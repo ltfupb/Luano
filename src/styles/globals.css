@@ -1,0 +1,169 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg-base: #05080f;
+  --bg-panel: #080d18;
+  --bg-elevated: #0c1423;
+  --bg-surface: #101d30;
+  --bg-hover: #152538;
+  --border-subtle: #111d30;
+  --border: #1a2d45;
+  --border-strong: #243f62;
+  --accent: #2563eb;
+  --accent-hover: #1d4ed8;
+  --accent-muted: rgba(37, 99, 235, 0.12);
+  --accent-glow: rgba(37, 99, 235, 0.3);
+  --text-primary: #ffffff;
+  --text-secondary: #c8ddf5;
+  --text-muted: #7aaac8;
+  --text-ghost: #3a5a7a;
+  --success: #10b981;
+  --warning: #f59e0b;
+  --danger: #e11d48;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  height: 100%;
+}
+
+body {
+  background-color: var(--bg-base);
+  color: var(--text-primary);
+  font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  overflow: hidden;
+  user-select: none;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ── Scrollbar ─────────────────────────────────────────────── */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 10px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--border-strong);
+}
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* ── Text selection ────────────────────────────────────────── */
+.selectable {
+  user-select: text;
+}
+.selectable ::selection {
+  background: rgba(37, 99, 235, 0.3);
+  color: var(--text-primary);
+}
+
+/* ── Focus ring ────────────────────────────────────────────── */
+*:focus-visible {
+  outline: 1.5px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* ── Button base ────────────────────────────────────────────── */
+button {
+  cursor: pointer;
+}
+button:active {
+  transform: scale(0.97);
+}
+
+/* ── Drag region ────────────────────────────────────────────── */
+.drag-region {
+  -webkit-app-region: drag;
+}
+.drag-region button,
+.drag-region a {
+  -webkit-app-region: no-drag;
+}
+
+/* ── Animations ─────────────────────────────────────────────── */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideInRight {
+  from { opacity: 0; transform: translateX(12px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes glowPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(37, 99, 235, 0); }
+  50%       { box-shadow: 0 0 14px 3px rgba(37, 99, 235, 0.28); }
+}
+
+@keyframes shimmer {
+  0%   { background-position: -200% center; }
+  100% { background-position: 200% center; }
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0; }
+}
+
+@keyframes spinOnce {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+/* ── Utility classes ─────────────────────────────────────────── */
+.animate-fade-in      { animation: fadeIn 0.18s ease-out both; }
+.animate-slide-up     { animation: slideUp 0.2s ease-out both; }
+.animate-slide-in-right { animation: slideInRight 0.22s ease-out both; }
+.animate-glow-pulse   { animation: glowPulse 2.4s ease-in-out infinite; }
+.animate-blink        { animation: blink 1.1s step-end infinite; }
+
+/* ── Shimmer text ─────────────────────────────────────────────── */
+.text-shimmer {
+  background: linear-gradient(
+    90deg,
+    var(--text-secondary) 25%,
+    var(--text-primary) 50%,
+    var(--text-secondary) 75%
+  );
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: shimmer 1.8s ease-in-out infinite;
+}
+
+/* ── Glass surface ─────────────────────────────────────────────── */
+.glass {
+  backdrop-filter: blur(16px) saturate(180%);
+  background: rgba(8, 13, 24, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+/* ── Subtle gradient border ─────────────────────────────────────── */
+.border-gradient-blue {
+  border-image: linear-gradient(180deg, rgba(37,99,235,0.5), rgba(37,99,235,0)) 1;
+}

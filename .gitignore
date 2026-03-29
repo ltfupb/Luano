@@ -1,0 +1,53 @@
+# Dependencies
+node_modules/
+packages/*/node_modules/
+
+# Build outputs
+out/
+dist/
+dist-electron/
+release/
+
+# TypeScript
+*.tsbuildinfo
+
+# Environment & secrets
+.env
+.env.local
+.env.*.local
+config.json
+electron-store-*.json
+
+# Editor
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Electron
+app-update.yml
+
+# Sidecar binaries — downloaded at build time via scripts/download-binaries.ts
+resources/binaries/
+
+# Test coverage
+coverage/
+
+# Claude Code local settings
+.claude/
+
+# Temp files
+tsc_*.txt

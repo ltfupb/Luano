@@ -1,0 +1,177 @@
+import { contextBridge, ipcRenderer } from "electron"
+import { electronAPI } from "@electron-toolkit/preload"
+
+export interface ToolEvent {
+  tool: string
+  input: Record<string, unknown>
+  output: string
+  success: boolean
+}
+
+const api = {
+  // ── 프로젝트 ──────────────────────────────────────────────────────────────
+  openFolder: () => ipcRenderer.invoke("project:open-folder"),
+  openProject: (path: string) => ipcRenderer.invoke("project:open", path),
+  initProject: (path: string) => ipcRenderer.invoke("project:init", path),
+
+  // ── 파일 ──────────────────────────────────────────────────────────────────
+  readFile: (path: string) => ipcRenderer.invoke("file:read", path),
+  writeFile: (path: string, content: string) => ipcRenderer.invoke("file:write", path, content),
+  readDir: (path: string) => ipcRenderer.invoke("file:read-dir", path),
+  watchProject: (path: string) => ipcRenderer.invoke("file:watch", path),
+  createFile: (dirPath: string, name: string) => ipcRenderer.invoke("file:create-file", dirPath, name),
+  createFolder: (dirPath: string, name: string) => ipcRenderer.invoke("file:create-folder", dirPath, name),
+  renameEntry: (oldPath: string, newName: string) => ipcRenderer.invoke("file:rename", oldPath, newName),
+  deleteEntry: (entryPath: string) => ipcRenderer.invoke("file:delete", entryPath),
+  moveEntry: (srcPath: string) => ipcRenderer.invoke("file:move", srcPath),
+  searchFiles: (projectPath: string, query: string) =>
+    ipcRenderer.invoke("file:search", projectPath, query),
+
+  // ── Rojo ──────────────────────────────────────────────────────────────────
+  rojoServe: (projectPath: string) => ipcRenderer.invoke("rojo:serve", projectPath),
+  rojoStop: () => ipcRenderer.invoke("rojo:stop"),
+  rojoGetStatus: () => ipcRenderer.invoke("rojo:status"),
+
+  // ── 린트 ──────────────────────────────────────────────────────────────────
+  formatFile: (path: string) => ipcRenderer.invoke("lint:format", path),
+  lintFile: (path: string) => ipcRenderer.invoke("lint:check", path),
+
+  // ── AI 키 ──────────────────────────────────────────────────────────────────
+  aiSetKey: (key: string) => ipcRenderer.invoke("ai:setKey", key),
+  aiGetKey: () => ipcRenderer.invoke("ai:get-key"),
+  aiSetOpenAIKey: (key: string) => ipcRenderer.invoke("ai:set-openai-key", key),
+  aiGetOpenAIKey: () => ipcRenderer.invoke("ai:get-openai-key"),
+  aiSetProvider: (provider: string) => ipcRenderer.invoke("ai:set-provider", provider),
+  aiSetModel: (model: string) => ipcRenderer.invoke("ai:set-model", model),
+  aiGetProviderModel: () => ipcRenderer.invoke("ai:get-provider-model"),
+
+  // ── AI 컨텍스트 ───────────────────────────────────────────────────────────
+  buildContext: (projectPath: string, filePath?: string) =>
+    ipcRenderer.invoke("ai:build-context", projectPath, filePath),
+
+  // ── AI 채팅 ───────────────────────────────────────────────────────────────
+  aiChat: (messages: unknown[], context: unknown) =>
+    ipcRenderer.invoke("ai:chat", messages, context),
+
+  aiChatStream: (
+    messages: unknown[],
+    context: unknown,
+    onChunk: (chunk: string | null) => void
+  ): Promise<void> => {
+    const channel = `ai:stream:${Date.now()}`
+    ipcRenderer.on(channel, (_, chunk) => onChunk(chunk as string | null))
+    return ipcRenderer.invoke("ai:chat-stream", messages, context, channel).finally(() => {
+      ipcRenderer.removeAllListeners(channel)
+    }) as Promise<void>
+  },
+
+  // ── Plan Chat ────────────────────────────────────────────────────────────
+  aiPlanChat: (messages: unknown[], context: unknown): Promise<string[]> =>
+    ipcRenderer.invoke("ai:plan-chat", messages, context),
+
+  // ── Inline Edit (Cmd+K) ───────────────────────────────────────────────────
+  inlineEdit: (
+    filePath: string,
+    fileContent: string,
+    instruction: string,
+    context: unknown
+  ): Promise<string> =>
+    ipcRenderer.invoke("ai:inline-edit", filePath, fileContent, instruction, context),
+
+  // ── Agent Chat ────────────────────────────────────────────────────────────
+  aiAgentChat: (
+    messages: unknown[],
+    context: unknown,
+    onChunk: (chunk: string | null) => void,
+    onTool: (event: ToolEvent) => void
+  ): Promise<{ modifiedFiles: string[] }> => {
+    const channel = `ai:agent:${Date.now()}`
+    ipcRenderer.on(channel, (_, chunk) => onChunk(chunk as string | null))
+    ipcRenderer.on(`${channel}:tool`, (_, event) => onTool(event as ToolEvent))
+    return ipcRenderer
+      .invoke("ai:agent-chat", messages, context, channel)
+      .finally(() => {
+        ipcRenderer.removeAllListeners(channel)
+        ipcRenderer.removeAllListeners(`${channel}:tool`)
+      }) as Promise<{ modifiedFiles: string[] }>
+  },
+
+  // ── Studio Bridge (legacy MCP) ────────────────────────────────────────────
+  studioGetConsole: (): Promise<string | null> =>
+    ipcRenderer.invoke("studio:get-console"),
+
+  studioIsConnected: (): Promise<boolean> =>
+    ipcRenderer.invoke("studio:is-connected"),
+
+  // ── Live Bridge ───────────────────────────────────────────────────────────
+  bridgeGetTree: () => ipcRenderer.invoke("bridge:get-tree"),
+  bridgeGetLogs: () => ipcRenderer.invoke("bridge:get-logs"),
+  bridgeIsConnected: (): Promise<boolean> => ipcRenderer.invoke("bridge:is-connected"),
+  bridgeClearLogs: () => ipcRenderer.invoke("bridge:clear-logs"),
+  bridgeRunScript: (code: string): Promise<{ id: string }> =>
+    ipcRenderer.invoke("bridge:run-script", code),
+  bridgeGetCommandResult: (id: string) => ipcRenderer.invoke("bridge:get-command-result", id),
+  bridgeInstallPlugin: (): Promise<{ success: boolean; path?: string; error?: string }> =>
+    ipcRenderer.invoke("bridge:install-plugin"),
+
+  // ── Terminal (node-pty) ───────────────────────────────────────────────────
+  terminalCreate: (cwd?: string): Promise<{ id: string; error?: string }> =>
+    ipcRenderer.invoke("terminal:create", cwd),
+  terminalWrite: (id: string, data: string): Promise<void> =>
+    ipcRenderer.invoke("terminal:write", id, data),
+  terminalResize: (id: string, cols: number, rows: number): Promise<void> =>
+    ipcRenderer.invoke("terminal:resize", id, cols, rows),
+  terminalKill: (id: string): Promise<void> =>
+    ipcRenderer.invoke("terminal:kill", id),
+
+  // ── Topology ──────────────────────────────────────────────────────────────
+  analyzeTopology: (projectPath: string) =>
+    ipcRenderer.invoke("topology:analyze", projectPath),
+
+  // ── Cross-Script Analysis ────────────────────────────────────────────────
+  analyzeCrossScript: (projectPath: string) =>
+    ipcRenderer.invoke("analysis:cross-script", projectPath),
+  perfLint: (projectPath: string) =>
+    ipcRenderer.invoke("analysis:perf-lint", projectPath),
+  perfLintFile: (filePath: string, content: string) =>
+    ipcRenderer.invoke("analysis:perf-lint-file", filePath, content),
+
+  // ── DataStore Schema ─────────────────────────────────────────────────────
+  datastoreLoadSchemas: (projectPath: string) =>
+    ipcRenderer.invoke("datastore:load-schemas", projectPath),
+  datastoreSaveSchema: (projectPath: string, schema: unknown) =>
+    ipcRenderer.invoke("datastore:save-schema", projectPath, schema),
+  datastoreDeleteSchema: (projectPath: string, name: string) =>
+    ipcRenderer.invoke("datastore:delete-schema", projectPath, name),
+  datastoreGenerateCode: (schema: unknown): Promise<string> =>
+    ipcRenderer.invoke("datastore:generate-code", schema),
+  datastoreGenerateMigration: (oldSchema: unknown, newSchema: unknown): Promise<string> =>
+    ipcRenderer.invoke("datastore:generate-migration", oldSchema, newSchema),
+
+  // ── Error Explainer ───────────────────────────────────────────────────────
+  explainError: (errorText: string, context: unknown): Promise<string> =>
+    ipcRenderer.invoke("ai:explain-error", errorText, context),
+
+  // ── 이벤트 리스너 ─────────────────────────────────────────────────────────
+  on: (channel: string, callback: (...args: unknown[]) => void): (() => void) => {
+    ipcRenderer.on(channel, (_, ...args) => callback(...args))
+    return () => ipcRenderer.removeAllListeners(channel)
+  },
+  off: (channel: string) => ipcRenderer.removeAllListeners(channel)
+}
+
+if (process.contextIsolated) {
+  try {
+    contextBridge.exposeInMainWorld("electron", electronAPI)
+    contextBridge.exposeInMainWorld("api", api)
+  } catch (error) {
+    console.error(error)
+  }
+} else {
+  // @ts-ignore
+  window.electron = electronAPI
+  // @ts-ignore
+  window.api = api
+}
+
+export type LuanoAPI = typeof api

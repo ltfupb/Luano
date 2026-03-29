@@ -1,0 +1,4 @@
+-- Roblox global type definitions for luau-lsp
+-- 실제 사용 시 luau-lsp 릴리스에서 최신 버전 다운로드:
+-- https://github.com/JohnnyMorganz/luau-lsp/releases
+-- 파일명: globalTypes.d.luau

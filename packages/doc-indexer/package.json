@@ -1,0 +1,17 @@
+{
+  "name": "@luano/doc-indexer",
+  "version": "1.0.0",
+  "description": "Roblox API docs → SQLite FTS5 indexer",
+  "scripts": {
+    "build": "npx ts-node src/build-index.ts"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.0.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.11",
+    "@types/node": "^20.0.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.5.2"
+  }
+}

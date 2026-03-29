@@ -1,0 +1,5 @@
+[rules]
+roblox_incorrect_roact_usage = "allow"
+
+[config]
+std = "roblox"

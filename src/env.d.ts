@@ -1,0 +1,176 @@
+// Global type augmentations for Luano renderer
+// Non-module .d.ts — all declarations are automatically global
+
+// ── Vite ?worker imports ──────────────────────────────────────────────────────
+declare module "*?worker" {
+  const WorkerConstructor: new () => Worker
+  export default WorkerConstructor
+}
+
+// ── Topology types ────────────────────────────────────────────────────────────
+type ScriptKind = "server" | "client" | "shared"
+
+type EdgeKind =
+  | "require"
+  | "fire_server"
+  | "fire_client"
+  | "fire_all"
+  | "receives_server"
+  | "receives_client"
+
+interface TopologyScriptNode {
+  id: string
+  name: string
+  path: string
+  kind: ScriptKind
+  group: string
+}
+
+interface TopologyRemoteNode {
+  id: string
+  name: string
+}
+
+interface TopologyEdge {
+  id: string
+  source: string
+  target: string
+  kind: EdgeKind
+  label?: string
+}
+
+interface TopologyResult {
+  scripts: TopologyScriptNode[]
+  remotes: TopologyRemoteNode[]
+  edges: TopologyEdge[]
+}
+
+// ── Bridge types ──────────────────────────────────────────────────────────────
+interface BridgeInstanceNode {
+  name: string
+  class: string
+  children?: BridgeInstanceNode[]
+}
+
+interface BridgeLogEntry {
+  text: string
+  kind: "output" | "warn" | "error"
+  ts: number
+}
+
+interface BridgeCommandResult {
+  id: string
+  success: boolean
+  result: string
+}
+
+// ── Window.api augmentation ───────────────────────────────────────────────────
+interface Window {
+  api: {
+    // 프로젝트
+    openFolder: () => Promise<string | null>
+    openProject: (path: string) => Promise<{ success: boolean; lspPort: number }>
+    initProject: (path: string) => Promise<{ success: boolean }>
+
+    // 파일
+    readFile: (path: string) => Promise<string>
+    writeFile: (path: string, content: string) => Promise<{ success: boolean }>
+    readDir: (path: string) => Promise<unknown[]>
+    watchProject: (path: string) => Promise<{ success: boolean }>
+    createFile: (dirPath: string, name: string) => Promise<{ success: boolean; path: string }>
+    createFolder: (dirPath: string, name: string) => Promise<{ success: boolean; path: string }>
+    renameEntry: (oldPath: string, newName: string) => Promise<{ success: boolean; path: string }>
+    deleteEntry: (entryPath: string) => Promise<{ success: boolean }>
+    moveEntry: (srcPath: string) => Promise<{ success: boolean; canceled?: boolean; path?: string }>
+    searchFiles: (projectPath: string, query: string) => Promise<Array<{ file: string; line: number; text: string }>>
+
+    // Rojo
+    rojoServe: (projectPath: string) => Promise<{ success: boolean }>
+    rojoStop: () => Promise<{ success: boolean }>
+    rojoGetStatus: () => Promise<string>
+
+    // 린트
+    formatFile: (path: string) => Promise<{ success: boolean }>
+    lintFile: (path: string) => Promise<unknown>
+
+    // AI 키
+    aiSetKey: (key: string) => Promise<{ success: boolean }>
+    aiGetKey: () => Promise<string | null>
+    aiSetOpenAIKey: (key: string) => Promise<{ success: boolean }>
+    aiGetOpenAIKey: () => Promise<string | null>
+    aiSetProvider: (provider: string) => Promise<{ success: boolean }>
+    aiSetModel: (model: string) => Promise<{ success: boolean }>
+    aiGetProviderModel: () => Promise<{
+      provider: string
+      model: string
+      models: {
+        anthropic: Array<{ id: string; label: string }>
+        openai: Array<{ id: string; label: string }>
+      }
+    }>
+
+    // AI 컨텍스트
+    buildContext: (projectPath: string, filePath?: string) => Promise<{ globalSummary: string }>
+
+    // AI 채팅
+    aiChat: (messages: unknown[], context: unknown) => Promise<string>
+    aiChatStream: (
+      messages: unknown[],
+      context: unknown,
+      onChunk: (chunk: string | null) => void
+    ) => Promise<void>
+
+    // Plan Chat
+    aiPlanChat: (messages: unknown[], context: unknown) => Promise<string[]>
+
+    // Inline Edit (Cmd+K)
+    inlineEdit: (
+      filePath: string,
+      fileContent: string,
+      instruction: string,
+      context: unknown
+    ) => Promise<string>
+
+    // Agent Chat (Tool Use)
+    aiAgentChat: (
+      messages: unknown[],
+      context: unknown,
+      onChunk: (chunk: string | null) => void,
+      onTool: (event: {
+        tool: string
+        input: Record<string, unknown>
+        output: string
+        success: boolean
+      }) => void
+    ) => Promise<{ modifiedFiles: string[] }>
+
+    // Studio Bridge (legacy MCP)
+    studioGetConsole: () => Promise<string | null>
+    studioIsConnected: () => Promise<boolean>
+
+    // Live Bridge
+    bridgeGetTree: () => Promise<BridgeInstanceNode | null>
+    bridgeGetLogs: () => Promise<BridgeLogEntry[]>
+    bridgeIsConnected: () => Promise<boolean>
+    bridgeClearLogs: () => Promise<{ success: boolean }>
+    bridgeRunScript: (code: string) => Promise<{ id: string }>
+    bridgeGetCommandResult: (id: string) => Promise<BridgeCommandResult | null>
+    bridgeInstallPlugin: () => Promise<{ success: boolean; path?: string; error?: string }>
+
+    // Terminal (node-pty)
+    terminalCreate: (cwd?: string) => Promise<{ id: string; error?: string }>
+    terminalWrite: (id: string, data: string) => Promise<void>
+    terminalResize: (id: string, cols: number, rows: number) => Promise<void>
+    terminalKill: (id: string) => Promise<void>
+
+    // Topology
+    analyzeTopology: (projectPath: string) => Promise<TopologyResult>
+
+    // Error Explainer
+    explainError: (errorText: string, context: unknown) => Promise<string>
+
+    // 이벤트
+    on: (channel: string, callback: (...args: unknown[]) => void) => () => void
+    off: (channel: string) => void
+  }
+}

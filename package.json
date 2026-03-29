@@ -1,0 +1,129 @@
+{
+  "name": "luano",
+  "version": "0.1.0",
+  "description": "The all-in-one AI-powered code editor for Roblox developers",
+  "homepage": "https://github.com/ltfupb/luano",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ltfupb/luano.git"
+  },
+  "author": "ltfupb",
+  "license": "MIT",
+  "main": "out/main/index.js",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "preview": "electron-vite preview",
+    "package": "electron-vite build && electron-builder",
+    "package:win": "electron-vite build && electron-builder --win --x64",
+    "package:mac": "electron-vite build && electron-builder --mac",
+    "package:linux": "electron-vite build && electron-builder --linux"
+  },
+  "devDependencies": {
+    "@electron-toolkit/preload": "^3.0.1",
+    "@electron-toolkit/utils": "^3.0.0",
+    "@types/better-sqlite3": "^7.6.11",
+    "@types/node": "^20.14.8",
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "@types/ws": "^8.18.1",
+    "@vitejs/plugin-react": "^4.3.1",
+    "autoprefixer": "^10.4.19",
+    "electron": "^31.0.2",
+    "electron-builder": "^24.13.3",
+    "electron-vite": "^2.3.0",
+    "postcss": "^8.4.38",
+    "tailwindcss": "^3.4.4",
+    "typescript": "^5.5.2",
+    "vite": "^5.3.1"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.24.3",
+    "@monaco-editor/react": "^4.6.0",
+    "better-sqlite3": "^11.0.0",
+    "chokidar": "^3.6.0",
+    "electron-updater": "^6.3.9",
+    "monaco-editor": "^0.50.0",
+    "monaco-languageclient": "^8.4.0",
+    "node-pty": "^1.0.0",
+    "openai": "^6.33.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "vscode-languageclient": "^9.0.1",
+    "ws": "^8.17.1",
+    "xterm": "^5.3.0",
+    "xterm-addon-fit": "^0.8.0",
+    "zustand": "^4.5.4"
+  },
+  "build": {
+    "appId": "io.luano.app",
+    "productName": "Luano",
+    "copyright": "Copyright © 2026 Luano",
+    "asar": true,
+    "asarUnpack": [
+      "node_modules/better-sqlite3/**",
+      "node_modules/node-pty/**"
+    ],
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "out/**"
+    ],
+    "extraResources": [
+      {
+        "from": "resources/binaries/${os}",
+        "to": "binaries",
+        "filter": ["**/*"]
+      },
+      {
+        "from": "resources/roblox-docs",
+        "to": "roblox-docs"
+      },
+      {
+        "from": "resources/type-defs",
+        "to": "type-defs"
+      },
+      {
+        "from": "resources/templates",
+        "to": "templates"
+      },
+      {
+        "from": "resources/studio-plugin",
+        "to": "studio-plugin"
+      }
+    ],
+    "win": {
+      "target": [
+        { "target": "nsis", "arch": ["x64"] }
+      ],
+      "icon": "resources/icons/icon.ico",
+      "signingHashAlgorithms": null,
+      "sign": null
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Luano"
+    },
+    "mac": {
+      "target": [
+        { "target": "dmg", "arch": ["x64", "arm64"] }
+      ],
+      "icon": "resources/icons/icon.icns",
+      "category": "public.app-category.developer-tools"
+    },
+    "linux": {
+      "target": "AppImage",
+      "icon": "resources/icons/icon.png",
+      "category": "Development"
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "ltfupb",
+      "repo": "luano"
+    }
+  }
+}
