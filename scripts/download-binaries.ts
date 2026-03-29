@@ -2,12 +2,11 @@
  * scripts/download-binaries.ts
  *
  * Downloads sidecar binaries from GitHub Releases into resources/binaries/.
- * Run: npx ts-node scripts/download-binaries.ts
+ * Run: npx ts-node scripts/download-binaries.ts [win|mac|linux|all]
  *
- * Binary versions — update here when new versions release.
+ * Uses curl (available on all CI runners) to handle redirects reliably.
  */
 
-import * as https from "https"
 import * as fs from "fs"
 import * as path from "path"
 import { execSync } from "child_process"
@@ -43,23 +42,21 @@ const TARGETS = {
 const ROOT = path.join(__dirname, "..")
 const TMP = path.join(ROOT, "tmp-bins")
 
-function download(url: string, dest: string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const file = fs.createWriteStream(dest)
-    https.get(url, (res) => {
-      if (res.statusCode === 302 || res.statusCode === 301) {
-        file.close()
-        fs.unlinkSync(dest)
-        download(res.headers.location!, dest).then(resolve).catch(reject)
-        return
-      }
-      res.pipe(file)
-      file.on("finish", () => { file.close(); resolve() })
-    }).on("error", (err) => {
-      fs.unlinkSync(dest)
-      reject(err)
-    })
+function curlDownload(url: string, dest: string): void {
+  execSync(`curl -fSL --retry 3 --retry-delay 2 -o "${dest}" "${url}"`, {
+    stdio: "inherit",
+    timeout: 120_000
   })
+}
+
+function extractZip(zipPath: string, destDir: string): void {
+  fs.mkdirSync(destDir, { recursive: true })
+  if (process.platform === "win32") {
+    // Use tar (built into Windows 10+/Server 2019+) — more reliable than PowerShell Expand-Archive
+    execSync(`tar -xf "${zipPath}" -C "${destDir}"`, { stdio: "inherit" })
+  } else {
+    execSync(`unzip -o "${zipPath}" -d "${destDir}"`, { stdio: "inherit" })
+  }
 }
 
 async function downloadBinaries(platform: "win" | "mac" | "linux"): Promise<void> {
@@ -79,33 +76,30 @@ async function downloadBinaries(platform: "win" | "mac" | "linux"): Promise<void
 
     console.log(`  ↓ ${name} (${platform})...`)
 
-    if (url.endsWith(".exe")) {
-      await download(url, outFile)
-    } else {
-      // zip — download then extract
-      const zipPath = path.join(TMP, `${name}.zip`)
-      await download(url, zipPath)
+    // Download zip
+    const zipPath = path.join(TMP, `${name}.zip`)
+    curlDownload(url, zipPath)
 
-      // Use system unzip/7z
-      if (process.platform === "win32") {
-        execSync(`powershell -Command "Expand-Archive -Path '${zipPath}' -DestinationPath '${TMP}\\${name}' -Force"`)
-      } else {
-        execSync(`unzip -o "${zipPath}" -d "${TMP}/${name}"`)
-      }
+    // Verify the file is not empty / corrupt
+    const stat = fs.statSync(zipPath)
+    if (stat.size < 1000) {
+      throw new Error(`Downloaded file too small (${stat.size} bytes), likely corrupt: ${url}`)
+    }
 
-      // Find the binary inside the extracted folder
-      const extracted = path.join(TMP, name)
-      const files = fs.readdirSync(extracted).filter(f => !f.endsWith(".zip"))
-      const binFile = files.find(f => f.startsWith(name) || f === name + ext || f === name)
-      if (!binFile) {
-        console.error(`    ✗ Could not find binary in zip for ${name}`)
-        continue
-      }
+    // Extract
+    const extracted = path.join(TMP, name)
+    extractZip(zipPath, extracted)
 
-      fs.copyFileSync(path.join(extracted, binFile), outFile)
-      if (platform !== "win") {
-        fs.chmodSync(outFile, 0o755)
-      }
+    // Find the binary inside the extracted folder
+    const files = fs.readdirSync(extracted).filter(f => !f.endsWith(".zip"))
+    const binFile = files.find(f => f.startsWith(name) || f === name + ext || f === name)
+    if (!binFile) {
+      throw new Error(`Could not find binary in zip for ${name}. Files: ${files.join(", ")}`)
+    }
+
+    fs.copyFileSync(path.join(extracted, binFile), outFile)
+    if (platform !== "win") {
+      fs.chmodSync(outFile, 0o755)
     }
 
     console.log(`    ✓ ${name} → ${outFile}`)
