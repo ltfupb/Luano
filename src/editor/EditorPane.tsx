@@ -314,20 +314,39 @@ export function EditorPane(): JSX.Element {
           )
         })}
 
-        {/* Cmd+K hint — far right */}
+        {/* Inline AI Edit button — far right */}
         {activeFile && (
           <div
-            className="ml-auto flex items-center px-3 flex-shrink-0"
-            style={{ height: "34px", fontSize: "11px", color: "var(--text-ghost)" }}
+            data-tour="inline-edit-btn"
+            className="ml-auto flex items-center px-2 flex-shrink-0"
+            style={{ height: "34px" }}
           >
-            <span
-              className="px-1.5 py-0.5 rounded cursor-pointer transition-colors hover:text-[var(--text-muted)]"
-              style={{ background: "var(--bg-surface)", letterSpacing: "0.3px" }}
+            <button
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-md cursor-pointer transition-all duration-150"
+              style={{
+                background: "var(--accent-muted)",
+                border: "1px solid var(--accent)",
+                color: "var(--accent)",
+                fontSize: "11px",
+                fontWeight: 500
+              }}
               onClick={() => setInlineEditOpen(true)}
               title={`Inline AI Edit (${KB_LABEL})`}
+              onMouseEnter={e => {
+                (e.currentTarget as HTMLElement).style.background = "var(--accent)"
+                ;(e.currentTarget as HTMLElement).style.color = "white"
+              }}
+              onMouseLeave={e => {
+                (e.currentTarget as HTMLElement).style.background = "var(--accent-muted)"
+                ;(e.currentTarget as HTMLElement).style.color = "var(--accent)"
+              }}
             >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 20h9" />
+                <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+              </svg>
               {KB_LABEL}
-            </span>
+            </button>
           </div>
         )}
       </div>

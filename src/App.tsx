@@ -18,6 +18,7 @@ import { TerminalPane } from "./terminal/TerminalPane"
 import { StatusBar } from "./components/StatusBar"
 import { ErrorBoundary } from "./components/ErrorBoundary"
 import { ToastContainer, toast } from "./components/Toast"
+import { TutorialOverlay, shouldShowTutorial } from "./components/TutorialOverlay"
 import { CrossScriptPanel } from "./analysis/CrossScriptPanel"
 import { DataStorePanel } from "./datastore/DataStorePanel"
 import { useT } from "./i18n/useT"
@@ -25,6 +26,10 @@ import { useT } from "./i18n/useT"
 const TERMINAL_MIN = 80
 const TERMINAL_MAX = 600
 const TERMINAL_DEFAULT = 220
+
+const SIDEPANEL_MIN = 150
+const SIDEPANEL_MAX = 500
+const SIDEPANEL_DEFAULT = 224
 
 function IconChat(): JSX.Element {
   return (
@@ -96,12 +101,19 @@ export default function App(): JSX.Element {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [terminalOpen, setTerminalOpen] = useState(false)
   const [terminalHeight, setTerminalHeight] = useState(TERMINAL_DEFAULT)
+  const [sidePanelWidth, setSidePanelWidth] = useState(SIDEPANEL_DEFAULT)
   const [quickOpenVisible, setQuickOpenVisible] = useState(false)
+  const [showTutorial, setShowTutorial] = useState(() => shouldShowTutorial())
 
   // Terminal resize drag state
   const isDraggingRef = useRef(false)
   const dragStartY = useRef(0)
   const dragStartH = useRef(0)
+
+  // Side panel resize drag state
+  const isSideDraggingRef = useRef(false)
+  const sideDragStartX = useRef(0)
+  const sideDragStartW = useRef(0)
 
   useIpcEvent("rojo:status-changed", (status) => setStatus(status as never))
   useIpcEvent("rojo:log", (log) => addLog(log as string))
@@ -237,6 +249,27 @@ export default function App(): JSX.Element {
     window.addEventListener("mouseup", onUp)
   }
 
+  // ── 사이드패널 리사이즈 드래그 ────────────────────────────────────────────────
+  const handleSideResizeMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault()
+    isSideDraggingRef.current = true
+    sideDragStartX.current = e.clientX
+    sideDragStartW.current = sidePanelWidth
+
+    const onMove = (mv: MouseEvent) => {
+      if (!isSideDraggingRef.current) return
+      const delta = mv.clientX - sideDragStartX.current
+      setSidePanelWidth(Math.max(SIDEPANEL_MIN, Math.min(SIDEPANEL_MAX, sideDragStartW.current + delta)))
+    }
+    const onUp = () => {
+      isSideDraggingRef.current = false
+      window.removeEventListener("mousemove", onMove)
+      window.removeEventListener("mouseup", onUp)
+    }
+    window.addEventListener("mousemove", onMove)
+    window.addEventListener("mouseup", onUp)
+  }
+
   return (
     <div className="flex flex-col h-screen overflow-hidden" style={{ background: "var(--bg-base)", color: "var(--text-primary)" }}>
       {/* Titlebar */}
@@ -246,6 +279,7 @@ export default function App(): JSX.Element {
       >
         <div className="flex items-center gap-0.5">
           <button
+            data-tour="file-btn"
             onClick={handleOpenFolder}
             className="px-2.5 h-7 flex items-center rounded-md text-xs transition-all duration-150"
             style={{ color: "var(--text-secondary)" }}
@@ -255,6 +289,7 @@ export default function App(): JSX.Element {
             File
           </button>
           <button
+            data-tour="settings-btn"
             onClick={() => setSettingsOpen(true)}
             className="px-2.5 h-7 flex items-center rounded-md text-xs transition-all duration-150"
             style={{ color: "var(--text-secondary)" }}
@@ -269,31 +304,46 @@ export default function App(): JSX.Element {
       <div className="flex flex-1 overflow-hidden min-h-0">
         {/* Sidebar */}
         {projectPath && (
-          <Sidebar
-            activePanel={activePanel}
-            onSelect={setActivePanel}
-            terminalOpen={terminalOpen}
-            onTerminalToggle={() => setTerminalOpen((v) => !v)}
-          />
-        )}
-
-        {/* Left panel */}
-        {projectPath && activePanel !== "topology" && (
-          <div
-            className="w-56 flex-shrink-0 flex flex-col overflow-hidden animate-slide-in-right"
-            style={{ background: "var(--bg-panel)", borderRight: "1px solid var(--border-subtle)" }}
-          >
-            {activePanel === "explorer" && <FileExplorer />}
-            {activePanel === "search" && <SearchPanel />}
-            {activePanel === "rojo" && <RojoPanel />}
-            {activePanel === "studio" && <StudioPanel />}
-            {activePanel === "analysis" && <CrossScriptPanel />}
-            {activePanel === "datastore" && <DataStorePanel />}
+          <div data-tour="sidebar">
+            <Sidebar
+              activePanel={activePanel}
+              onSelect={setActivePanel}
+              terminalOpen={terminalOpen}
+              onTerminalToggle={() => setTerminalOpen((v) => !v)}
+            />
           </div>
         )}
 
+        {/* Left panel + resize handle */}
+        {projectPath && activePanel !== "topology" && (
+          <>
+            <div
+              className="flex-shrink-0 flex flex-col overflow-hidden animate-slide-in-right"
+              style={{ width: `${sidePanelWidth}px`, background: "var(--bg-panel)" }}
+            >
+              {activePanel === "explorer" && <FileExplorer />}
+              {activePanel === "search" && <SearchPanel />}
+              {activePanel === "rojo" && <RojoPanel />}
+              {activePanel === "studio" && <StudioPanel />}
+              {activePanel === "analysis" && <CrossScriptPanel />}
+              {activePanel === "datastore" && <DataStorePanel />}
+            </div>
+            <div
+              onMouseDown={handleSideResizeMouseDown}
+              className="flex-shrink-0 transition-colors duration-100"
+              style={{
+                width: "3px",
+                cursor: "col-resize",
+                background: "var(--border-subtle)"
+              }}
+              onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "var(--accent)"}
+              onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "var(--border-subtle)"}
+            />
+          </>
+        )}
+
         {/* Editor area (with optional terminal at bottom) */}
-        <div className="flex-1 flex flex-col overflow-hidden min-w-0 min-h-0">
+        <div data-tour="editor-area" className="flex-1 flex flex-col overflow-hidden min-w-0 min-h-0">
           {/* Main editor / topology */}
           <div className="flex-1 flex overflow-hidden min-h-0">
             <ErrorBoundary>
@@ -335,6 +385,7 @@ export default function App(): JSX.Element {
         {/* AI Chat panel */}
         {projectPath && rightPanelOpen && (
           <div
+            data-tour="chat-panel"
             className="w-80 flex-shrink-0 flex flex-col overflow-hidden animate-slide-in-right"
             style={{ borderLeft: "1px solid var(--border-subtle)" }}
           >
@@ -363,6 +414,9 @@ export default function App(): JSX.Element {
       {settingsOpen && <SettingsPanel onClose={() => setSettingsOpen(false)} />}
       {quickOpenVisible && <QuickOpen onClose={() => setQuickOpenVisible(false)} />}
       <ToastContainer />
+
+      {/* Tutorial overlay */}
+      {showTutorial && <TutorialOverlay onDone={() => setShowTutorial(false)} />}
 
       {/* Switch project confirmation (unsaved changes) */}
       {switchConfirm && (

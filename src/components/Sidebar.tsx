@@ -2,6 +2,7 @@
 // Vertical icon sidebar — explorer, search, rojo, studio, topology
 
 import { useT } from "../i18n/useT"
+import { useRojoStore } from "../stores/rojoStore"
 
 export type SidePanel = "explorer" | "search" | "rojo" | "studio" | "topology" | "analysis" | "datastore"
 
@@ -107,6 +108,8 @@ const panelIcons: Record<SidePanel, () => JSX.Element> = {
 
 export function Sidebar({ activePanel, onSelect, terminalOpen, onTerminalToggle }: SidebarProps): JSX.Element {
   const t = useT()
+  const rojoStatus = useRojoStore((s) => s.status)
+  const rojoServing = rojoStatus === "serving" || rojoStatus === "starting"
 
   const labels: Record<SidePanel, string> = {
     explorer: t("files"),
@@ -130,6 +133,7 @@ export function Sidebar({ activePanel, onSelect, terminalOpen, onTerminalToggle 
         return (
           <button
             key={panel}
+            data-tour={panel === "rojo" ? "rojo-icon" : undefined}
             onClick={() => onSelect(panel)}
             title={labels[panel]}
             className="relative w-9 h-9 flex items-center justify-center rounded-lg transition-all duration-150"
@@ -157,6 +161,16 @@ export function Sidebar({ activePanel, onSelect, terminalOpen, onTerminalToggle 
               />
             )}
             <Icon />
+            {/* Rojo active indicator */}
+            {panel === "rojo" && rojoServing && (
+              <span
+                className="absolute top-1 right-1 w-2 h-2 rounded-full"
+                style={{
+                  background: "var(--success)",
+                  boxShadow: "0 0 6px var(--success)"
+                }}
+              />
+            )}
           </button>
         )
       })}
