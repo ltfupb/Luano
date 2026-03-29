@@ -15,7 +15,7 @@ const VERSIONS = {
   rojo:       "7.6.1",
   selene:     "0.30.1",
   stylua:     "2.4.0",
-  "luau-lsp": "1.63.0"
+  "luau-lsp": "1.64.0"
 }
 
 const TARGETS = {
@@ -23,19 +23,19 @@ const TARGETS = {
     rojo:       `https://github.com/rojo-rbx/rojo/releases/download/v${VERSIONS.rojo}/rojo-${VERSIONS.rojo}-windows-x86_64.zip`,
     selene:     `https://github.com/Kampfkarren/selene/releases/download/${VERSIONS.selene}/selene-${VERSIONS.selene}-windows.zip`,
     stylua:     `https://github.com/JohnnyMorganz/StyLua/releases/download/v${VERSIONS.stylua}/stylua-windows-x86_64.zip`,
-    "luau-lsp": `https://github.com/JohnnyMorganz/luau-lsp/releases/download/v${VERSIONS["luau-lsp"]}/luau-lsp-win64.zip`
+    "luau-lsp": `https://github.com/JohnnyMorganz/luau-lsp/releases/download/${VERSIONS["luau-lsp"]}/luau-lsp-win64.zip`
   },
   mac: {
     rojo:       `https://github.com/rojo-rbx/rojo/releases/download/v${VERSIONS.rojo}/rojo-${VERSIONS.rojo}-macos-aarch64.zip`,
     selene:     `https://github.com/Kampfkarren/selene/releases/download/${VERSIONS.selene}/selene-${VERSIONS.selene}-macos.zip`,
     stylua:     `https://github.com/JohnnyMorganz/StyLua/releases/download/v${VERSIONS.stylua}/stylua-macos-aarch64.zip`,
-    "luau-lsp": `https://github.com/JohnnyMorganz/luau-lsp/releases/download/v${VERSIONS["luau-lsp"]}/luau-lsp-macos.zip`
+    "luau-lsp": `https://github.com/JohnnyMorganz/luau-lsp/releases/download/${VERSIONS["luau-lsp"]}/luau-lsp-macos.zip`
   },
   linux: {
     rojo:       `https://github.com/rojo-rbx/rojo/releases/download/v${VERSIONS.rojo}/rojo-${VERSIONS.rojo}-linux-x86_64.zip`,
     selene:     `https://github.com/Kampfkarren/selene/releases/download/${VERSIONS.selene}/selene-${VERSIONS.selene}-linux.zip`,
     stylua:     `https://github.com/JohnnyMorganz/StyLua/releases/download/v${VERSIONS.stylua}/stylua-linux-x86_64.zip`,
-    "luau-lsp": `https://github.com/JohnnyMorganz/luau-lsp/releases/download/v${VERSIONS["luau-lsp"]}/luau-lsp-linux.zip`
+    "luau-lsp": `https://github.com/JohnnyMorganz/luau-lsp/releases/download/${VERSIONS["luau-lsp"]}/luau-lsp-linux-x86_64.zip`
   }
 }
 
