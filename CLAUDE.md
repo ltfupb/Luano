@@ -35,6 +35,9 @@ luano/
 │   ├── main.ts                  # BrowserWindow 생성, 앱 라이프사이클
 │   ├── preload.ts               # contextBridge IPC API 노출
 │   ├── store.ts                 # electron-store 기반 설정 저장
+│   ├── pro/
+│   │   ├── index.ts             # @luano/pro 인터페이스 + Feature gating (Free/Pro 분리)
+│   │   └── modules.ts           # tryRequire() 기반 Pro 모듈 중앙 로더
 │   ├── sidecar/                 # 외부 바이너리 프로세스 관리
 │   │   ├── index.ts             # spawnSidecar() 공통 헬퍼
 │   │   ├── rojo.ts              # Rojo serve/build/sourcemap
@@ -43,10 +46,9 @@ luano/
 │   ├── lsp/
 │   │   ├── manager.ts           # luau-lsp 스폰 + WebSocket 브릿지
 │   │   └── bridge.ts            # stdio ↔ WebSocket 변환
-│   ├── pro/
-│   │   └── index.ts             # @luano/pro 인터페이스 (Free/Pro 분리)
 │   ├── ai/
-│   │   ├── provider.ts          # Claude/OpenAI Agent loop (양쪽 tool use)
+│   │   ├── provider.ts          # Claude/OpenAI 기본 채팅/스트리밍 + Prompt Caching
+│   │   ├── agent.ts             # Agent loop (Anthropic + OpenAI 양쪽 tool use)
 │   │   ├── context.ts           # 3-레이어 컨텍스트 + topology/sourcemap 주입
 │   │   ├── tools.ts             # AI 도구 12개 (lint_file 포함)
 │   │   └── rag.ts               # FTS5 docs 검색
@@ -68,31 +70,37 @@ luano/
 │
 ├── src/                         # Renderer process (React)
 │   ├── App.tsx                  # 루트 레이아웃
+│   ├── main.tsx                 # React 엔트리포인트
 │   ├── editor/                  # Monaco + LSP
 │   │   ├── EditorPane.tsx       # 탭 바, 분할 뷰
 │   │   ├── LuauLanguageClient.ts # WebSocket LSP 클라이언트
 │   │   ├── LuauTokensProvider.ts # 문법 강조
-│   │   ├── LuauTheme.ts         # 다크 테마 (인디고 #2563eb 악센트)
-│   │   └── EditorActions.ts     # Cmd+K 인라인 편집
+│   │   └── LuauSnippets.ts     # 코드 스니펫
 │   ├── ai/                      # AI 채팅 패널
-│   │   ├── ChatPanel.tsx
-│   │   ├── ChatMessage.tsx
-│   │   ├── DiffView.tsx
-│   │   ├── InlineEditOverlay.tsx # Cmd+K 오버레이
-│   │   └── useAIChat.ts
+│   │   ├── ChatPanel.tsx        # 메인 채팅 UI
+│   │   ├── CodeBlock.tsx        # 코드 블록 렌더링 + DiffView 연동
+│   │   ├── DiffView.tsx         # Pro: AI 수정 diff 비교
+│   │   ├── InlineEditOverlay.tsx # Pro: Cmd+K 인라인 편집 오버레이
+│   │   └── skills.ts            # 빌트인 AI 스킬 10개 (/explain, /fix 등)
 │   ├── explorer/                # 파일 트리
 │   ├── terminal/                # 내장 터미널 (xterm.js)
 │   ├── rojo/                    # Rojo 패널 + 상태 표시
-│   ├── studio/                  # Studio 브릿지 패널 (Phase 2+)
-│   ├── topology/                # Roblox 계층 시각화
-│   ├── components/              # 공유 UI (Sidebar, StatusBar, Settings, QuickOpen)
+│   ├── studio/                  # Studio 브릿지 패널 (Pro)
+│   ├── topology/                # Roblox 계층 시각화 (Pro)
+│   ├── analysis/                # 크로스 스크립트 분석 (Pro)
+│   ├── datastore/               # DataStore 스키마 관리 (Pro)
+│   ├── components/              # 공유 UI
+│   │   ├── Sidebar.tsx, StatusBar.tsx, SettingsPanel.tsx
+│   │   ├── QuickOpen.tsx, SearchPanel.tsx
+│   │   ├── ErrorBoundary.tsx, Toast.tsx, TutorialOverlay.tsx
 │   ├── stores/                  # Zustand 스토어
 │   │   ├── projectStore.ts      # 파일 트리, 열린 파일, 내용
-│   │   ├── aiStore.ts           # 채팅 메시지, 스트리밍 상태
+│   │   ├── aiStore.ts           # 채팅 메시지, 스트리밍 상태, planMode
 │   │   ├── rojoStore.ts         # Rojo 상태 + 로그
 │   │   └── settingsStore.ts     # 사용자 설정
-│   ├── hooks/                   # useIpc, useFileWatcher, useKeybindings
-│   ├── lib/                     # constants.ts, types.ts
+│   ├── hooks/                   # useIpc, useKeybindings, useFileWatcher
+│   ├── lib/
+│   │   └── loadPro.tsx          # Renderer Pro 컴포넌트 중앙 로더 (import.meta.glob)
 │   └── i18n/                    # 다국어 (translations.ts, useT.ts)
 │
 ├── resources/
@@ -100,9 +108,13 @@ luano/
 │   ├── roblox-docs/roblox_docs.db # FTS5 사전인덱싱 DB
 │   ├── type-defs/globalTypes.d.luau
 │   ├── studio-plugin/LuanoPlugin.lua
-│   └── templates/{empty,obby,tycoon}/
+│   └── templates/empty/           # 프로젝트 템플릿
 │
-└── packages/doc-indexer/        # 빌드타임 Roblox 문서 인덱서
+├── packages/doc-indexer/        # 빌드타임 Roblox 문서 → SQLite FTS5 인덱서
+├── scripts/download-binaries.ts
+└── .github/workflows/
+    ├── ci.yml                   # lint + typecheck
+    └── build.yml                # 3-platform build + auto GitHub Release
 ```
 
 ---
@@ -143,8 +155,18 @@ win.webContents.send(channel, null); // null = 스트림 종료
 Monaco (renderer) ↔ WebSocket (port 6008) ↔ Node.js main ↔ luau-lsp stdio
 ```
 
+### AI 시스템
+- `provider.ts`: 기본 채팅/스트리밍, Prompt Caching 유틸, 클라이언트 관리
+- `agent.ts`: Pro Agent loop (Anthropic + OpenAI 양쪽 tool use, MAX_ROUNDS 15)
+- Prompt Caching: `toCachedSystem()`이 시스템 프롬프트를 정적 규칙(캐시) + 동적 컨텍스트로 분리
+
+### Pro 모듈 로딩
+- Backend: `electron/pro/modules.ts` — `tryRequire()` 패턴, 모든 Pro 함수를 no-op 폴백과 함께 export
+- Frontend: `src/lib/loadPro.tsx` — `import.meta.glob` + `React.lazy`로 Pro 패널/컴포넌트 동적 로딩
+- Dev: `LUANO_PRO=1` 환경변수로 Pro 모드 활성화, electron-vite가 `preserveModules: true`로 빌드
+
 ### AI 컨텍스트 3레이어
-1. **Global Summary** (~500 tokens): 프로젝트 구조 + 모듈 exports (자동 재생성)
+1. **Global Summary** (~500 tokens): 프로젝트 구조 + 모듈 exports (정규식 기반 추출, 자동 재생성)
 2. **Local Context**: 현재 파일 + requires + diagnostics
 3. **On-Demand RAG**: Roblox 문서 FTS5 검색
 
@@ -155,12 +177,12 @@ Monaco (renderer) ↔ WebSocket (port 6008) ↔ Node.js main ↔ luau-lsp stdio
 
 ## 개발 단계 로드맵
 
-| 단계 | 내용 |
-|------|------|
-| **Phase 1** (현재) | 에디터, LSP, Rojo, AI 채팅, 템플릿 |
-| **Phase 2** | 인라인 편집, RAG docs, Studio 브릿지(읽기전용), 에러 설명 |
-| **Phase 3** | 구독 티어, Luano Studio 플러그인, 텔레메트리, 멀티 AI |
-| **Phase 4** | 에이전트 모드, 플레이테스트 자동화, 화면 캡처, 플러그인 시스템 |
+| 단계 | 내용 | 상태 |
+|------|------|------|
+| **Phase 1** | 에디터, LSP, Rojo, AI 채팅, 템플릿 | ✅ 완료 |
+| **Phase 2** | 인라인 편집, RAG docs, Studio 브릿지, 에러 설명, Agent 모드 | ✅ 완료 |
+| **Phase 3** | Free/Pro 분리, Studio 플러그인, 텔레메트리, 멀티 AI (OpenAI), Prompt Caching | ✅ 완료 |
+| **Phase 4** | 플레이테스트 자동화, 화면 캡처, 플러그인 시스템 | 예정 |
 
 ---
 

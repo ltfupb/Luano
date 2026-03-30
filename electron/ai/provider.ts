@@ -159,6 +159,39 @@ export interface ChatMessage {
   content: string
 }
 
+// ── Prompt Caching (Anthropic cache_control) ────────────────────────────────
+
+type CachedTextBlock = {
+  type: "text"
+  text: string
+  cache_control?: { type: "ephemeral" }
+}
+
+/**
+ * Split system prompt into cached (static rules) + uncached (dynamic context).
+ * Static rules (~3K tokens) are cached via cache_control, saving ~90% on cache hits.
+ */
+export function toCachedSystem(systemPrompt: string): CachedTextBlock[] {
+  const marker = "\nPROJECT CONTEXT:"
+  const idx = systemPrompt.indexOf(marker)
+  if (idx === -1) {
+    return [{ type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } }]
+  }
+  return [
+    { type: "text", text: systemPrompt.slice(0, idx), cache_control: { type: "ephemeral" } },
+    { type: "text", text: systemPrompt.slice(idx) }
+  ]
+}
+
+/** Add cache_control to the last tool definition to cache all tool schemas. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function toCachedTools<T extends Record<string, any>>(tools: T[]): T[] {
+  if (tools.length === 0) return tools
+  return tools.map((tool, i) =>
+    i === tools.length - 1 ? { ...tool, cache_control: { type: "ephemeral" } } : tool
+  )
+}
+
 // ── 기본 채팅 ────────────────────────────────────────────────────────────────
 
 export async function chat(messages: ChatMessage[], systemPrompt: string): Promise<string> {
@@ -177,7 +210,7 @@ export async function chat(messages: ChatMessage[], systemPrompt: string): Promi
   const response = await withTimeout(getAnthropicClient().messages.create({
     model,
     max_tokens: 8192,
-    system: systemPrompt,
+    system: toCachedSystem(systemPrompt),
     messages
   }))
   return response.content[0].type === "text" ? response.content[0].text : ""
@@ -223,7 +256,7 @@ export async function chatStream(
     const stream = getAnthropicClient().messages.stream({
       model,
       max_tokens: 8192,
-      system: systemPrompt,
+      system: toCachedSystem(systemPrompt),
       messages
     })
     for await (const chunk of stream) {

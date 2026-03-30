@@ -29,6 +29,8 @@ try {
 }
 
 export function isPro(): boolean {
+  // Dev override: LUANO_PRO=1 in env enables Pro features locally
+  if (process.env.LUANO_PRO === "1") return true
   return pro !== null && pro.validateLicense()
 }
 
