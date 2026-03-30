@@ -26,11 +26,15 @@ const panelModules = import.meta.glob<Record<string, ComponentType>>([
 
 function loadProPanel(path: string, exportName: string, fallback: string): FC {
   const loader = panelModules[path]
-  if (!loader) return () => <ProPlaceholder name={fallback} />
+  if (!loader) {
+    const Placeholder: FC = function ProPanelPlaceholder() { return <ProPlaceholder name={fallback} /> }
+    return Placeholder
+  }
   const Lazy = lazy(() =>
     loader().then(m => ({ default: (m[exportName] as ComponentType) ?? (() => <ProPlaceholder name={fallback} />) }))
   )
-  return () => <Suspense fallback={null}><Lazy /></Suspense>
+  const Wrapper: FC = function ProPanelWrapper() { return <Suspense fallback={null}><Lazy /></Suspense> }
+  return Wrapper
 }
 
 export const StudioPanel = loadProPanel("../studio/StudioPanel.tsx", "StudioPanel", "Studio Bridge")
@@ -50,7 +54,8 @@ function loadProComponent<P>(path: string, exportName: string): ComponentType<P>
   if (!loader) return null
   const Lazy = lazy(() => loader().then(m => ({ default: m[exportName] as ComponentType<P> })))
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return ((props: P) => <Suspense fallback={null}><Lazy {...(props as any)} /></Suspense>) as ComponentType<P>
+  function ProComponentWrapper(props: P) { return <Suspense fallback={null}><Lazy {...(props as any)} /></Suspense> }
+  return ProComponentWrapper as ComponentType<P>
 }
 
 export const DiffView = loadProComponent<{ original: string; modified: string }>(
