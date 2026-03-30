@@ -50,6 +50,7 @@ coverage/
 .claude/
 
 # === Pro (private) ===
+electron/pro/impl.ts
 electron/ai/agent.ts
 electron/ai/tools.ts
 electron/ai/context.ts
