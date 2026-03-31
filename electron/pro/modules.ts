@@ -80,7 +80,36 @@ export const getConsoleOutput = mcp?.getConsoleOutput ?? (async () => null)
 export const isStudioConnected = mcp?.isStudioConnected ?? (() => false)
 
 // ── Bridge Server ───────────────────────────────────────────────────────────
-// Bridge is now imported directly (free feature), see electron/bridge/server.ts
+
+const bridge = tryRequire<{
+  startBridgeServer: (port?: number) => void
+  setBridgeWindow: (win: any) => void
+  getBridgeTree: () => any
+  getBridgeLogs: () => any
+  isBridgeConnected: () => boolean
+  clearBridgeLogs: () => void
+  queueScript: (code: string) => string
+  getCommandResult: (id: string) => any
+}>("../bridge/server")
+
+export const startBridgeServer = bridge?.startBridgeServer ?? (() => {})
+export const setBridgeWindow = bridge?.setBridgeWindow ?? (() => {})
+export const getBridgeTree = bridge?.getBridgeTree ?? (() => null)
+export const getBridgeLogs = bridge?.getBridgeLogs ?? (() => [])
+export const isBridgeConnected = bridge?.isBridgeConnected ?? (() => false)
+export const clearBridgeLogs = bridge?.clearBridgeLogs ?? (() => {})
+export const queueScript = bridge?.queueScript ?? (() => "")
+export const getCommandResult = bridge?.getCommandResult ?? (() => null)
+
+// ── Agent Checkpoint ────────────────────────────────────────────────────────
+
+const agent = tryRequire<{
+  getLastCheckpoint: () => any
+  revertCheckpoint: (checkpoint: any) => string[]
+}>("../ai/agent")
+
+export const getLastCheckpoint = agent?.getLastCheckpoint ?? (() => null)
+export const revertCheckpoint = agent?.revertCheckpoint ?? (() => [])
 
 // ── Telemetry ───────────────────────────────────────────────────────────────
 

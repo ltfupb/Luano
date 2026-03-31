@@ -15,14 +15,7 @@ import {
   setProvider, setModel, getProviderAndModel,
   MODELS
 } from "../ai/provider"
-import { getLastCheckpoint, revertCheckpoint } from "../ai/agent"
 import { isPro, hasFeature, type ProFeature } from "../pro"
-
-// ── Bridge (always available — connection status is a free feature) ──────────
-import {
-  getBridgeTree, getBridgeLogs, isBridgeConnected, clearBridgeLogs,
-  queueScript, getCommandResult
-} from "../bridge/server"
 
 // ── Pro modules (centralized loader — gracefully absent in Community edition) ─
 import {
@@ -32,6 +25,9 @@ import {
   loadSchemas, addSchema, deleteSchema, generateDataModule, generateMigration,
   getConsoleOutput, isStudioConnected,
   telemetryEnabled, setTelemetry, telemetryStats, recordDiff, recordQuery,
+  getBridgeTree, getBridgeLogs, isBridgeConnected, clearBridgeLogs,
+  queueScript, getCommandResult,
+  getLastCheckpoint, revertCheckpoint,
   type DataStoreSchema
 } from "../pro/modules"
 

@@ -4,7 +4,7 @@ import { electronApp, optimizer, is } from "@electron-toolkit/utils"
 import { registerIpcHandlers } from "./ipc/handlers"
 import { RojoManager } from "./sidecar/rojo"
 import { LspManager } from "./lsp/manager"
-import { startBridgeServer, setBridgeWindow } from "./bridge/server"
+import { startBridgeServer, setBridgeWindow } from "./pro/modules"
 
 let mainWindow: BrowserWindow | null = null
 
