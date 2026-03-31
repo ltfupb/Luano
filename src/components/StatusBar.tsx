@@ -34,7 +34,7 @@ export function StatusBar(): JSX.Element {
           className="w-1.5 h-1.5 rounded-full flex-shrink-0"
           style={{
             background: statusDot[status] ?? statusDot.stopped,
-            boxShadow: status === "connected" ? "0 0 4px #10b981" : "none"
+            boxShadow: status === "running" ? "0 0 4px #10b981" : "none"
           }}
         />
         <span style={{ color: "var(--text-muted)" }}>{statusLabel[status] ?? status}</span>

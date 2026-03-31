@@ -148,6 +148,12 @@ interface Window {
     // Agent Abort
     aiAbort: () => void
 
+    // Agent Revert (checkpoint rollback)
+    aiRevert: () => Promise<{ success: boolean; reverted?: string[] }>
+
+    // Agent Checkpoint listener
+    onCheckpointAvailable: (cb: (info: { fileCount: number; files: string[] }) => void) => () => void
+
     // Studio Bridge (legacy MCP)
     studioGetConsole: () => Promise<string | null>
     studioIsConnected: () => Promise<boolean>

@@ -1,4 +1,4 @@
-import { ipcMain, dialog, app, WebContents } from "electron"
+import { ipcMain, dialog, app, BrowserWindow, WebContents } from "electron"
 import { join } from "path"
 import { copyFileSync, mkdirSync, existsSync, readdirSync, readFileSync, writeFileSync } from "fs"
 import { is } from "@electron-toolkit/utils"
@@ -366,8 +366,7 @@ export function registerIpcHandlers(): void {
 
       // Notify renderer that a checkpoint is available for revert
       if (result.modifiedFiles.length > 0) {
-        const { BrowserWindow: BW } = require("electron")
-        BW.getAllWindows().forEach((win: { webContents: WebContents }) => {
+        BrowserWindow.getAllWindows().forEach((win) => {
           win.webContents.send("agent:checkpoint-available", {
             fileCount: result.modifiedFiles.length,
             files: result.modifiedFiles

@@ -62,7 +62,7 @@ export function RojoPanel(): JSX.Element {
           />
           <span style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
             {cfg.label}
-            {(status === "running" || status === "connected") && port && (
+            {status === "running" && port && (
               <span style={{ color: "var(--text-muted)", marginLeft: "4px" }}>:{port}</span>
             )}
           </span>
