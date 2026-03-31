@@ -325,20 +325,41 @@ gh run watch <RUN_ID> --repo ltfupb/Luano
 
 ### 5. 릴리즈 설명 업데이트
 
-`build.yml`의 `generate_release_notes: true`는 커밋 로그 기반 자동 생성. 수동으로 보강:
+`build.yml`의 `generate_release_notes: true`는 커밋 로그 기반 자동 생성. 수동으로 아래 형식에 맞춰 보강:
 
-```bash
-gh release edit v0.X.0 --repo ltfupb/Luano --notes "$(cat <<'EOF'
-## 주요 변경사항
-- ...
+```markdown
+## v0.X.0 — 한줄 요약 제목
 
-## 바이너리
-| 파일 | 플랫폼 |
-|------|--------|
+### 카테고리 1 (예: AI Improvements)
+- 변경사항 설명 — 왜 바꿨는지 간략히
+
+### 카테고리 2 (예: UX)
+- 변경사항 설명
+
+### Fixes (핫픽스 릴리즈일 경우)
+- 수정 내용
+
+### Binaries
+
+| File | Platform |
+|------|----------|
 | Luano-0.X.0-win-x64.exe | Windows x64 |
 | Luano-0.X.0-mac-arm64.dmg | macOS Apple Silicon |
 | Luano-0.X.0-mac-x64.dmg | macOS Intel |
 | Luano-0.X.0-linux-x86_64.AppImage | Linux x64 |
+```
+
+**규칙:**
+- 제목 형식: `v0.X.0 — 한줄 요약`
+- 카테고리별로 분류 (AI, UX, Architecture, Fixes 등)
+- 각 항목은 무엇을 바꿨는지 + 왜/효과를 한줄로
+- Binaries 테이블 항상 포함
+- 불필요한 어셋(latest.yml, .blockmap) 업로드 후 삭제
+- Co-Authored-By 커밋 메시지에 붙이지 않기
+
+```bash
+gh release edit v0.X.0 --repo ltfupb/Luano --notes "$(cat <<'EOF'
+여기에 위 형식대로 작성
 EOF
 )"
 ```
