@@ -170,7 +170,6 @@ Monaco (renderer) ↔ WebSocket (port 6008) ↔ Node.js main ↔ luau-lsp stdio
 
 ### Pro 모듈 로딩
 - Backend: `electron/pro/modules.ts` — `tryRequire()` 패턴, Pro 함수를 no-op 폴백과 함께 export
-- Bridge 서버는 직접 import (Free 기능 — `main.ts`에서 `./bridge/server` 직접 import)
 - Frontend: `src/lib/loadPro.tsx` — `import.meta.glob` + `React.lazy`로 Pro 패널/컴포넌트 동적 로딩
 - Dev: `LUANO_PRO=1` 환경변수로 Pro 모드 활성화, electron-vite가 `preserveModules: true`로 빌드
 
@@ -214,3 +213,69 @@ Monaco (renderer) ↔ WebSocket (port 6008) ↔ Node.js main ↔ luau-lsp stdio
 - Tailwind 다크 테마: surface/ink/accent/border 커스텀 색상
 - 사이드카 바이너리: `spawnSidecar()` 헬퍼 사용, 크래시 시 자동 재시작 (지수 백오프)
 - IPC 핸들러명 컨벤션: `"domain:action"` (예: `"ai:chat-stream"`, `"project:open-folder"`)
+
+---
+
+## CI / 푸시 전 체크리스트 (반드시 준수)
+
+> **과거 반복된 CI 실패 원인을 정리한 섹션. 코드 수정 후 push 전에 반드시 확인할 것.**
+
+### 1. .gitignore된 Pro 파일은 절대 직접 import 금지
+
+`.gitignore`에 등록된 파일은 CI에 존재하지 않는다. **반드시 `electron/pro/modules.ts`의 `tryRequire()` 패턴**을 통해 import하고 no-op 폴백을 제공해야 한다.
+
+**gitignore된 Pro 파일 목록:**
+```
+electron/pro/impl.ts
+electron/ai/agent.ts
+electron/ai/tools.ts
+electron/ai/context.ts
+electron/ai/rag.ts
+electron/bridge/server.ts
+electron/mcp/client.ts
+electron/analysis/
+electron/datastore/
+electron/topology/
+electron/telemetry/
+src/ai/InlineEditOverlay.tsx
+src/ai/DiffView.tsx
+src/studio/
+src/analysis/
+src/datastore/
+src/topology/
+```
+
+**잘못된 예 (CI 실패):**
+```typescript
+// ❌ 직접 import — CI에서 모듈 못 찾음
+import { startBridgeServer } from "./bridge/server"
+import { getLastCheckpoint } from "../ai/agent"
+```
+
+**올바른 예:**
+```typescript
+// ✅ pro/modules.ts를 통한 import — 없으면 no-op 폴백
+import { startBridgeServer, getLastCheckpoint } from "./pro/modules"
+```
+
+### 2. preload.ts의 API와 env.d.ts 타입 동기화
+
+`electron/preload.ts`에 새 API 함수를 추가하면 `src/env.d.ts`의 `Window.api` 인터페이스에도 반드시 추가해야 한다. 안 하면 renderer 코드에서 타입 에러.
+
+### 3. 타입 리터럴 변경 시 모든 참조 업데이트
+
+예: `RojoStatus` 타입에서 `"connected"`를 제거했으면, 코드 전체에서 `status === "connected"` 비교를 모두 제거해야 한다. TypeScript가 `This comparison appears to be unintentional` 에러를 낸다.
+
+### 4. require() 대신 ES import 사용
+
+ESLint `@typescript-eslint/no-require-imports` 규칙이 활성화되어 있다. 일반 코드에서 `require()` 사용 금지. 유일한 예외: `pro/modules.ts` (eslint-disable 주석으로 명시적 허용).
+
+### 5. push 전 로컬 검증 명령어
+
+```bash
+npx tsc -p tsconfig.web.json --noEmit    # renderer 타입 체크
+npx tsc -p tsconfig.node.json --noEmit   # main process 타입 체크
+npx eslint "src/**/*.{ts,tsx}" "electron/**/*.ts" --max-warnings 20
+```
+
+세 명령어 모두 통과해야 CI가 통과한다. **반드시 push 전에 실행할 것.**
