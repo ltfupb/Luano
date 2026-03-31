@@ -50,6 +50,7 @@ luano/
 │   │   ├── provider.ts          # Claude/OpenAI 기본 채팅/스트리밍 + Prompt Caching
 │   │   ├── agent.ts             # Agent loop (Anthropic + OpenAI 양쪽 tool use)
 │   │   ├── context.ts           # 3-레이어 컨텍스트 + topology/sourcemap 주입
+│   │   ├── api-context.ts       # 런타임 Roblox API 컨텍스트 주입
 │   │   ├── tools.ts             # AI 도구 12개 (lint_file 포함)
 │   │   └── rag.ts               # FTS5 docs 검색
 │   ├── file/
@@ -160,20 +161,24 @@ Monaco (renderer) ↔ WebSocket (port 6008) ↔ Node.js main ↔ luau-lsp stdio
 - `agent.ts`: Phase-based Agent loop (Claude Code subagent 패턴 참조)
   - 3단계: EXPLORE (읽기 전용 도구) → EXECUTE (전체 도구) → VERIFY (자동 lint + 수정)
   - EXPLORE: 코드 이해 후 전환 메시지 주입 → EXECUTE로 자동 전환
-  - VERIFY: 수정된 .lua/.luau 파일 자동 lint → 에러 시 최대 3라운드 자동 수정
+  - VERIFY: 수정된 .lua/.luau 파일 자동 lint → ERROR만 수정 대상 (WARNING 무시)
+  - 반복 에러 감지: 동일 에러 재발 시 자동 중단 (무한 루프 방지)
   - MAX_ROUNDS 15 + MAX_VERIFY_ROUNDS 3
 - `context.ts`: Scope Discipline 규칙 포함 — 요청 범위 밖 수정 방지 ("하지 마" 규칙)
+- `api-context.ts`: 현재 파일에서 사용 중인 Roblox 서비스/클래스의 Full API 정의를 자동 주입
 - Prompt Caching: `toCachedSystem()`이 시스템 프롬프트를 정적 규칙(캐시) + 동적 컨텍스트로 분리
 
 ### Pro 모듈 로딩
-- Backend: `electron/pro/modules.ts` — `tryRequire()` 패턴, 모든 Pro 함수를 no-op 폴백과 함께 export
+- Backend: `electron/pro/modules.ts` — `tryRequire()` 패턴, Pro 함수를 no-op 폴백과 함께 export
+- Bridge 서버는 직접 import (Free 기능 — `main.ts`에서 `./bridge/server` 직접 import)
 - Frontend: `src/lib/loadPro.tsx` — `import.meta.glob` + `React.lazy`로 Pro 패널/컴포넌트 동적 로딩
 - Dev: `LUANO_PRO=1` 환경변수로 Pro 모드 활성화, electron-vite가 `preserveModules: true`로 빌드
 
-### AI 컨텍스트 3레이어
+### AI 컨텍스트 4레이어
 1. **Global Summary** (~500 tokens): 프로젝트 구조 + 모듈 exports (정규식 기반 추출, 자동 재생성)
 2. **Local Context**: 현재 파일 + requires + diagnostics
-3. **On-Demand RAG**: Roblox 문서 FTS5 검색
+3. **API Context**: 현재 파일에서 감지된 Roblox 서비스/클래스의 Full API 정의 (api-context.ts)
+4. **On-Demand RAG**: Roblox 문서 FTS5 검색 (8,528 entries, Full API Dump 기반)
 
 ### 파일 변경 워크플로우
 `chokidar 감지` → `StyLua 포맷` → `Selene 린트` → `renderer IPC 알림` (300ms debounce)
@@ -187,6 +192,7 @@ Monaco (renderer) ↔ WebSocket (port 6008) ↔ Node.js main ↔ luau-lsp stdio
 | **Phase 1** | 에디터, LSP, Rojo, AI 채팅, 템플릿 | ✅ 완료 |
 | **Phase 2** | 인라인 편집, RAG docs, Studio 브릿지, 에러 설명, Agent 모드 | ✅ 완료 |
 | **Phase 3** | Free/Pro 분리, Studio 플러그인, 텔레메트리, 멀티 AI (OpenAI), Prompt Caching | ✅ 완료 |
+| **Phase 3.5** | AI 코드 품질 개선, Welcome 화면, Rojo 상태 단순화, Full API RAG | ✅ v0.4.0 |
 | **Phase 4** | 플레이테스트 자동화, 화면 캡처, 플러그인 시스템 | 예정 |
 
 ---

@@ -177,7 +177,7 @@ Monaco (renderer) ↔ WebSocket (port 6008) ↔ Node.js main ↔ luau-lsp stdio
 - 3단계 실행: EXPLORE → EXECUTE → VERIFY
 - EXPLORE: 읽기 전용 도구만 제공 (`read_file`, `list_files`, `grep_files`, `search_docs`, `read_instance_tree`, `get_runtime_logs`). 코드 이해 후 실행으로 전환
 - EXECUTE: 전체 도구. 파일 생성/수정/삭제 + lint 검증
-- VERIFY: 실행 완료 후 수정된 모든 .lua/.luau 파일 자동 lint → 에러 발견 시 자동 수정 (최대 3라운드)
+- VERIFY: 실행 완료 후 수정된 모든 .lua/.luau 파일 자동 lint → ERROR만 수정 (WARNING 무시), 동일 에러 반복 시 자동 중단
 - 순수 질문(`?`, `뭐야`, `explain` 등)은 EXPLORE 건너뛰고 바로 EXECUTE
 - Anthropic: `messages.stream()` + `tool_use` stop reason
 - OpenAI: `chat.completions.create()` + function calling
@@ -207,12 +207,13 @@ Monaco (renderer) ↔ WebSocket (port 6008) ↔ Node.js main ↔ luau-lsp stdio
 **Phase 전환 흐름**:
 1. EXPLORE: `list_files`, `read_file`, `grep_files`로 프로젝트 이해 → `end_turn` 시 전환 메시지 주입
 2. EXECUTE: `create_file`, `edit_file`로 수정 → `end_turn` 시 자동 lint 검증
-3. VERIFY: lint 에러 발견 시 자동 수정 루프 (최대 3라운드)
+3. VERIFY: ERROR만 자동 수정 (WARNING 무시), 동일 에러 반복 시 중단
 
-**3-레이어 컨텍스트**:
+**4-레이어 컨텍스트**:
 1. Global Summary (~500 tokens): 프로젝트 구조 + 모듈 exports + topology 의존성 + sourcemap instance map
 2. Local Context: 현재 파일 + diagnostics + 첨부 파일
-3. On-Demand RAG: Roblox 문서 FTS5 검색
+3. API Context: 현재 파일에서 감지된 Roblox 서비스/클래스의 Full API 정의 (`api-context.ts`)
+4. On-Demand RAG: Roblox 문서 FTS5 검색 (8,528 entries)
 
 ### 5.4 Studio Bridge
 
