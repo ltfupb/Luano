@@ -22,6 +22,8 @@ Zero-setup: Rojo, Selene, StyLua, luau-lsp 전부 앱 안에 번들링.
 | LSP | luau-lsp (stdio ↔ WebSocket bridge, port 6008) |
 | AI | Claude API (primary), OpenAI (secondary), @anthropic-ai/sdk |
 | DB | better-sqlite3 + FTS5 (Roblox docs RAG) |
+| Update | electron-updater (GitHub Releases auto-update) |
+| License | LemonSqueezy License API (Pro 구독 관리) |
 | Sidecar | Rojo, Selene, StyLua, luau-lsp 바이너리 (resources/binaries/{win,mac,linux}/) |
 
 ---
@@ -35,8 +37,10 @@ luano/
 │   ├── main.ts                  # BrowserWindow 생성, 앱 라이프사이클
 │   ├── preload.ts               # contextBridge IPC API 노출
 │   ├── store.ts                 # electron-store 기반 설정 저장
+│   ├── updater.ts               # electron-updater 자동 업데이트 (check/download/install)
 │   ├── pro/
 │   │   ├── index.ts             # @luano/pro 인터페이스 + Feature gating (Free/Pro 분리)
+│   │   ├── license.ts           # LemonSqueezy 라이센스 관리 (activate/validate/deactivate)
 │   │   └── modules.ts           # tryRequire() 기반 Pro 모듈 중앙 로더
 │   ├── sidecar/                 # 외부 바이너리 프로세스 관리
 │   │   ├── index.ts             # spawnSidecar() 공통 헬퍼
@@ -49,6 +53,7 @@ luano/
 │   ├── ai/
 │   │   ├── provider.ts          # Claude/OpenAI 기본 채팅/스트리밍 + Prompt Caching
 │   │   ├── agent.ts             # Agent loop (Anthropic + OpenAI 양쪽 tool use)
+│   │   ├── evaluator.ts         # AI 코드 품질 평가기 (VERIFY 단계 독립 평가)
 │   │   ├── context.ts           # 3-레이어 컨텍스트 + topology/sourcemap 주입
 │   │   ├── api-context.ts       # 런타임 Roblox API 컨텍스트 주입
 │   │   ├── tools.ts             # AI 도구 12개 (lint_file 포함)
@@ -96,10 +101,10 @@ luano/
 │   │   ├── ErrorBoundary.tsx, Toast.tsx, TutorialOverlay.tsx
 │   ├── stores/                  # Zustand 스토어
 │   │   ├── projectStore.ts      # 파일 트리, 열린 파일, 내용
-│   │   ├── aiStore.ts           # 채팅 메시지, 스트리밍 상태, planMode
+│   │   ├── aiStore.ts           # 채팅 메시지, 스트리밍 상태, planMode, chatHistory persist
 │   │   ├── rojoStore.ts         # Rojo 상태 + 로그
 │   │   └── settingsStore.ts     # 사용자 설정
-│   ├── hooks/                   # useIpc, useKeybindings, useFileWatcher
+│   ├── hooks/                   # useIpc, useKeybindings, useFileWatcher, usePanelResize
 │   ├── lib/
 │   │   └── loadPro.tsx          # Renderer Pro 컴포넌트 중앙 로더 (import.meta.glob)
 │   └── i18n/                    # 다국어 (translations.ts, useT.ts)
@@ -164,14 +169,23 @@ Monaco (renderer) ↔ WebSocket (port 6008) ↔ Node.js main ↔ luau-lsp stdio
   - VERIFY: 수정된 .lua/.luau 파일 자동 lint → ERROR만 수정 대상 (WARNING 무시)
   - 반복 에러 감지: 동일 에러 재발 시 자동 중단 (무한 루프 방지)
   - MAX_ROUNDS 15 + MAX_VERIFY_ROUNDS 3
+- `evaluator.ts`: 별도 AI API 호출로 코드 품질 평가 (1-10점, Luau/Roblox 특화 기준)
 - `context.ts`: Scope Discipline 규칙 포함 — 요청 범위 밖 수정 방지 ("하지 마" 규칙)
 - `api-context.ts`: 현재 파일에서 사용 중인 Roblox 서비스/클래스의 Full API 정의를 자동 주입
 - Prompt Caching: `toCachedSystem()`이 시스템 프롬프트를 정적 규칙(캐시) + 동적 컨텍스트로 분리
+- Session Handoff: 새 세션 시작 시 이전 대화 요약을 자동 주입 (`sessionHandoff` in aiStore)
+- Progress File: `.luano/progress.md`에 장기 작업 진행 상황 기록, 세션 간 연속성
 
 ### Pro 모듈 로딩
 - Backend: `electron/pro/modules.ts` — `tryRequire()` 패턴, Pro 함수를 no-op 폴백과 함께 export
 - Frontend: `src/lib/loadPro.tsx` — `import.meta.glob` + `React.lazy`로 Pro 패널/컴포넌트 동적 로딩
 - Dev: `LUANO_PRO=1` 환경변수로 Pro 모드 활성화, electron-vite가 `preserveModules: true`로 빌드
+- License: `electron/pro/license.ts` — LemonSqueezy public API로 라이센스 검증 (product_id: 937319)
+
+### 자동 업데이트
+- `electron/updater.ts`: electron-updater 기반, GitHub Releases에서 자동 감지
+- 시작 10초 후 자동 체크, 수동 다운로드/설치 지원
+- StatusBar에 업데이트 상태 표시 (available → downloading → restart)
 
 ### AI 컨텍스트 4레이어
 1. **Global Summary** (~500 tokens): 프로젝트 구조 + 모듈 exports (정규식 기반 추출, 자동 재생성)
@@ -192,7 +206,8 @@ Monaco (renderer) ↔ WebSocket (port 6008) ↔ Node.js main ↔ luau-lsp stdio
 | **Phase 2** | 인라인 편집, RAG docs, Studio 브릿지, 에러 설명, Agent 모드 | ✅ 완료 |
 | **Phase 3** | Free/Pro 분리, Studio 플러그인, 텔레메트리, 멀티 AI (OpenAI), Prompt Caching | ✅ 완료 |
 | **Phase 3.5** | AI 코드 품질 개선, Welcome 화면, Rojo 상태 단순화, Full API RAG | ✅ v0.4.0 |
-| **Phase 4** | 플레이테스트 자동화, 화면 캡처, 플러그인 시스템 | 예정 |
+| **Phase 4** | Auto-save, Pro 라이센싱, Auto-update, AI Evaluator, Context handoff, 배치 도구 | ✅ v0.5.0 |
+| **Phase 5** | 플레이테스트 자동화, 화면 캡처, 플러그인 시스템 | 예정 |
 
 ---
 
