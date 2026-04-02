@@ -198,16 +198,13 @@ Monaco (renderer) ↔ WebSocket (port 6008) ↔ Node.js main ↔ luau-lsp stdio
 
 ---
 
-## 개발 단계 로드맵
+## 릴리즈 히스토리
 
-| 단계 | 내용 | 상태 |
-|------|------|------|
-| **Phase 1** | 에디터, LSP, Rojo, AI 채팅, 템플릿 | ✅ 완료 |
-| **Phase 2** | 인라인 편집, RAG docs, Studio 브릿지, 에러 설명, Agent 모드 | ✅ 완료 |
-| **Phase 3** | Free/Pro 분리, Studio 플러그인, 텔레메트리, 멀티 AI (OpenAI), Prompt Caching | ✅ 완료 |
-| **v0.4.0** | AI 코드 품질 개선, Welcome 화면, Rojo 상태 단순화, Full API RAG | ✅ |
-| **v0.5.0** | UX 기본기 + 수익화 + AI 품질 강화 | ✅ |
-| **v0.6.0** | 플레이테스트 자동화, 화면 캡처, 플러그인 시스템 | 예정 |
+- **v0.5.0** — UX 기본기 + 수익화 + AI 품질 강화
+- **v0.4.0** — AI 코드 품질 개선 + Welcome 화면 + Full API RAG
+- **v0.3.0** — Free/Pro 분리 + Studio 플러그인 + 멀티 AI
+- **v0.2.0** — 인라인 편집 + RAG docs + Studio 브릿지 + Agent 모드
+- **v0.1.0** — 에디터 + LSP + Rojo + AI 채팅 + 템플릿
 
 ---
 
@@ -343,16 +340,10 @@ gh run watch <RUN_ID> --repo ltfupb/Luano
 `build.yml`의 `generate_release_notes: true`는 커밋 로그 기반 자동 생성. 수동으로 아래 형식에 맞춰 보강:
 
 ```markdown
-## v0.X.0 — 한줄 요약 제목
+## v0.X.0 — 쉼표 없이 짧은 한줄 요약
 
-### 카테고리 1 (예: AI Improvements)
-- 변경사항 설명 — 왜 바꿨는지 간략히
-
-### 카테고리 2 (예: UX)
+### 카테고리 (예: AI / UX / Fixes)
 - 변경사항 설명
-
-### Fixes (핫픽스 릴리즈일 경우)
-- 수정 내용
 
 ### Binaries
 
@@ -367,12 +358,10 @@ gh run watch <RUN_ID> --repo ltfupb/Luano
 ```
 
 **규칙:**
-- 제목 형식: `v0.X.0 — 한줄 요약`
-- 카테고리별로 분류 (AI, UX, Architecture, Fixes 등)
-- 각 항목은 무엇을 바꿨는지 + 왜/효과를 한줄로
+- 버전명에 v 접두사 필수 (v0.5.0)
+- 제목 첫줄: 쉼표 없이 간결하게 (예: `v0.5.0 — UX 기본기와 수익화`)
 - Binaries 테이블 항상 포함
-- 불필요한 어셋(latest.yml, .blockmap) 업로드 후 삭제
-- Co-Authored-By 커밋 메시지에 붙이지 않기
+- .blockmap 어셋 삭제, latest.yml은 auto-update용으로 유지
 
 ```bash
 gh release edit v0.X.0 --repo ltfupb/Luano --notes "$(cat <<'EOF'
