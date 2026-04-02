@@ -18,6 +18,7 @@ import { ErrorBoundary } from "./components/ErrorBoundary"
 import { ToastContainer, toast } from "./components/Toast"
 import { TutorialOverlay, shouldShowTutorial } from "./components/TutorialOverlay"
 import { useT } from "./i18n/useT"
+import { usePanelResize } from "./hooks/usePanelResize"
 import { StudioPanel, CrossScriptPanel, DataStorePanel, TopologyPanel } from "./lib/loadPro"
 
 const TERMINAL_MIN = 80
@@ -151,7 +152,7 @@ function WelcomeScreen({
 export default function App(): JSX.Element {
   const { projectPath, openFiles, dirtyFiles, setProject, closeProject, setFileTree, openFile } = useProjectStore()
   const { setStatus, addLog } = useRojoStore()
-  const { setGlobalSummary, clearMessages } = useAIStore()
+  const { setGlobalSummary, clearMessages, saveProjectChat, loadProjectChat } = useAIStore()
   const theme = useSettingsStore((s) => s.theme)
   const addRecentProject = useSettingsStore((s) => s.addRecentProject)
   const t = useT()
@@ -170,20 +171,10 @@ export default function App(): JSX.Element {
   const [quickOpenVisible, setQuickOpenVisible] = useState(false)
   const [showTutorial, setShowTutorial] = useState(() => shouldShowTutorial())
 
-  // Terminal resize drag state
-  const isDraggingRef = useRef(false)
-  const dragStartY = useRef(0)
-  const dragStartH = useRef(0)
-
-  // Side panel resize drag state
-  const isSideDraggingRef = useRef(false)
-  const sideDragStartX = useRef(0)
-  const sideDragStartW = useRef(0)
-
-  // Chat panel resize drag state
-  const isChatDraggingRef = useRef(false)
-  const chatDragStartX = useRef(0)
-  const chatDragStartW = useRef(0)
+  // Panel resize hooks
+  const handleResizeMouseDown = usePanelResize("y", TERMINAL_MIN, TERMINAL_MAX, setTerminalHeight, true)
+  const handleSideResizeMouseDown = usePanelResize("x", SIDEPANEL_MIN, SIDEPANEL_MAX, setSidePanelWidth)
+  const handleChatResizeMouseDown = usePanelResize("x", CHATPANEL_MIN, CHATPANEL_MAX, setChatPanelWidth, true)
 
   useIpcEvent("rojo:status-changed", (status) => setStatus(status as never))
   useIpcEvent("rojo:log", (log) => addLog(log as string))
@@ -228,8 +219,20 @@ export default function App(): JSX.Element {
           openFile(filePath, content ?? "")
         } catch { /* 파일이 삭제된 경우 skip */ }
       }
+      // Restore chat history for this project
+      loadProjectChat(savedPath)
     })
   // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // ── 앱 종료 시 채팅 저장 ──────────────────────────────────────────────────────
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      const path = useProjectStore.getState().projectPath
+      if (path) useAIStore.getState().saveProjectChat(path)
+    }
+    window.addEventListener("beforeunload", handleBeforeUnload)
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload)
   }, [])
 
   // ── 오프라인 감지 ────────────────────────────────────────────────────────────
@@ -287,21 +290,19 @@ export default function App(): JSX.Element {
   }, [fileMenuOpen])
 
   const switchToProject = useCallback(async (path: string, isNew: boolean) => {
+    // Save current project's chat before switching
+    const currentPath = useProjectStore.getState().projectPath
+    if (currentPath) saveProjectChat(currentPath)
     closeProject()
     clearMessages()
     setGlobalSummary("")
     if (isNew) await window.api.initProject(path)
     await openPath(path)
-  }, [closeProject, clearMessages, setGlobalSummary, openPath])
+    // Load new project's chat history
+    loadProjectChat(path)
+  }, [closeProject, clearMessages, setGlobalSummary, openPath, saveProjectChat, loadProjectChat])
 
-  const handleOpenFolder = async () => {
-    const path = await window.api.openFolder()
-    if (!path) return
-    if (projectPath && dirtyFiles.length > 0) {
-      setSwitchConfirm({ action: "open", path })
-      return
-    }
-    // Check if folder has default.project.json
+  const checkRojoAndOpen = async (path: string) => {
     let hasRojo = false
     try {
       await window.api.readFile(`${path}/default.project.json`)
@@ -312,6 +313,16 @@ export default function App(): JSX.Element {
       return
     }
     await switchToProject(path, false)
+  }
+
+  const handleOpenFolder = async () => {
+    const path = await window.api.openFolder()
+    if (!path) return
+    if (projectPath && dirtyFiles.length > 0) {
+      setSwitchConfirm({ action: "open", path })
+      return
+    }
+    await checkRojoAndOpen(path)
   }
 
   const handleNewProject = async () => {
@@ -340,80 +351,9 @@ export default function App(): JSX.Element {
       setSwitchConfirm({ action: "open", path })
       return
     }
-    let hasRojo = false
-    try {
-      await window.api.readFile(`${path}/default.project.json`)
-      hasRojo = true
-    } catch { /* no project file */ }
-    if (!hasRojo) {
-      setRojoSetup(path)
-      return
-    }
-    await switchToProject(path, false)
+    await checkRojoAndOpen(path)
   }
 
-  // ── 터미널 리사이즈 드래그 ───────────────────────────────────────────────────
-  const handleResizeMouseDown = (e: React.MouseEvent) => {
-    e.preventDefault()
-    isDraggingRef.current = true
-    dragStartY.current = e.clientY
-    dragStartH.current = terminalHeight
-
-    const onMove = (mv: MouseEvent) => {
-      if (!isDraggingRef.current) return
-      const delta = dragStartY.current - mv.clientY
-      setTerminalHeight(Math.max(TERMINAL_MIN, Math.min(TERMINAL_MAX, dragStartH.current + delta)))
-    }
-    const onUp = () => {
-      isDraggingRef.current = false
-      window.removeEventListener("mousemove", onMove)
-      window.removeEventListener("mouseup", onUp)
-    }
-    window.addEventListener("mousemove", onMove)
-    window.addEventListener("mouseup", onUp)
-  }
-
-  // ── 사이드패널 리사이즈 드래그 ────────────────────────────────────────────────
-  const handleSideResizeMouseDown = (e: React.MouseEvent) => {
-    e.preventDefault()
-    isSideDraggingRef.current = true
-    sideDragStartX.current = e.clientX
-    sideDragStartW.current = sidePanelWidth
-
-    const onMove = (mv: MouseEvent) => {
-      if (!isSideDraggingRef.current) return
-      const delta = mv.clientX - sideDragStartX.current
-      setSidePanelWidth(Math.max(SIDEPANEL_MIN, Math.min(SIDEPANEL_MAX, sideDragStartW.current + delta)))
-    }
-    const onUp = () => {
-      isSideDraggingRef.current = false
-      window.removeEventListener("mousemove", onMove)
-      window.removeEventListener("mouseup", onUp)
-    }
-    window.addEventListener("mousemove", onMove)
-    window.addEventListener("mouseup", onUp)
-  }
-
-  // ── 채팅패널 리사이즈 드래그 ──────────────────────────────────────────────────
-  const handleChatResizeMouseDown = (e: React.MouseEvent) => {
-    e.preventDefault()
-    isChatDraggingRef.current = true
-    chatDragStartX.current = e.clientX
-    chatDragStartW.current = chatPanelWidth
-
-    const onMove = (mv: MouseEvent) => {
-      if (!isChatDraggingRef.current) return
-      const delta = chatDragStartX.current - mv.clientX
-      setChatPanelWidth(Math.max(CHATPANEL_MIN, Math.min(CHATPANEL_MAX, chatDragStartW.current + delta)))
-    }
-    const onUp = () => {
-      isChatDraggingRef.current = false
-      window.removeEventListener("mousemove", onMove)
-      window.removeEventListener("mouseup", onUp)
-    }
-    window.addEventListener("mousemove", onMove)
-    window.addEventListener("mouseup", onUp)
-  }
 
   return (
     <div className="flex flex-col h-screen overflow-hidden" style={{ background: "var(--bg-base)", color: "var(--text-primary)" }}>

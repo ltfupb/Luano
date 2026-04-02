@@ -244,7 +244,13 @@ function SkillEditor({
 // ── Main Settings Panel ─────────────────────────────────────────────────────
 
 export function SettingsPanel({ onClose }: SettingsPanelProps): JSX.Element {
-  const { language, setLanguage, theme, setTheme, apiKey, setApiKey, openaiKey, setOpenAIKey, provider, setProvider, model, setModel } = useSettingsStore()
+  const {
+    language, setLanguage, theme, setTheme,
+    apiKey, setApiKey, openaiKey, setOpenAIKey,
+    provider, setProvider, model, setModel,
+    autoSave, setAutoSave, autoSaveDelay, setAutoSaveDelay,
+    fontSize, setFontSize
+  } = useSettingsStore()
   const { projectPath } = useProjectStore()
   const t = useT()
   const [models, setModels] = useState<ProviderModels>({ anthropic: [], openai: [] })
@@ -253,6 +259,10 @@ export function SettingsPanel({ onClose }: SettingsPanelProps): JSX.Element {
   const [editingSkill, setEditingSkill] = useState<{ index: number; skill: CustomSkill } | null>(null)
   const [telemetryEnabled, setTelemetryEnabled] = useState(false)
   const [proStatus, setProStatus] = useState<{ isPro: boolean } | null>(null)
+  const [licenseInfo, setLicenseInfo] = useState<{ isActive: boolean; customerName?: string; customerEmail?: string } | null>(null)
+  const [licenseKeyInput, setLicenseKeyInput] = useState("")
+  const [licenseActivating, setLicenseActivating] = useState(false)
+  const [licenseError, setLicenseError] = useState("")
 
   useEffect(() => {
     requestAnimationFrame(() => setVisible(true))
@@ -273,6 +283,7 @@ export function SettingsPanel({ onClose }: SettingsPanelProps): JSX.Element {
     // Load telemetry and pro status
     window.api.telemetryIsEnabled().then((v: boolean) => setTelemetryEnabled(v)).catch(() => {})
     window.api.getProStatus().then((s: { isPro: boolean }) => setProStatus(s)).catch(() => {})
+    window.api.licenseInfo().then(setLicenseInfo).catch(() => {})
   }, [])
 
   const handleClose = () => {
@@ -403,6 +414,76 @@ export function SettingsPanel({ onClose }: SettingsPanelProps): JSX.Element {
                   {t.label}
                 </button>
               ))}
+            </div>
+          </div>
+
+          {/* Divider */}
+          <div style={{ height: "1px", background: "var(--border-subtle)" }} />
+
+          {/* Editor */}
+          <div className="flex flex-col gap-3">
+            <SectionLabel>Editor</SectionLabel>
+
+            {/* Auto Save */}
+            <label className="flex items-center gap-2.5 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={autoSave}
+                onChange={(e) => setAutoSave(e.target.checked)}
+                className="accent-[var(--accent)]"
+                style={{ width: 14, height: 14 }}
+              />
+              <span style={{ fontSize: "11px", color: "var(--text-secondary)" }}>
+                Auto Save
+              </span>
+            </label>
+
+            {autoSave && (
+              <div className="flex items-center gap-2 pl-6">
+                <span style={{ fontSize: "10px", color: "var(--text-muted)", whiteSpace: "nowrap" }}>Delay</span>
+                <select
+                  value={autoSaveDelay}
+                  onChange={(e) => setAutoSaveDelay(Number(e.target.value))}
+                  className="rounded-md px-2 py-1 focus:outline-none"
+                  style={{
+                    background: "var(--bg-base)",
+                    border: "1px solid var(--border)",
+                    color: "var(--text-primary)",
+                    fontSize: "11px"
+                  }}
+                >
+                  <option value={500}>500ms</option>
+                  <option value={1000}>1s</option>
+                  <option value={2000}>2s</option>
+                  <option value={5000}>5s</option>
+                </select>
+              </div>
+            )}
+
+            {/* Font Size */}
+            <div className="flex items-center gap-2.5">
+              <span style={{ fontSize: "11px", color: "var(--text-secondary)", whiteSpace: "nowrap" }}>Font Size</span>
+              <input
+                type="range"
+                min={10}
+                max={24}
+                step={1}
+                value={fontSize}
+                onChange={(e) => setFontSize(Number(e.target.value))}
+                className="flex-1 accent-[var(--accent)]"
+                style={{ height: 4 }}
+              />
+              <span
+                style={{
+                  fontSize: "11px",
+                  color: "var(--text-muted)",
+                  fontFamily: "monospace",
+                  minWidth: 28,
+                  textAlign: "right"
+                }}
+              >
+                {fontSize}px
+              </span>
             </div>
           </div>
 
@@ -587,8 +668,8 @@ export function SettingsPanel({ onClose }: SettingsPanelProps): JSX.Element {
           {/* Divider */}
           <div style={{ height: "1px", background: "var(--border-subtle)" }} />
 
-          {/* Pro Status */}
-          <div className="flex flex-col gap-2">
+          {/* Pro Status + License */}
+          <div className="flex flex-col gap-2.5">
             <SectionLabel>Plan</SectionLabel>
             <div
               className="flex items-center gap-2 rounded-lg px-3 py-2.5"
@@ -597,12 +678,81 @@ export function SettingsPanel({ onClose }: SettingsPanelProps): JSX.Element {
               <span style={{ fontSize: "12px", fontWeight: 600, color: proStatus?.isPro ? "#10b981" : "var(--text-secondary)" }}>
                 {proStatus?.isPro ? "Pro" : "Community (Free)"}
               </span>
-              {!proStatus?.isPro && (
-                <span style={{ fontSize: "10px", color: "var(--text-ghost)", marginLeft: "auto" }}>
-                  Agent, Inline Edit, Studio Bridge require Pro
+              {licenseInfo?.isActive && licenseInfo.customerEmail && (
+                <span style={{ fontSize: "10px", color: "var(--text-muted)", marginLeft: "auto" }}>
+                  {licenseInfo.customerEmail}
                 </span>
               )}
             </div>
+
+            {licenseInfo?.isActive ? (
+              <button
+                onClick={async () => {
+                  const result = await window.api.licenseDeactivate()
+                  if (result.success) {
+                    setLicenseInfo({ isActive: false })
+                    setProStatus({ isPro: false })
+                  }
+                }}
+                className="px-3 py-1.5 rounded-lg text-xs transition-all duration-150"
+                style={{
+                  background: "var(--bg-elevated)",
+                  color: "#f87171",
+                  border: "1px solid rgba(248,113,113,0.3)",
+                  alignSelf: "flex-start"
+                }}
+              >
+                Deactivate License
+              </button>
+            ) : (
+              <div className="flex flex-col gap-2">
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={licenseKeyInput}
+                    onChange={(e) => { setLicenseKeyInput(e.target.value); setLicenseError("") }}
+                    placeholder="Enter license key"
+                    className="flex-1 rounded-lg px-3 py-2 transition-all duration-150 focus:outline-none"
+                    style={{
+                      background: "var(--bg-base)",
+                      border: `1px solid ${licenseError ? "rgba(248,113,113,0.5)" : "var(--border)"}`,
+                      color: "var(--text-primary)",
+                      fontSize: "12px"
+                    }}
+                    onFocus={e => (e.currentTarget).style.borderColor = "var(--accent)"}
+                    onBlur={e => (e.currentTarget).style.borderColor = licenseError ? "rgba(248,113,113,0.5)" : "var(--border)"}
+                  />
+                  <button
+                    onClick={async () => {
+                      if (!licenseKeyInput.trim()) return
+                      setLicenseActivating(true)
+                      setLicenseError("")
+                      const result = await window.api.licenseActivate(licenseKeyInput.trim())
+                      setLicenseActivating(false)
+                      if (result.success) {
+                        setLicenseKeyInput("")
+                        setLicenseInfo({ isActive: true, customerName: result.customerName, customerEmail: result.customerEmail })
+                        setProStatus({ isPro: true })
+                      } else {
+                        setLicenseError(result.error ?? "Activation failed")
+                      }
+                    }}
+                    disabled={licenseActivating || !licenseKeyInput.trim()}
+                    className="px-3 py-2 rounded-lg font-medium transition-all duration-150 disabled:opacity-50"
+                    style={{ background: "var(--accent)", color: "white", fontSize: "12px", whiteSpace: "nowrap" }}
+                  >
+                    {licenseActivating ? "..." : "Activate"}
+                  </button>
+                </div>
+                {licenseError && (
+                  <span style={{ fontSize: "10px", color: "#f87171" }}>{licenseError}</span>
+                )}
+                <span style={{ fontSize: "10px", color: "var(--text-ghost)", lineHeight: 1.4 }}>
+                  Get a license key at{" "}
+                  <span style={{ color: "var(--accent)" }}>luano.dev</span>
+                </span>
+              </div>
+            )}
           </div>
         </div>
 

@@ -16,6 +16,7 @@ import {
   MODELS
 } from "../ai/provider"
 import { isPro, hasFeature, type ProFeature } from "../pro"
+import { activateLicense, deactivateLicense, getLicenseInfo, validateLicense as revalidateLicense } from "../pro/license"
 
 // ── Pro modules (centralized loader — gracefully absent in Community edition) ─
 import {
@@ -28,11 +29,64 @@ import {
   getBridgeTree, getBridgeLogs, isBridgeConnected, clearBridgeLogs,
   queueScript, getCommandResult,
   getLastCheckpoint, revertCheckpoint,
+  evaluateCode, evaluateFiles,
   type DataStoreSchema
 } from "../pro/modules"
 
 // Track AI-generated file contents for telemetry diff comparison
 const aiGeneratedFiles = new Map<string, string>()
+
+/** Common shape for AI context data from renderer */
+interface AIContext {
+  globalSummary: string
+  projectPath?: string
+  currentFile?: string
+  currentFileContent?: string
+  docsContext?: string
+  sessionHandoff?: string
+  attachedFiles?: Array<{ path: string; content: string }>
+}
+
+/** Extract last user message and build RAG docs context */
+async function buildRAGContext(messages: unknown[]): Promise<{ lastUserMsg: string; docsContext: string }> {
+  const msgList = messages as Array<{ role: string; content: string }>
+  const lastMsg = [...msgList].reverse().find((m) => m.role === "user")
+  const lastUserMsg = lastMsg?.content ?? ""
+  const docsContext = lastUserMsg ? await buildDocsContext(lastUserMsg) : ""
+  return { lastUserMsg, docsContext }
+}
+
+/** Read .luano/progress.md if it exists, for agent session continuity */
+function readProgressFile(projectPath?: string): string {
+  if (!projectPath) return ""
+  const progressPath = join(projectPath, ".luano", "progress.md")
+  if (!existsSync(progressPath)) return ""
+  try {
+    const content = readFileSync(progressPath, "utf-8").trim()
+    return content ? `\n\nPrevious progress notes:\n${content}` : ""
+  } catch { return "" }
+}
+
+const PROGRESS_INSTRUCTION = `\n\nFor multi-step tasks, maintain a progress file at .luano/progress.md in the project root. Update it after completing each major step with: what was done, what remains, and any decisions made. This allows work to continue across sessions.`
+
+/** Recursively collect all .lua/.luau files in a project */
+function collectLuauFiles(dir: string): string[] {
+  const results: string[] = []
+  const SKIP = new Set(["node_modules", ".git", "Packages", "DevPackages"])
+  const walk = (d: string): void => {
+    if (!existsSync(d)) return
+    let entries
+    try { entries = readdirSync(d, { withFileTypes: true }) } catch { return }
+    for (const e of entries) {
+      if (e.name.startsWith(".") || SKIP.has(e.name)) continue
+      const full = join(d, e.name)
+      if (e.isDirectory()) walk(full)
+      else if (/\.(lua|luau)$/i.test(e.name)) results.push(full)
+    }
+  }
+  walk(dir)
+  return results
+}
 
 const PRO_REQUIRED = (feature: ProFeature) => ({
   success: false,
@@ -89,6 +143,12 @@ export function registerIpcHandlers(): void {
       skills: true
     }
   }))
+
+  // ── 라이센스 ──────────────────────────────────────────────────────────────
+  ipcMain.handle("license:activate", (_, key: string) => activateLicense(key))
+  ipcMain.handle("license:deactivate", () => deactivateLicense())
+  ipcMain.handle("license:info", () => getLicenseInfo())
+  ipcMain.handle("license:validate", async () => ({ valid: await revalidateLicense() }))
 
   // ── 프로젝트 ──────────────────────────────────────────────────────────────
   ipcMain.handle("project:open-folder", async () => {
@@ -234,43 +294,31 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(
     "ai:chat-stream",
     async (_, messages: unknown[], contextData: unknown, streamChannel: string) => {
-      const ctx = contextData as {
-        globalSummary: string
-        currentFile?: string
-        currentFileContent?: string
-        attachedFiles?: Array<{ path: string; content: string }>
-      }
+      const ctx = contextData as AIContext
+      const { lastUserMsg, docsContext } = await buildRAGContext(messages)
 
-      // RAG: 마지막 유저 메시지로 문서 검색
-      const msgList = messages as Array<{ role: string; content: string }>
-      const lastMsg = [...msgList].reverse().find((m) => m.role === "user")
-      const docsContext = lastMsg ? await buildDocsContext(lastMsg.content) : ""
-
-      const systemPrompt = buildSystemPrompt({
+      const basePrompt = buildSystemPrompt({
         globalSummary: ctx.globalSummary ?? "",
         currentFile: ctx.currentFile,
         currentFileContent: ctx.currentFileContent,
         docsContext: docsContext || undefined,
         attachedFiles: ctx.attachedFiles
       })
+      const systemPrompt = ctx.sessionHandoff
+        ? `${basePrompt}\n\n${ctx.sessionHandoff}`
+        : basePrompt
 
       await chatStream(messages as never, systemPrompt, streamChannel)
-      const userQuery = lastMsg?.content ?? ""
-      recordQuery({ userQuery, apisReferenced: [], ragHit: !!docsContext })
+      recordQuery({ userQuery: lastUserMsg, apisReferenced: [], ragHit: !!docsContext })
       return { success: true }
     }
   )
 
   // ── Plan Chat ─────────────────────────────────────────────────────────────
   ipcMain.handle("ai:plan-chat", async (_, messages: unknown[], contextData: unknown) => {
-    const ctx = contextData as {
-      globalSummary: string
-      currentFile?: string
-      currentFileContent?: string
-    }
-    const msgList = messages as Array<{ role: string; content: string }>
-    const lastMsg = [...msgList].reverse().find((m) => m.role === "user")
-    const docsContext = lastMsg ? await buildDocsContext(lastMsg.content) : ""
+    const ctx = contextData as AIContext
+    const { docsContext } = await buildRAGContext(messages)
+
     const systemPrompt = buildSystemPrompt({
       globalSummary: ctx.globalSummary ?? "",
       currentFile: ctx.currentFile,
@@ -308,16 +356,10 @@ export function registerIpcHandlers(): void {
     "ai:agent-chat",
     async (_, messages: unknown[], contextData: unknown, streamChannel: string) => {
       if (!hasFeature("agent")) return PRO_REQUIRED("agent")
-      const ctx = contextData as {
-        globalSummary: string
-        currentFile?: string
-        currentFileContent?: string
-        attachedFiles?: Array<{ path: string; content: string }>
-      }
+      const ctx = contextData as AIContext
 
-      const msgList = messages as Array<{ role: string; content: string }>
-      const lastMsg = [...msgList].reverse().find((m) => m.role === "user")
-      const docsContext = lastMsg ? await buildDocsContext(lastMsg.content) : ""
+      const progressContext = readProgressFile(ctx.projectPath)
+      const { lastUserMsg, docsContext } = await buildRAGContext(messages)
 
       // Phase 4: include live Studio state when bridge is connected
       let bridgeContext: string | undefined
@@ -349,8 +391,12 @@ export function registerIpcHandlers(): void {
         attachedFiles: ctx.attachedFiles
       })
 
-      const result = await agentChat(messages as never, systemPrompt, streamChannel)
-      recordQuery({ userQuery: lastMsg?.content ?? "", apisReferenced: [], ragHit: !!docsContext })
+      const handoffContext = ctx.sessionHandoff ? `\n\n${ctx.sessionHandoff}` : ""
+      const fullPrompt = ctx.projectPath
+        ? systemPrompt + PROGRESS_INSTRUCTION + progressContext + handoffContext
+        : systemPrompt + handoffContext
+      const result = await agentChat(messages as never, fullPrompt, streamChannel)
+      recordQuery({ userQuery: lastUserMsg, apisReferenced: [], ragHit: !!docsContext })
 
       // Track AI-modified files for telemetry diff comparison
       for (const fp of result.modifiedFiles) {
@@ -581,6 +627,71 @@ export function registerIpcHandlers(): void {
     return { success: true }
   })
   ipcMain.handle("telemetry:stats", () => telemetryStats())
+
+  // ── AI Evaluator [Pro] ────────────────────────────────────────────────────
+  ipcMain.handle("ai:evaluate", async (_, filePath: string, content: string, instruction?: string) => {
+    if (!hasFeature("agent")) return PRO_REQUIRED("agent")
+    return evaluateCode(filePath, content, instruction)
+  })
+
+  ipcMain.handle("ai:evaluate-batch", async (_, files: Array<{ path: string; content: string }>, instruction?: string) => {
+    if (!hasFeature("agent")) return PRO_REQUIRED("agent")
+    return evaluateFiles(files, instruction)
+  })
+
+  // ── Performance Monitoring ───────────────────────────────────────────────
+  ipcMain.handle("perf:stats", () => {
+    const mem = process.memoryUsage()
+    return {
+      heapUsed: Math.round(mem.heapUsed / 1024 / 1024),
+      heapTotal: Math.round(mem.heapTotal / 1024 / 1024),
+      rss: Math.round(mem.rss / 1024 / 1024),
+      uptime: Math.round(process.uptime())
+    }
+  })
+
+  // ── Batch Operations ─────────────────────────────────────────────────────
+  ipcMain.handle("batch:format-all", async (_, projectPath: string) => {
+    const files = collectLuauFiles(projectPath)
+    let formatted = 0
+    let failed = 0
+    for (const f of files) {
+      try {
+        const ok = await formatFile(f)
+        if (ok) formatted++; else failed++
+      } catch { failed++ }
+    }
+    return { formatted, failed, total: files.length }
+  })
+
+  ipcMain.handle("batch:lint-all", async (_, projectPath: string) => {
+    const files = collectLuauFiles(projectPath)
+    const results: Array<{ file: string; diagnostics: unknown }> = []
+    for (const f of files) {
+      try {
+        const diag = await lintFile(f)
+        results.push({ file: f, diagnostics: diag })
+      } catch { /* skip */ }
+    }
+    return { results, total: files.length }
+  })
+
+  // ── Chat Export ──────────────────────────────────────────────────────────
+  ipcMain.handle("chat:export", async (_, messages: Array<{ role: string; content: string }>, projectName: string) => {
+    const { filePath } = await dialog.showSaveDialog({
+      title: "Export Chat",
+      defaultPath: `${projectName}-chat-${new Date().toISOString().slice(0, 10)}.md`,
+      filters: [{ name: "Markdown", extensions: ["md"] }]
+    })
+    if (!filePath) return { success: false, canceled: true }
+    const lines = [`# ${projectName} — AI Chat Export\n`, `> Exported: ${new Date().toISOString()}\n`]
+    for (const m of messages) {
+      lines.push(`## ${m.role === "user" ? "You" : "Luano AI"}\n`)
+      lines.push(m.content + "\n")
+    }
+    writeFileSync(filePath, lines.join("\n"), "utf-8")
+    return { success: true, path: filePath }
+  })
 
   // ── Error Explainer ───────────────────────────────────────────────────────
   ipcMain.handle("ai:explain-error", async (_, errorText: string, contextData: unknown) => {

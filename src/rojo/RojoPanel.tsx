@@ -1,6 +1,6 @@
 import { useRojoStore } from "../stores/rojoStore"
 import { useProjectStore } from "../stores/projectStore"
-import { useRef, useEffect } from "react"
+import { useRef, useEffect, useState } from "react"
 
 const statusConfig: Record<string, { color: string; glow: boolean; label: string }> = {
   stopped:    { color: "#3a5272", glow: false, label: "Stopped" },
@@ -20,7 +20,42 @@ export function RojoPanel(): JSX.Element {
     }
   }, [logs])
 
+  const [batchRunning, setBatchRunning] = useState(false)
+  const [batchResult, setBatchResult] = useState<string | null>(null)
+
   const cfg = statusConfig[status] ?? statusConfig.stopped
+
+  const handleFormatAll = async () => {
+    if (!projectPath || batchRunning) return
+    setBatchRunning(true)
+    setBatchResult(null)
+    try {
+      const res = await window.api.batchFormatAll(projectPath)
+      setBatchResult(`Formatted ${res.formatted}/${res.total} files${res.failed ? `, ${res.failed} failed` : ""}`)
+    } catch (err) {
+      setBatchResult(`Error: ${String(err)}`)
+    } finally {
+      setBatchRunning(false)
+    }
+  }
+
+  const handleLintAll = async () => {
+    if (!projectPath || batchRunning) return
+    setBatchRunning(true)
+    setBatchResult(null)
+    try {
+      const res = await window.api.batchLintAll(projectPath)
+      const withIssues = res.results.filter((r) => {
+        const d = r.diagnostics as { diagnostics?: unknown[] } | null
+        return d && Array.isArray(d.diagnostics) && d.diagnostics.length > 0
+      }).length
+      setBatchResult(`Linted ${res.total} files — ${withIssues} with issues`)
+    } catch (err) {
+      setBatchResult(`Error: ${String(err)}`)
+    } finally {
+      setBatchRunning(false)
+    }
+  }
 
   const handleToggle = async () => {
     if (!projectPath) return
@@ -92,6 +127,47 @@ export function RojoPanel(): JSX.Element {
         >
           Clear logs
         </button>
+
+        {/* Batch Operations */}
+        <div
+          className="pt-2 mt-1 flex flex-col gap-2"
+          style={{ borderTop: "1px solid var(--border-subtle)" }}
+        >
+          <span style={{ fontSize: "10px", fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--text-muted)" }}>
+            Tools
+          </span>
+          <div className="flex gap-2">
+            <button
+              onClick={handleFormatAll}
+              disabled={batchRunning || !projectPath}
+              className="flex-1 py-1.5 px-2 rounded-lg text-xs font-medium transition-all duration-150 disabled:opacity-40"
+              style={{
+                background: "rgba(16,185,129,0.1)",
+                color: "#10b981",
+                border: "1px solid rgba(16,185,129,0.25)"
+              }}
+            >
+              {batchRunning ? "Running…" : "Format All"}
+            </button>
+            <button
+              onClick={handleLintAll}
+              disabled={batchRunning || !projectPath}
+              className="flex-1 py-1.5 px-2 rounded-lg text-xs font-medium transition-all duration-150 disabled:opacity-40"
+              style={{
+                background: "rgba(96,165,250,0.1)",
+                color: "#60a5fa",
+                border: "1px solid rgba(96,165,250,0.25)"
+              }}
+            >
+              {batchRunning ? "Running…" : "Lint All"}
+            </button>
+          </div>
+          {batchResult && (
+            <span className="animate-fade-in" style={{ fontSize: "11px", color: "var(--text-muted)" }}>
+              {batchResult}
+            </span>
+          )}
+        </div>
       </div>
 
       {/* Logs */}

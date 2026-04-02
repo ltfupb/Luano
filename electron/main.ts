@@ -5,6 +5,7 @@ import { registerIpcHandlers } from "./ipc/handlers"
 import { RojoManager } from "./sidecar/rojo"
 import { LspManager } from "./lsp/manager"
 import { startBridgeServer, setBridgeWindow } from "./pro/modules"
+import { setupUpdater } from "./updater"
 
 let mainWindow: BrowserWindow | null = null
 
@@ -55,7 +56,11 @@ app.whenReady().then(() => {
 
   startBridgeServer()
   registerIpcHandlers()
+  setupUpdater()
   createWindow()
+
+  // Validate license key on startup (non-blocking)
+  import("./pro/license").then(({ validateLicense }) => validateLicense()).catch(() => {})
 
   app.on("activate", function () {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()

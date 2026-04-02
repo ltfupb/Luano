@@ -113,9 +113,12 @@ const KB_LABEL = isMac ? "⌘K" : "Ctrl+K"
 export function EditorPane(): JSX.Element {
   const {
     openFiles, activeFile, fileContents, lspPort, dirtyFiles,
-    closeFile, setActiveFile, updateFileContent, markClean
+    closeFile, setActiveFile, updateFileContent
   } = useProjectStore()
   const appTheme = useSettingsStore((s) => s.theme)
+  const autoSave = useSettingsStore((s) => s.autoSave)
+  const autoSaveDelay = useSettingsStore((s) => s.autoSaveDelay)
+  const fontSize = useSettingsStore((s) => s.fontSize)
   const monacoTheme = appTheme === "tokyo-night" ? "luano-tokyo-night" : "luano-dark"
 
   const [inlineEditOpen, setInlineEditOpen] = useState(false)
@@ -140,27 +143,40 @@ export function EditorPane(): JSX.Element {
     }
   }, [lspPort])
 
-  // ── Save on Ctrl+S ─────────────────────────────────────────────────────────
-  const handleSave = useCallback(async () => {
-    if (!activeFile) return
-    const content = useProjectStore.getState().fileContents[activeFile]
+  // ── Save helpers ────────────────────────────────────────────────────────────
+  const saveFile = useCallback(async (path: string) => {
+    const content = useProjectStore.getState().fileContents[path]
     if (content === undefined) return
-    await window.api.writeFile(activeFile, content)
-    markClean(activeFile)
-  }, [activeFile, markClean])
+    await window.api.writeFile(path, content)
+    useProjectStore.getState().markClean(path)
+  }, [])
 
-  // ── Ctrl+S — save ─────────────────────────────────────────────────────────
-  // (Ctrl+K is registered on the Monaco instance in handleEditorMount)
+  // ── Ctrl+S — manual save ──────────────────────────────────────────────────
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === "s") {
         e.preventDefault()
-        handleSave()
+        if (activeFile) saveFile(activeFile)
       }
     }
     window.addEventListener("keydown", handler)
     return () => window.removeEventListener("keydown", handler)
-  }, [handleSave])
+  }, [activeFile, saveFile])
+
+  // ── Auto-save ─────────────────────────────────────────────────────────────
+  const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const activeContent = activeFile ? fileContents[activeFile] : undefined
+
+  useEffect(() => {
+    if (!autoSave || !activeFile || !dirtyFiles.includes(activeFile)) return
+
+    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current)
+    autoSaveTimerRef.current = setTimeout(() => saveFile(activeFile), autoSaveDelay)
+
+    return () => {
+      if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current)
+    }
+  }, [autoSave, autoSaveDelay, activeFile, dirtyFiles, activeContent, saveFile])
 
   // ── Lint diagnostics (future: apply to Monaco markers) ────────────────────
   useIpcEvent("lint:diagnostics", (data) => {
@@ -171,10 +187,9 @@ export function EditorPane(): JSX.Element {
   const handleInlineAccept = useCallback(async (newContent: string) => {
     if (!activeFile) return
     updateFileContent(activeFile, newContent)
-    await window.api.writeFile(activeFile, newContent)
-    markClean(activeFile)
+    await saveFile(activeFile)
     setInlineEditOpen(false)
-  }, [activeFile, updateFileContent, markClean])
+  }, [activeFile, updateFileContent, saveFile])
 
   const handleEditorChange = useCallback(
     (value: string | undefined) => {
@@ -364,7 +379,7 @@ export function EditorPane(): JSX.Element {
             onMount={handleEditorMount}
             beforeMount={defineEditorTheme}
             options={{
-              fontSize: 13,
+              fontSize,
               fontFamily: "'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace",
               fontLigatures: true,
               minimap: { enabled: false },
@@ -401,9 +416,7 @@ export function EditorPane(): JSX.Element {
       {closeConfirm && (() => {
         const fileName = closeConfirm.split(/[/\\]/).pop() ?? closeConfirm
         const handleSave = async () => {
-          const content = useProjectStore.getState().fileContents[closeConfirm]
-          if (content !== undefined) await window.api.writeFile(closeConfirm, content)
-          markClean(closeConfirm)
+          await saveFile(closeConfirm)
           closeFile(closeConfirm)
           setCloseConfirm(null)
         }

@@ -201,6 +201,66 @@ interface Window {
       features: Record<string, boolean>
     }>
 
+    // License
+    licenseActivate: (key: string) => Promise<{
+      success: boolean
+      error?: string
+      customerName?: string
+      customerEmail?: string
+    }>
+    licenseDeactivate: () => Promise<{ success: boolean; error?: string }>
+    licenseInfo: () => Promise<{
+      isActive: boolean
+      customerName?: string
+      customerEmail?: string
+      activatedAt?: string
+    }>
+    licenseValidate: () => Promise<{ valid: boolean }>
+
+    // Auto-update
+    updaterCheck: () => Promise<{ success: boolean; version?: string; error?: string }>
+    updaterDownload: () => Promise<{ success: boolean; error?: string }>
+    updaterInstall: () => Promise<{ success: boolean }>
+    updaterStatus: () => Promise<{
+      status: "idle" | "checking" | "available" | "downloading" | "downloaded" | "error"
+      version?: string
+      progress?: number
+      error?: string
+    }>
+
+    // AI Evaluator
+    aiEvaluate: (filePath: string, content: string, instruction?: string) => Promise<{
+      score: number
+      issues: string[]
+      suggestions: string[]
+      summary: string
+    }>
+    aiEvaluateBatch: (
+      files: Array<{ path: string; content: string }>,
+      instruction?: string
+    ) => Promise<Record<string, { score: number; issues: string[]; suggestions: string[]; summary: string }>>
+
+    // Performance Monitoring
+    perfStats: () => Promise<{
+      heapUsed: number
+      heapTotal: number
+      rss: number
+      uptime: number
+    }>
+
+    // Batch Operations
+    batchFormatAll: (projectPath: string) => Promise<{ formatted: number; failed: number; total: number }>
+    batchLintAll: (projectPath: string) => Promise<{
+      results: Array<{ file: string; diagnostics: unknown }>
+      total: number
+    }>
+
+    // Chat Export
+    chatExport: (
+      messages: Array<{ role: string; content: string }>,
+      projectName: string
+    ) => Promise<{ success: boolean; canceled?: boolean; path?: string }>
+
     // Telemetry
     telemetryIsEnabled: () => Promise<boolean>
     telemetrySetEnabled: (enabled: boolean) => Promise<{ success: boolean }>

@@ -16,6 +16,9 @@ interface SettingsStore {
   openaiKey: string
   provider: string
   model: string
+  autoSave: boolean
+  autoSaveDelay: number
+  fontSize: number
   recentProjects: RecentProject[]
   setLanguage: (lang: string) => void
   setTheme: (theme: AppTheme) => void
@@ -23,6 +26,9 @@ interface SettingsStore {
   setOpenAIKey: (key: string) => void
   setProvider: (provider: string) => void
   setModel: (model: string) => void
+  setAutoSave: (enabled: boolean) => void
+  setAutoSaveDelay: (ms: number) => void
+  setFontSize: (size: number) => void
   addRecentProject: (path: string) => void
   removeRecentProject: (path: string) => void
 }
@@ -36,6 +42,9 @@ export const useSettingsStore = create<SettingsStore>()(
       openaiKey: "",
       provider: "anthropic",
       model: "claude-sonnet-4-6",
+      autoSave: true,
+      autoSaveDelay: 1000,
+      fontSize: 13,
       recentProjects: [],
       setLanguage: (language) => set({ language }),
       setTheme: (theme) => set({ theme }),
@@ -43,6 +52,9 @@ export const useSettingsStore = create<SettingsStore>()(
       setOpenAIKey: (openaiKey) => set({ openaiKey }),
       setProvider: (provider) => set({ provider }),
       setModel: (model) => set({ model }),
+      setAutoSave: (autoSave) => set({ autoSave }),
+      setAutoSaveDelay: (autoSaveDelay) => set({ autoSaveDelay }),
+      setFontSize: (fontSize) => set({ fontSize }),
       addRecentProject: (path) => {
         const name = path.split(/[/\\]/).pop() ?? path
         const existing = get().recentProjects.filter((p) => p.path !== path)
@@ -62,6 +74,9 @@ export const useSettingsStore = create<SettingsStore>()(
         openaiKey: state.openaiKey,
         provider: state.provider,
         model: state.model,
+        autoSave: state.autoSave,
+        autoSaveDelay: state.autoSaveDelay,
+        fontSize: state.fontSize,
         recentProjects: state.recentProjects
       })
     }

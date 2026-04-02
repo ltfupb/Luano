@@ -12,6 +12,12 @@ const api = {
   // ── Pro 상태 ──────────────────────────────────────────────────────────────
   getProStatus: () => ipcRenderer.invoke("pro:status"),
 
+  // ── 라이센스 ──────────────────────────────────────────────────────────────
+  licenseActivate: (key: string) => ipcRenderer.invoke("license:activate", key),
+  licenseDeactivate: () => ipcRenderer.invoke("license:deactivate"),
+  licenseInfo: () => ipcRenderer.invoke("license:info"),
+  licenseValidate: () => ipcRenderer.invoke("license:validate"),
+
   // ── 프로젝트 ──────────────────────────────────────────────────────────────
   openFolder: () => ipcRenderer.invoke("project:open-folder"),
   openProject: (path: string) => ipcRenderer.invoke("project:open", path),
@@ -184,6 +190,29 @@ const api = {
   // ── Error Explainer ───────────────────────────────────────────────────────
   explainError: (errorText: string, context: unknown): Promise<string> =>
     ipcRenderer.invoke("ai:explain-error", errorText, context),
+
+  // ── Auto-update ───────────────────────────────────────────────────────────
+  updaterCheck: () => ipcRenderer.invoke("updater:check"),
+  updaterDownload: () => ipcRenderer.invoke("updater:download"),
+  updaterInstall: () => ipcRenderer.invoke("updater:install"),
+  updaterStatus: () => ipcRenderer.invoke("updater:status"),
+
+  // ── AI Evaluator ─────────────────────────────────────────────────────────
+  aiEvaluate: (filePath: string, content: string, instruction?: string) =>
+    ipcRenderer.invoke("ai:evaluate", filePath, content, instruction),
+  aiEvaluateBatch: (files: Array<{ path: string; content: string }>, instruction?: string) =>
+    ipcRenderer.invoke("ai:evaluate-batch", files, instruction),
+
+  // ── Performance Monitoring ───────────────────────────────────────────────
+  perfStats: () => ipcRenderer.invoke("perf:stats"),
+
+  // ── Batch Operations ─────────────────────────────────────────────────────
+  batchFormatAll: (projectPath: string) => ipcRenderer.invoke("batch:format-all", projectPath),
+  batchLintAll: (projectPath: string) => ipcRenderer.invoke("batch:lint-all", projectPath),
+
+  // ── Chat Export ──────────────────────────────────────────────────────────
+  chatExport: (messages: Array<{ role: string; content: string }>, projectName: string) =>
+    ipcRenderer.invoke("chat:export", messages, projectName),
 
   // ── 이벤트 리스너 ─────────────────────────────────────────────────────────
   on: (channel: string, callback: (...args: unknown[]) => void): (() => void) => {

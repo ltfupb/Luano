@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from "react"
+import React, { useState, useRef, useEffect, useCallback, useMemo } from "react"
 import { useAIStore, ChatMessage } from "../stores/aiStore"
 import { useProjectStore } from "../stores/projectStore"
 import { CodeBlock } from "./CodeBlock"
@@ -86,7 +86,11 @@ interface AttachedFile {
 }
 
 export function ChatPanel({ onClose }: ChatPanelProps): JSX.Element {
-  const { messages, isStreaming, addMessage, updateMessage, setStreaming, globalSummary, planMode, autoAccept, setPlanMode, setAutoAccept } = useAIStore()
+  const {
+    messages, isStreaming, addMessage, updateMessage, setStreaming,
+    globalSummary, planMode, autoAccept, setPlanMode, setAutoAccept,
+    sessionHandoff, startNewSession
+  } = useAIStore()
   const { projectPath, activeFile, fileContents } = useProjectStore()
   const [input, setInput] = useState("")
   const [toolMessages, setToolMessages] = useState<ToolCallMessage[]>([])
@@ -136,27 +140,36 @@ export function ChatPanel({ onClose }: ChatPanelProps): JSX.Element {
 
   const handleRevert = useCallback(async () => {
     if (typeof window.api.aiRevert !== "function") return
+    const fileNames = checkpointFiles.map((f) => f.split(/[/\\]/).pop()).join(", ")
+    const confirmed = window.confirm(`Revert ${checkpointFiles.length} file(s)?\n\n${fileNames}`)
+    if (!confirmed) return
     const res = await window.api.aiRevert()
     if (res.success && res.reverted) {
-      addMessage({ role: "assistant", content: `Reverted ${res.reverted.length} file(s).` })
+      const names = res.reverted.map((f) => f.split(/[/\\]/).pop()).join(", ")
+      addMessage({ role: "assistant", content: `Reverted ${res.reverted.length} file(s): ${names}` })
       setCheckpointFiles([])
     }
-  }, [addMessage])
+  }, [addMessage, checkpointFiles])
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
   }, [messages, toolMessages])
 
-  const displayMessages: DisplayMessage[] = [...messages, ...toolMessages].sort((a, b) => {
-    const aTs = "ts" in a ? a.ts : Number(a.id.split("-")[0]) || 0
-    const bTs = "ts" in b ? b.ts : Number(b.id.split("-")[0]) || 0
-    return aTs - bTs
-  })
+  const displayMessages = useMemo<DisplayMessage[]>(() =>
+    [...messages, ...toolMessages].sort((a, b) => {
+      const aTs = "ts" in a ? a.ts : Number(a.id.split("-")[0]) || 0
+      const bTs = "ts" in b ? b.ts : Number(b.id.split("-")[0]) || 0
+      return aTs - bTs
+    }),
+    [messages, toolMessages]
+  )
 
   const buildContext = () => ({
     globalSummary,
+    projectPath: projectPath ?? undefined,
     currentFile: activeFile ?? undefined,
     currentFileContent: activeFile ? fileContents[activeFile] : undefined,
+    sessionHandoff: sessionHandoff || undefined,
     attachedFiles: attachedFiles.length > 0
       ? attachedFiles.map((f) => ({ path: f.path, content: f.content }))
       : undefined
@@ -394,7 +407,7 @@ export function ChatPanel({ onClose }: ChatPanelProps): JSX.Element {
         {!isStreaming && checkpointFiles.length > 0 && (
           <button
             onClick={handleRevert}
-            title={`Revert ${checkpointFiles.length} file(s) changed by AI`}
+            title={`Revert:\n${checkpointFiles.map((f) => f.split(/[/\\]/).pop()).join("\n")}`}
             className="flex items-center gap-1 px-1.5 py-0.5 rounded transition-all duration-100"
             style={{
               fontSize: "10px",
@@ -403,6 +416,10 @@ export function ChatPanel({ onClose }: ChatPanelProps): JSX.Element {
               border: "1px solid rgba(248,113,113,0.3)"
             }}
           >
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="1 4 1 10 7 10" />
+              <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
+            </svg>
             Revert ({checkpointFiles.length})
           </button>
         )}
@@ -438,6 +455,51 @@ export function ChatPanel({ onClose }: ChatPanelProps): JSX.Element {
           <IconLightning />
           {t("autoAccept")}
         </button>
+
+        {/* Export chat */}
+        {messages.length > 0 && !isStreaming && (
+          <button
+            onClick={() => {
+              const path = useProjectStore.getState().projectPath
+              const name = path?.split(/[/\\]/).pop() ?? "project"
+              const exportMsgs = messages.filter((m) => !m.streaming).map((m) => ({ role: m.role, content: m.content }))
+              window.api.chatExport(exportMsgs, name)
+            }}
+            title="Export chat as Markdown"
+            className="flex items-center gap-1 px-1.5 py-0.5 rounded transition-all duration-100"
+            style={{
+              fontSize: "10px",
+              color: "var(--text-muted)",
+              border: "1px solid var(--border-subtle)"
+            }}
+          >
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="7 10 12 15 17 10" />
+              <line x1="12" y1="15" x2="12" y2="3" />
+            </svg>
+          </button>
+        )}
+
+        {/* New Session */}
+        {messages.length > 0 && !isStreaming && (
+          <button
+            onClick={() => startNewSession(useProjectStore.getState().projectPath ?? undefined)}
+            title="Start new session (context carried over)"
+            className="flex items-center gap-1 px-1.5 py-0.5 rounded transition-all duration-100"
+            style={{
+              fontSize: "10px",
+              color: "var(--text-muted)",
+              border: "1px solid var(--border-subtle)"
+            }}
+          >
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="12" y1="5" x2="12" y2="19" />
+              <line x1="5" y1="12" x2="19" y2="12" />
+            </svg>
+            New
+          </button>
+        )}
 
         {/* Close */}
         <button
@@ -690,9 +752,9 @@ function parseMessage(raw: string): Segment[] {
 
 // ── Message bubble ────────────────────────────────────────────────────────────
 
-function MessageBubble({ message }: { message: ChatMessage }): JSX.Element {
+const MessageBubble = React.memo(function MessageBubble({ message }: { message: ChatMessage }): JSX.Element {
   const isUser = message.role === "user"
-  const segments = isUser ? null : parseMessage(message.content)
+  const segments = useMemo(() => isUser ? null : parseMessage(message.content), [isUser, message.content])
   const t = useT()
 
   return (
@@ -756,7 +818,7 @@ function MessageBubble({ message }: { message: ChatMessage }): JSX.Element {
       )}
     </div>
   )
-}
+})
 
 // ── Tool call bubble ──────────────────────────────────────────────────────────
 

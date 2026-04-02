@@ -127,4 +127,18 @@ export const telemetryStats = tele?.getStats ?? (() => null)
 export const recordDiff = tele?.recordDiff ?? (() => {})
 export const recordQuery = tele?.recordQuery ?? (() => {})
 
+// ── Evaluator (public module — not Pro-gated) ─────────────────────────────
+// Re-exported here for consistent import pattern from handlers.ts
+
+const evaluator = tryRequire<{
+  evaluateCode: (filePath: string, content: string, instruction?: string) => Promise<any>
+  evaluateFiles: (files: Array<{ path: string; content: string }>, instruction?: string) => Promise<any>
+}>("../ai/evaluator")
+
+export const evaluateCode = evaluator?.evaluateCode ?? (async () => ({
+  score: 0, issues: ["Evaluator not available"], suggestions: [], summary: "N/A"
+}))
+
+export const evaluateFiles = evaluator?.evaluateFiles ?? (async () => ({}))
+
 /* eslint-enable @typescript-eslint/no-require-imports, @typescript-eslint/no-explicit-any */

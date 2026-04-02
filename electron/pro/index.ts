@@ -10,6 +10,7 @@
  */
 
 import type { ChatMessage, AgentChatResult } from "../ai/provider"
+import { hasValidLicense } from "./license"
 
 export interface LuanoProModule {
   validateLicense(): boolean
@@ -31,6 +32,8 @@ try {
 export function isPro(): boolean {
   // Dev override: LUANO_PRO=1 in env enables Pro features locally
   if (process.env.LUANO_PRO === "1") return true
+  // LemonSqueezy license key
+  if (hasValidLicense()) return true
   return pro !== null && pro.validateLicense()
 }
 
