@@ -4,7 +4,7 @@
 
 Luano is a desktop editor built specifically for Roblox game development. It bundles everything you need — Luau language server, Rojo, Selene, StyLua — so you can open the app and start building immediately. No setup required.
 
-> **Status:** Early alpha. Expect rough edges.
+> **Status:** Early beta. Expect rough edges.
 
 ---
 
@@ -89,7 +89,7 @@ AI is optional — the editor, LSP, Rojo, Selene, and StyLua all work without an
 | Rojo, Selene, StyLua bundled | ✅ | ✅ |
 | File explorer, Terminal | ✅ | ✅ |
 | Project templates | ✅ | ✅ |
-| AI Chat (BYOK, Q&A) | ✅ | ✅ |
+| AI Chat (BYOK) | ✅ | ✅ |
 | AI Agent mode (autonomous coding) | — | ✅ |
 | Inline AI Edit (Cmd+K) | — | ✅ |
 | Roblox Docs RAG | — | ✅ |
