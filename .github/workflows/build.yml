@@ -38,7 +38,7 @@ jobs:
           cache: npm
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --force
 
       - name: Download sidecar binaries
         run: npx ts-node scripts/download-binaries.ts ${{ matrix.platform }}
