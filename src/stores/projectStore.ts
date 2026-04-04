@@ -26,6 +26,7 @@ interface ProjectStore {
   updateFileContent: (path: string, content: string) => void
   setFileTree: (tree: FileEntry[]) => void
   markClean: (path: string) => void
+  reorderFiles: (from: number, to: number) => void
 }
 
 export const useProjectStore = create<ProjectStore>()(
@@ -85,7 +86,14 @@ export const useProjectStore = create<ProjectStore>()(
       setFileTree: (tree) => set({ fileTree: tree }),
 
       markClean: (path) =>
-        set({ dirtyFiles: get().dirtyFiles.filter((f) => f !== path) })
+        set({ dirtyFiles: get().dirtyFiles.filter((f) => f !== path) }),
+
+      reorderFiles: (from, to) => {
+        const files = [...get().openFiles]
+        const [moved] = files.splice(from, 1)
+        files.splice(to, 0, moved)
+        set({ openFiles: files })
+      }
     }),
     {
       name: "luano-project",

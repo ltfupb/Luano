@@ -1,8 +1,11 @@
-import { app } from "electron"
+import { app, safeStorage } from "electron"
 import { join } from "path"
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "fs"
 
-// electron-store 대체 — 단순 JSON 파일 기반 저장소
+// Keys that contain secrets and should be encrypted at rest
+const ENCRYPTED_KEYS = new Set(["apiKey", "openaiKey"])
+
+// electron-store 대체 — 단순 JSON 파일 기반 저장소 + safeStorage 암호화
 class SimpleStore {
   private data: Record<string, unknown> = {}
   private filePath: string
@@ -30,12 +33,40 @@ class SimpleStore {
     } catch {}
   }
 
+  /** Encrypt a string using OS keychain via safeStorage */
+  private encrypt(value: string): string {
+    if (safeStorage.isEncryptionAvailable()) {
+      return safeStorage.encryptString(value).toString("base64")
+    }
+    return value // fallback: plaintext if OS keychain unavailable
+  }
+
+  /** Decrypt a string. Handles both encrypted (base64) and legacy plaintext values */
+  private decrypt(stored: string): string {
+    if (!safeStorage.isEncryptionAvailable()) return stored
+    try {
+      const buf = Buffer.from(stored, "base64")
+      return safeStorage.decryptString(buf)
+    } catch {
+      // Legacy plaintext value — return as-is, will be re-encrypted on next set()
+      return stored
+    }
+  }
+
   get<T>(key: string): T | undefined {
-    return this.data[key] as T | undefined
+    const raw = this.data[key]
+    if (ENCRYPTED_KEYS.has(key) && typeof raw === "string" && raw) {
+      return this.decrypt(raw) as T
+    }
+    return raw as T | undefined
   }
 
   set(key: string, value: unknown): void {
-    this.data[key] = value
+    if (ENCRYPTED_KEYS.has(key) && typeof value === "string" && value) {
+      this.data[key] = this.encrypt(value)
+    } else {
+      this.data[key] = value
+    }
     this.save()
   }
 

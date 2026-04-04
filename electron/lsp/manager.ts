@@ -1,4 +1,5 @@
 import { ChildProcess } from "child_process"
+import { BrowserWindow } from "electron"
 import { spawnSidecar, getResourcePath } from "../sidecar/index"
 import { LspBridge } from "./bridge"
 import { join } from "path"
@@ -38,12 +39,18 @@ export class LspManager {
 
       this.proc.on("error", (err) => {
         console.error("[LspManager] Process error:", err.message)
+        BrowserWindow.getAllWindows().forEach((win) =>
+          win.webContents.send("sidecar:error", { tool: "luau-lsp", message: err.message })
+        )
         if (this.projectPath) {
           setTimeout(() => this.start(this.projectPath!).catch(console.error), 2000)
         }
       })
     } catch (err) {
       console.error("[LspManager] Failed to start luau-lsp:", err)
+      BrowserWindow.getAllWindows().forEach((win) =>
+        win.webContents.send("sidecar:error", { tool: "luau-lsp", message: String(err) })
+      )
       throw err
     }
   }

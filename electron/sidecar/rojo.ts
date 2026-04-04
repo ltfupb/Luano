@@ -11,6 +11,7 @@ export class RojoManager {
   private sourcemapProc: ChildProcess | null = null
   private status: RojoStatus = "stopped"
   private projectPath: string | null = null
+  private port: number | null = null
   private restartCount = 0
 
   serve(projectPath: string): void {
@@ -21,7 +22,6 @@ export class RojoManager {
     if (!existsSync(join(projectPath, "default.project.json"))) {
       this.status = "stopped"
       this.notifyStatus()
-      this.notifyLog("[info] No default.project.json found — Rojo not started")
       return
     }
 
@@ -33,16 +33,16 @@ export class RojoManager {
         cwd: projectPath,
         onData: (data) => {
           this.restartCount = 0
+          // Parse port from Rojo output (e.g. "Listening on port 34872")
+          const portMatch = data.match(/(?:port|localhost:|:)(\d{4,5})/i)
+          if (portMatch) this.port = parseInt(portMatch[1], 10)
           if (this.status !== "running") {
             this.status = "running"
           }
           this.notifyStatus()
-          this.notifyLog(data)
           this.startSourcemapWatch(projectPath)
         },
-        onError: (data) => {
-          this.notifyLog(`[stderr] ${data}`)
-        }
+        onError: () => {}
       })
 
       this.proc = sidecar.process
@@ -57,16 +57,13 @@ export class RojoManager {
         }
       })
 
-      this.proc.on("error", (err) => {
+      this.proc.on("error", () => {
         this.status = "error"
         this.notifyStatus()
-        this.notifyLog(`[error] Rojo process error: ${err.message}`)
       })
-    } catch (err) {
+    } catch {
       this.status = "error"
       this.notifyStatus()
-      const msg = err instanceof Error ? err.message : String(err)
-      this.notifyLog(`[error] Failed to start Rojo: ${msg}`)
     }
   }
 
@@ -97,15 +94,14 @@ export class RojoManager {
     return this.status
   }
 
+  getPort(): number | null {
+    return this.port
+  }
+
   private notifyStatus(): void {
     BrowserWindow.getAllWindows().forEach((win) => {
-      win.webContents.send("rojo:status-changed", this.status)
+      win.webContents.send("rojo:status-changed", this.status, this.port)
     })
   }
 
-  private notifyLog(data: string): void {
-    BrowserWindow.getAllWindows().forEach((win) => {
-      win.webContents.send("rojo:log", data)
-    })
-  }
 }

@@ -109,6 +109,11 @@ interface Window {
       }
     }>
 
+    // Token usage
+    aiGetTokenUsage: () => Promise<{ input: number; output: number; cacheRead: number }>
+    aiResetTokenUsage: () => Promise<{ success: boolean }>
+    onTokenUsage: (cb: (usage: { input: number; output: number; cacheRead: number }) => void) => () => void
+
     // AI 컨텍스트
     buildContext: (projectPath: string, filePath?: string) => Promise<{ globalSummary: string }>
 
@@ -165,6 +170,7 @@ interface Window {
     bridgeClearLogs: () => Promise<{ success: boolean }>
     bridgeRunScript: (code: string) => Promise<{ id: string }>
     bridgeGetCommandResult: (id: string) => Promise<BridgeCommandResult | null>
+    bridgeIsPluginInstalled: () => Promise<boolean>
     bridgeInstallPlugin: () => Promise<{ success: boolean; path?: string; error?: string }>
 
     // Terminal (node-pty)
@@ -255,11 +261,32 @@ interface Window {
       total: number
     }>
 
-    // Chat Export
-    chatExport: (
-      messages: Array<{ role: string; content: string }>,
-      projectName: string
-    ) => Promise<{ success: boolean; canceled?: boolean; path?: string }>
+    // Memory
+    memoryList: (projectPath: string) => Promise<Array<{
+      id: string
+      type: "user" | "project" | "feedback"
+      content: string
+      createdAt: string
+      updatedAt: string
+    }>>
+    memoryAdd: (projectPath: string, type: string, content: string) => Promise<{
+      id: string; type: string; content: string; createdAt: string; updatedAt: string
+    }>
+    memoryUpdate: (projectPath: string, id: string, content: string) => Promise<{
+      id: string; type: string; content: string; createdAt: string; updatedAt: string
+    } | null>
+    memoryDelete: (projectPath: string, id: string) => Promise<boolean>
+    memoryContext: (projectPath: string) => Promise<string>
+    memoryAutoDetect: (projectPath: string, userMsg: string, assistantMsg: string) => Promise<Array<{
+      id: string; type: string; content: string
+    }>>
+
+    // Project Instructions
+    instructionsLoad: (projectPath: string) => Promise<string>
+
+    // Context Compression
+    aiCompressMessages: (messages: Array<{ role: string; content: string }>) => Promise<string>
+    aiEstimateTokens: (messages: Array<{ role: string; content: string }>) => Promise<number>
 
     // Telemetry
     telemetryIsEnabled: () => Promise<boolean>

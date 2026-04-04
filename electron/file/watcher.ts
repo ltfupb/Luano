@@ -51,6 +51,9 @@ async function handleFileChange(filePath: string, projectRoot: string): Promise<
     await formatFile(filePath)
   } catch (err) {
     console.warn("[Watcher] StyLua format failed:", err)
+    BrowserWindow.getAllWindows().forEach((win) =>
+      win.webContents.send("sidecar:error", { tool: "stylua", message: String(err) })
+    )
   }
 
   try {
@@ -63,6 +66,9 @@ async function handleFileChange(filePath: string, projectRoot: string): Promise<
     })
   } catch (err) {
     console.warn("[Watcher] Selene lint failed:", err)
+    BrowserWindow.getAllWindows().forEach((win) =>
+      win.webContents.send("sidecar:error", { tool: "selene", message: String(err) })
+    )
   }
 }
 

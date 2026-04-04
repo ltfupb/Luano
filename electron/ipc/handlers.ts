@@ -9,17 +9,25 @@ import { watchProject } from "../file/watcher"
 import { lintFile } from "../sidecar/selene"
 import { formatFile } from "../sidecar/stylua"
 import {
-  chat, chatStream, inlineEdit, agentChat, planChat, abortAgent,
-  setApiKey, getApiKey,
+  chat, chatStream, planChat, abortAgent,
+  setApiKey,
   setOpenAIKey, getOpenAIKey,
   setProvider, setModel, getProviderAndModel,
-  MODELS
+  MODELS, getTokenUsage, resetTokenUsage
 } from "../ai/provider"
 import { isPro, hasFeature, type ProFeature } from "../pro"
 import { activateLicense, deactivateLicense, getLicenseInfo, validateLicense as revalidateLicense } from "../pro/license"
+import {
+  getMemories, addMemory, updateMemory, deleteMemory,
+  buildMemoryContext, loadInstructions,
+  buildMemoryDetectPrompt, parseMemoryDetectResponse,
+  estimateMessagesTokens, buildCompressionPrompt,
+  type MemoryType
+} from "../ai/memory"
 
 // ── Pro modules (centralized loader — gracefully absent in Community edition) ─
 import {
+  agentChat, inlineEdit,
   buildGlobalSummary, buildSystemPrompt, buildDocsContext,
   analyzeTopology, analyzeCrossScript,
   performanceLint, performanceLintFile,
@@ -45,6 +53,8 @@ interface AIContext {
   docsContext?: string
   sessionHandoff?: string
   attachedFiles?: Array<{ path: string; content: string }>
+  memories?: string
+  instructions?: string
 }
 
 /** Extract last user message and build RAG docs context */
@@ -67,7 +77,54 @@ function readProgressFile(projectPath?: string): string {
   } catch { return "" }
 }
 
-const PROGRESS_INSTRUCTION = `\n\nFor multi-step tasks, maintain a progress file at .luano/progress.md in the project root. Update it after completing each major step with: what was done, what remains, and any decisions made. This allows work to continue across sessions.`
+const PROGRESS_INSTRUCTION = `# Progress tracking
+For multi-step tasks, maintain a progress file at .luano/progress.md in the project root. Update it after each major step with: what was done, what remains, and any decisions made.`
+
+/**
+ * Build a complete system prompt with all context layers.
+ *
+ * Layer order (matches Claude Code's prompt structure):
+ *   1. Base system prompt (identity + context + tone — from buildSystemPrompt)
+ *   2. Project instructions (LUANO.md — user-defined, like CLAUDE.md)
+ *   3. Memories (persistent cross-session context)
+ *   4. Progress tracking (agent mode only)
+ *   5. Session handoff (compressed context from prior session)
+ */
+function buildFullSystemPrompt(
+  ctx: AIContext,
+  opts?: { docsContext?: string; bridgeContext?: string; includeProgress?: boolean }
+): string {
+  const layers = [
+    buildSystemPrompt({
+      globalSummary: ctx.globalSummary ?? "",
+      currentFile: ctx.currentFile,
+      currentFileContent: ctx.currentFileContent,
+      docsContext: opts?.docsContext || undefined,
+      bridgeContext: opts?.bridgeContext,
+      attachedFiles: ctx.attachedFiles
+    })
+  ]
+
+  if (ctx.projectPath) {
+    const instructions = loadInstructions(ctx.projectPath)
+    if (instructions) layers.push(`# Project instructions\n${instructions}`)
+    const memory = buildMemoryContext(ctx.projectPath)
+    if (memory) layers.push(memory)
+  }
+
+  if (opts?.includeProgress && ctx.projectPath) {
+    layers.push(PROGRESS_INSTRUCTION)
+    const progress = readProgressFile(ctx.projectPath)
+    if (progress) layers.push(progress)
+  }
+
+  if (ctx.sessionHandoff) layers.push(`# Session context\n${ctx.sessionHandoff}`)
+
+  // Always append language-matching rule (Pro prompt may omit it)
+  layers.push("# Language\nAlways respond in the same language the user writes in.")
+
+  return layers.join("\n\n")
+}
 
 /** Recursively collect all .lua/.luau files in a project */
 function collectLuauFiles(dir: string): string[] {
@@ -269,6 +326,11 @@ export function registerIpcHandlers(): void {
   ipcMain.handle("ai:get-provider-model", () => {
     return { ...getProviderAndModel(), models: MODELS }
   })
+  ipcMain.handle("ai:token-usage", () => getTokenUsage())
+  ipcMain.handle("ai:reset-token-usage", () => {
+    resetTokenUsage()
+    return { success: true }
+  })
 
   // ── AI 컨텍스트 ───────────────────────────────────────────────────────────
   ipcMain.handle("ai:build-context", async (_, projectPath: string) => {
@@ -278,17 +340,8 @@ export function registerIpcHandlers(): void {
 
   // ── AI 채팅 (기본) ────────────────────────────────────────────────────────
   ipcMain.handle("ai:chat", async (_, messages: unknown[], contextData: unknown) => {
-    const ctx = contextData as {
-      globalSummary: string
-      currentFile?: string
-      currentFileContent?: string
-    }
-    const systemPrompt = buildSystemPrompt({
-      globalSummary: ctx.globalSummary ?? "",
-      currentFile: ctx.currentFile,
-      currentFileContent: ctx.currentFileContent
-    })
-    return chat(messages as never, systemPrompt)
+    const ctx = contextData as AIContext
+    return chat(messages as never, buildFullSystemPrompt(ctx))
   })
 
   ipcMain.handle(
@@ -296,19 +349,7 @@ export function registerIpcHandlers(): void {
     async (_, messages: unknown[], contextData: unknown, streamChannel: string) => {
       const ctx = contextData as AIContext
       const { lastUserMsg, docsContext } = await buildRAGContext(messages)
-
-      const basePrompt = buildSystemPrompt({
-        globalSummary: ctx.globalSummary ?? "",
-        currentFile: ctx.currentFile,
-        currentFileContent: ctx.currentFileContent,
-        docsContext: docsContext || undefined,
-        attachedFiles: ctx.attachedFiles
-      })
-      const systemPrompt = ctx.sessionHandoff
-        ? `${basePrompt}\n\n${ctx.sessionHandoff}`
-        : basePrompt
-
-      await chatStream(messages as never, systemPrompt, streamChannel)
+      await chatStream(messages as never, buildFullSystemPrompt(ctx, { docsContext }), streamChannel)
       recordQuery({ userQuery: lastUserMsg, apisReferenced: [], ragHit: !!docsContext })
       return { success: true }
     }
@@ -318,14 +359,7 @@ export function registerIpcHandlers(): void {
   ipcMain.handle("ai:plan-chat", async (_, messages: unknown[], contextData: unknown) => {
     const ctx = contextData as AIContext
     const { docsContext } = await buildRAGContext(messages)
-
-    const systemPrompt = buildSystemPrompt({
-      globalSummary: ctx.globalSummary ?? "",
-      currentFile: ctx.currentFile,
-      currentFileContent: ctx.currentFileContent,
-      docsContext: docsContext || undefined
-    })
-    return planChat(messages as never, systemPrompt)
+    return planChat(messages as never, buildFullSystemPrompt(ctx, { docsContext }))
   })
 
   // ── Inline Edit (Cmd+K) [Pro] ──────────────────────────────────────────────
@@ -358,10 +392,9 @@ export function registerIpcHandlers(): void {
       if (!hasFeature("agent")) return PRO_REQUIRED("agent")
       const ctx = contextData as AIContext
 
-      const progressContext = readProgressFile(ctx.projectPath)
       const { lastUserMsg, docsContext } = await buildRAGContext(messages)
 
-      // Phase 4: include live Studio state when bridge is connected
+      // Include live Studio state when bridge is connected
       let bridgeContext: string | undefined
       if (isBridgeConnected()) {
         const tree = getBridgeTree()
@@ -382,19 +415,7 @@ export function registerIpcHandlers(): void {
         bridgeContext = lines.join("\n")
       }
 
-      const systemPrompt = buildSystemPrompt({
-        globalSummary: ctx.globalSummary ?? "",
-        currentFile: ctx.currentFile,
-        currentFileContent: ctx.currentFileContent,
-        docsContext: docsContext || undefined,
-        bridgeContext,
-        attachedFiles: ctx.attachedFiles
-      })
-
-      const handoffContext = ctx.sessionHandoff ? `\n\n${ctx.sessionHandoff}` : ""
-      const fullPrompt = ctx.projectPath
-        ? systemPrompt + PROGRESS_INSTRUCTION + progressContext + handoffContext
-        : systemPrompt + handoffContext
+      const fullPrompt = buildFullSystemPrompt(ctx, { docsContext, bridgeContext, includeProgress: true })
       const result = await agentChat(messages as never, fullPrompt, streamChannel)
       recordQuery({ userQuery: lastUserMsg, apisReferenced: [], ragHit: !!docsContext })
 
@@ -465,16 +486,32 @@ export function registerIpcHandlers(): void {
     return getCommandResult(id)
   })
 
+  function getPluginsDir(): string | null {
+    if (process.platform === "win32") {
+      const localAppData = process.env["LOCALAPPDATA"] ?? join(app.getPath("home"), "AppData", "Local")
+      return join(localAppData, "Roblox", "Plugins")
+    }
+    if (process.platform === "darwin") {
+      return join(app.getPath("home"), "Library", "Application Support", "Roblox", "Plugins")
+    }
+    return null
+  }
+
+  ipcMain.handle("bridge:is-plugin-installed", () => {
+    const dir = getPluginsDir()
+    if (!dir) return false
+    return existsSync(join(dir, "LuanoPlugin.lua"))
+  })
+
   ipcMain.handle("bridge:install-plugin", () => {
     try {
+      const pluginsDir = getPluginsDir()
+      if (!pluginsDir) return { success: false, error: "Roblox Studio plugins not supported on this platform" }
+
       const resourcesDir = is.dev
         ? join(app.getAppPath(), "resources")
         : process.resourcesPath
       const srcPath = join(resourcesDir, "studio-plugin/LuanoPlugin.lua")
-
-      // Windows: %LOCALAPPDATA%\Roblox\Plugins
-      const localAppData = process.env["LOCALAPPDATA"] ?? join(app.getPath("home"), "AppData", "Local")
-      const pluginsDir = join(localAppData, "Roblox", "Plugins")
 
       if (!existsSync(pluginsDir)) {
         mkdirSync(pluginsDir, { recursive: true })
@@ -676,36 +713,61 @@ export function registerIpcHandlers(): void {
     return { results, total: files.length }
   })
 
-  // ── Chat Export ──────────────────────────────────────────────────────────
-  ipcMain.handle("chat:export", async (_, messages: Array<{ role: string; content: string }>, projectName: string) => {
-    const { filePath } = await dialog.showSaveDialog({
-      title: "Export Chat",
-      defaultPath: `${projectName}-chat-${new Date().toISOString().slice(0, 10)}.md`,
-      filters: [{ name: "Markdown", extensions: ["md"] }]
-    })
-    if (!filePath) return { success: false, canceled: true }
-    const lines = [`# ${projectName} — AI Chat Export\n`, `> Exported: ${new Date().toISOString()}\n`]
-    for (const m of messages) {
-      lines.push(`## ${m.role === "user" ? "You" : "Luano AI"}\n`)
-      lines.push(m.content + "\n")
+  // ── Memory ─────────────────────────────────────────────────────────────────
+
+  ipcMain.handle("memory:list", (_, projectPath: string) => getMemories(projectPath))
+
+  ipcMain.handle("memory:add", (_, projectPath: string, type: MemoryType, content: string) =>
+    addMemory(projectPath, type, content)
+  )
+
+  ipcMain.handle("memory:update", (_, projectPath: string, id: string, content: string) =>
+    updateMemory(projectPath, id, content)
+  )
+
+  ipcMain.handle("memory:delete", (_, projectPath: string, id: string) =>
+    deleteMemory(projectPath, id)
+  )
+
+  ipcMain.handle("memory:context", (_, projectPath: string) =>
+    buildMemoryContext(projectPath)
+  )
+
+  // ── Project Instructions ──────────────────────────────────────────────────
+
+  ipcMain.handle("instructions:load", (_, projectPath: string) =>
+    loadInstructions(projectPath)
+  )
+
+  // ── Context Compression ───────────────────────────────────────────────────
+
+  ipcMain.handle("ai:compress-messages", async (_, messages: Array<{ role: string; content: string }>) => {
+    const prompt = buildCompressionPrompt(messages)
+    return chat([{ role: "user", content: prompt }], "You are a concise summarizer.")
+  })
+
+  ipcMain.handle("ai:estimate-tokens", (_, messages: Array<{ role: string; content: string }>) =>
+    estimateMessagesTokens(messages)
+  )
+
+  // ── Auto Memory Detection ─────────────────────────────────────────────────
+
+  ipcMain.handle("memory:auto-detect", async (_, projectPath: string, userMsg: string, assistantMsg: string) => {
+    const detectPrompt = buildMemoryDetectPrompt(userMsg, assistantMsg)
+    try {
+      const response = await chat([{ role: "user", content: detectPrompt }], "You extract memories from conversations. Be very selective.")
+      return parseMemoryDetectResponse(response, projectPath)
+    } catch {
+      return []
     }
-    writeFileSync(filePath, lines.join("\n"), "utf-8")
-    return { success: true, path: filePath }
   })
 
   // ── Error Explainer ───────────────────────────────────────────────────────
   ipcMain.handle("ai:explain-error", async (_, errorText: string, contextData: unknown) => {
-    const ctx = contextData as { globalSummary: string; projectPath?: string }
-    const systemPrompt = buildSystemPrompt({ globalSummary: ctx.globalSummary ?? "" })
-
+    const ctx = contextData as AIContext
     return chat(
-      [
-        {
-          role: "user",
-          content: `Explain the following Roblox Studio error. Include possible causes and how to fix it:\n\n${errorText}`
-        }
-      ],
-      systemPrompt
+      [{ role: "user", content: `Explain this Roblox Studio error. Possible causes and fix:\n\n${errorText}` }],
+      buildFullSystemPrompt(ctx)
     )
   })
 }

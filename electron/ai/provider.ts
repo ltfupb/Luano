@@ -3,51 +3,19 @@ import OpenAI from "openai"
 import { store } from "../store"
 import { BrowserWindow } from "electron"
 
-// ── Pro Agent (dynamic — gracefully absent in Community edition) ─────────────
+// ── Agent types (used by pro/index.ts — implementation in pro/modules.ts) ──
 
 export interface AgentChatResult {
   modifiedFiles: string[]
-}
-
-type AgentModule = {
-  agentChat(messages: ChatMessage[], systemPrompt: string, streamChannel: string): Promise<AgentChatResult>
-  inlineEdit(filePath: string, fileContent: string, instruction: string, systemPrompt: string): Promise<string>
-}
-
-let _agent: AgentModule | null = null
-try {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  _agent = require("./agent")
-} catch {
-  _agent = null
-}
-
-export async function agentChat(
-  messages: ChatMessage[],
-  systemPrompt: string,
-  streamChannel: string
-): Promise<AgentChatResult> {
-  if (!_agent) throw new Error("Agent mode requires Luano Pro")
-  return _agent.agentChat(messages, systemPrompt, streamChannel)
-}
-
-export async function inlineEdit(
-  filePath: string,
-  fileContent: string,
-  instruction: string,
-  systemPrompt: string
-): Promise<string> {
-  if (!_agent) throw new Error("Inline edit requires Luano Pro")
-  return _agent.inlineEdit(filePath, fileContent, instruction, systemPrompt)
 }
 
 export type Provider = "anthropic" | "openai"
 
 export const MODELS: Record<Provider, Array<{ id: string; label: string }>> = {
   anthropic: [
-    { id: "claude-sonnet-4-6", label: "Claude Sonnet 4.6" },
-    { id: "claude-opus-4-6", label: "Claude Opus 4.6" },
-    { id: "claude-haiku-4-5-20251001", label: "Claude Haiku 4.5" }
+    { id: "claude-sonnet-4-6", label: "Sonnet 4.6" },
+    { id: "claude-opus-4-6", label: "Opus 4.6" },
+    { id: "claude-haiku-4-5-20251001", label: "Haiku 4.5" }
   ],
   openai: [
     { id: "gpt-4o", label: "GPT-4o" },
@@ -63,6 +31,27 @@ export const MODELS: Record<Provider, Array<{ id: string; label: string }>> = {
 let anthropicClient: Anthropic | null = null
 let openaiClient: OpenAI | null = null
 let activeAbortController: AbortController | null = null
+
+// ── 토큰 사용량 추적 ──────────────────────────────────────────────────────────
+let _tokenUsage = { input: 0, output: 0, cacheRead: 0 }
+
+export function trackUsage(input: number, output: number, cacheRead = 0): void {
+  _tokenUsage.input += input
+  _tokenUsage.output += output
+  _tokenUsage.cacheRead += cacheRead
+  // Notify renderer
+  BrowserWindow.getAllWindows().forEach((win) =>
+    win.webContents.send("ai:token-usage", { ..._tokenUsage })
+  )
+}
+
+export function getTokenUsage(): { input: number; output: number; cacheRead: number } {
+  return { ..._tokenUsage }
+}
+
+export function resetTokenUsage(): void {
+  _tokenUsage = { input: 0, output: 0, cacheRead: 0 }
+}
 
 export function getProvider(): Provider {
   return (store.get("provider") as Provider | undefined) ?? "anthropic"
@@ -213,6 +202,11 @@ export async function chat(messages: ChatMessage[], systemPrompt: string): Promi
     system: toCachedSystem(systemPrompt),
     messages
   }))
+  trackUsage(
+    response.usage.input_tokens,
+    response.usage.output_tokens,
+    (response.usage as unknown as Record<string, number>).cache_read_input_tokens ?? 0
+  )
   return response.content[0].type === "text" ? response.content[0].text : ""
 }
 
@@ -264,6 +258,12 @@ export async function chatStream(
         send((chunk.delta as { type: "text_delta"; text: string }).text)
       }
     }
+    const finalMessage = await stream.finalMessage()
+    trackUsage(
+      finalMessage.usage.input_tokens,
+      finalMessage.usage.output_tokens,
+      (finalMessage.usage as unknown as Record<string, number>).cache_read_input_tokens ?? 0
+    )
     send(null)
   } catch (err) {
     sendError(err)

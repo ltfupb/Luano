@@ -74,7 +74,7 @@ export function SearchPanel(): JSX.Element {
         className="px-3 py-2 flex-shrink-0"
         style={{
           fontSize: "10px", fontWeight: 600, letterSpacing: "0.08em",
-          textTransform: "uppercase", color: "var(--text-muted)",
+          textTransform: "uppercase", color: "var(--text-secondary)",
           borderBottom: "1px solid var(--border-subtle)"
         }}
       >

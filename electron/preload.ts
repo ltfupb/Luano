@@ -53,6 +53,13 @@ const api = {
   aiSetProvider: (provider: string) => ipcRenderer.invoke("ai:set-provider", provider),
   aiSetModel: (model: string) => ipcRenderer.invoke("ai:set-model", model),
   aiGetProviderModel: () => ipcRenderer.invoke("ai:get-provider-model"),
+  aiGetTokenUsage: () => ipcRenderer.invoke("ai:token-usage"),
+  aiResetTokenUsage: () => ipcRenderer.invoke("ai:reset-token-usage"),
+  onTokenUsage: (cb: (usage: { input: number; output: number; cacheRead: number }) => void): (() => void) => {
+    const handler = (_: unknown, usage: { input: number; output: number; cacheRead: number }) => cb(usage)
+    ipcRenderer.on("ai:token-usage", handler)
+    return () => ipcRenderer.removeListener("ai:token-usage", handler)
+  },
 
   // ── AI 컨텍스트 ───────────────────────────────────────────────────────────
   buildContext: (projectPath: string, filePath?: string) =>
@@ -139,6 +146,8 @@ const api = {
   bridgeRunScript: (code: string): Promise<{ id: string }> =>
     ipcRenderer.invoke("bridge:run-script", code),
   bridgeGetCommandResult: (id: string) => ipcRenderer.invoke("bridge:get-command-result", id),
+  bridgeIsPluginInstalled: (): Promise<boolean> =>
+    ipcRenderer.invoke("bridge:is-plugin-installed"),
   bridgeInstallPlugin: (): Promise<{ success: boolean; path?: string; error?: string }> =>
     ipcRenderer.invoke("bridge:install-plugin"),
 
@@ -210,14 +219,35 @@ const api = {
   batchFormatAll: (projectPath: string) => ipcRenderer.invoke("batch:format-all", projectPath),
   batchLintAll: (projectPath: string) => ipcRenderer.invoke("batch:lint-all", projectPath),
 
-  // ── Chat Export ──────────────────────────────────────────────────────────
-  chatExport: (messages: Array<{ role: string; content: string }>, projectName: string) =>
-    ipcRenderer.invoke("chat:export", messages, projectName),
+  // ── Memory ──────────────────────────────────────────────────────────────
+  memoryList: (projectPath: string) =>
+    ipcRenderer.invoke("memory:list", projectPath),
+  memoryAdd: (projectPath: string, type: string, content: string) =>
+    ipcRenderer.invoke("memory:add", projectPath, type, content),
+  memoryUpdate: (projectPath: string, id: string, content: string) =>
+    ipcRenderer.invoke("memory:update", projectPath, id, content),
+  memoryDelete: (projectPath: string, id: string) =>
+    ipcRenderer.invoke("memory:delete", projectPath, id),
+  memoryContext: (projectPath: string): Promise<string> =>
+    ipcRenderer.invoke("memory:context", projectPath),
+  memoryAutoDetect: (projectPath: string, userMsg: string, assistantMsg: string) =>
+    ipcRenderer.invoke("memory:auto-detect", projectPath, userMsg, assistantMsg),
+
+  // ── Project Instructions ────────────────────────────────────────────────
+  instructionsLoad: (projectPath: string): Promise<string> =>
+    ipcRenderer.invoke("instructions:load", projectPath),
+
+  // ── Context Compression ─────────────────────────────────────────────────
+  aiCompressMessages: (messages: Array<{ role: string; content: string }>): Promise<string> =>
+    ipcRenderer.invoke("ai:compress-messages", messages),
+  aiEstimateTokens: (messages: Array<{ role: string; content: string }>): Promise<number> =>
+    ipcRenderer.invoke("ai:estimate-tokens", messages),
 
   // ── 이벤트 리스너 ─────────────────────────────────────────────────────────
   on: (channel: string, callback: (...args: unknown[]) => void): (() => void) => {
-    ipcRenderer.on(channel, (_, ...args) => callback(...args))
-    return () => ipcRenderer.removeAllListeners(channel)
+    const handler = (_: unknown, ...args: unknown[]) => callback(...args)
+    ipcRenderer.on(channel, handler)
+    return () => { ipcRenderer.removeListener(channel, handler) }
   },
   off: (channel: string) => ipcRenderer.removeAllListeners(channel)
 }

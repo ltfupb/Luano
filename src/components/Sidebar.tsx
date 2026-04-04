@@ -1,16 +1,14 @@
 // src/components/Sidebar.tsx
-// Vertical icon sidebar — explorer, search, rojo, studio, topology
+// Vertical icon sidebar — explorer, search, sync, analysis, datastore
 
 import { useT } from "../i18n/useT"
 import { useRojoStore } from "../stores/rojoStore"
 
-export type SidePanel = "explorer" | "search" | "rojo" | "studio" | "topology" | "analysis" | "datastore"
+export type SidePanel = "explorer" | "search" | "sync" | "analysis" | "datastore"
 
 interface SidebarProps {
   activePanel: SidePanel
   onSelect: (panel: SidePanel) => void
-  terminalOpen: boolean
-  onTerminalToggle: () => void
 }
 
 function IconFiles(): JSX.Element {
@@ -31,35 +29,13 @@ function IconSearch(): JSX.Element {
   )
 }
 
-function IconRojo(): JSX.Element {
+function IconSync(): JSX.Element {
   return (
     <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-      <polyline points="16 3 21 3 21 8" />
-      <line x1="4" y1="20" x2="21" y2="3" />
-      <polyline points="21 16 21 21 16 21" />
-      <line x1="15" y1="15" x2="21" y2="21" />
-    </svg>
-  )
-}
-
-function IconStudio(): JSX.Element {
-  return (
-    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="2" y="3" width="20" height="14" rx="2" />
-      <polyline points="8 21 12 17 16 21" />
-    </svg>
-  )
-}
-
-function IconTopology(): JSX.Element {
-  return (
-    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="5" cy="6" r="2" />
-      <circle cx="19" cy="6" r="2" />
-      <circle cx="12" cy="18" r="2" />
-      <line x1="7" y1="6" x2="17" y2="6" />
-      <line x1="6" y1="7.5" x2="11" y2="16.5" />
-      <line x1="18" y1="7.5" x2="13" y2="16.5" />
+      <polyline points="23 4 23 10 17 10" />
+      <polyline points="1 20 1 14 7 14" />
+      <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10" />
+      <path d="M20.49 15a9 9 0 0 1-14.85 3.36L1 14" />
     </svg>
   )
 }
@@ -87,26 +63,15 @@ function IconDataStore(): JSX.Element {
   )
 }
 
-function IconTerminal(): JSX.Element {
-  return (
-    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-      <polyline points="4 17 10 11 4 5" />
-      <line x1="12" y1="19" x2="20" y2="19" />
-    </svg>
-  )
-}
-
 const panelIcons: Record<SidePanel, () => JSX.Element> = {
   explorer: IconFiles,
   search: IconSearch,
-  rojo: IconRojo,
-  studio: IconStudio,
-  topology: IconTopology,
+  sync: IconSync,
   analysis: IconAnalysis,
   datastore: IconDataStore
 }
 
-export function Sidebar({ activePanel, onSelect, terminalOpen, onTerminalToggle }: SidebarProps): JSX.Element {
+export function Sidebar({ activePanel, onSelect }: SidebarProps): JSX.Element {
   const t = useT()
   const rojoStatus = useRojoStore((s) => s.status)
   const rojoActive = rojoStatus === "running" || rojoStatus === "starting"
@@ -114,9 +79,7 @@ export function Sidebar({ activePanel, onSelect, terminalOpen, onTerminalToggle 
   const labels: Record<SidePanel, string> = {
     explorer: t("files"),
     search: "Search",
-    rojo: t("rojo"),
-    studio: t("studio"),
-    topology: "Topology",
+    sync: t("sync"),
     analysis: t("analysis"),
     datastore: t("datastore")
   }
@@ -133,7 +96,7 @@ export function Sidebar({ activePanel, onSelect, terminalOpen, onTerminalToggle 
         return (
           <button
             key={panel}
-            data-tour={panel === "rojo" ? "rojo-icon" : undefined}
+            data-tour={panel === "sync" ? "rojo-icon" : undefined}
             onClick={() => onSelect(panel)}
             title={labels[panel]}
             className="relative w-9 h-9 flex items-center justify-center rounded-lg transition-all duration-150"
@@ -161,8 +124,8 @@ export function Sidebar({ activePanel, onSelect, terminalOpen, onTerminalToggle 
               />
             )}
             <Icon />
-            {/* Rojo active indicator */}
-            {panel === "rojo" && rojoActive && (
+            {/* Rojo active indicator on sync icon */}
+            {panel === "sync" && rojoActive && (
               <span
                 className="absolute top-1 right-1 w-2 h-2 rounded-full"
                 style={{
@@ -175,39 +138,6 @@ export function Sidebar({ activePanel, onSelect, terminalOpen, onTerminalToggle 
         )
       })}
 
-      {/* Spacer pushes terminal button to bottom */}
-      <div className="flex-1" />
-
-      {/* Terminal toggle button (bottom of sidebar) */}
-      <button
-        onClick={onTerminalToggle}
-        title="Toggle Terminal"
-        className="relative w-9 h-9 flex items-center justify-center rounded-lg transition-all duration-150"
-        style={{
-          color: terminalOpen ? "var(--text-primary)" : "var(--text-muted)",
-          background: terminalOpen ? "var(--bg-elevated)" : "transparent"
-        }}
-        onMouseEnter={e => {
-          if (!terminalOpen) {
-            (e.currentTarget).style.color = "var(--text-secondary)"
-            ;(e.currentTarget).style.background = "var(--bg-surface)"
-          }
-        }}
-        onMouseLeave={e => {
-          if (!terminalOpen) {
-            (e.currentTarget).style.color = "var(--text-muted)"
-            ;(e.currentTarget).style.background = "transparent"
-          }
-        }}
-      >
-        {terminalOpen && (
-          <span
-            className="absolute left-0 top-2 bottom-2 w-0.5 rounded-full animate-fade-in"
-            style={{ background: "var(--accent)" }}
-          />
-        )}
-        <IconTerminal />
-      </button>
     </div>
   )
 }

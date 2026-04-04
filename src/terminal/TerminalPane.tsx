@@ -48,6 +48,28 @@ interface TerminalPaneProps {
 }
 
 const TERMINAL_THEMES = {
+  light: {
+    background:   "#ffffff",
+    foreground:   "#1a1a1a",
+    cursor:       "#2563eb",
+    cursorAccent: "#ffffff",
+    black:        "#1a1a1a",
+    brightBlack:  "#6b6b6b",
+    red:          "#dc2626",
+    brightRed:    "#ef4444",
+    green:        "#16a34a",
+    brightGreen:  "#22c55e",
+    yellow:       "#ca8a04",
+    brightYellow: "#eab308",
+    blue:         "#2563eb",
+    brightBlue:   "#3b82f6",
+    magenta:      "#9333ea",
+    brightMagenta:"#a855f7",
+    cyan:         "#0891b2",
+    brightCyan:   "#06b6d4",
+    white:        "#e0e0e0",
+    brightWhite:  "#f5f5f5",
+  },
   dark: {
     background:   "#1e1e1e",
     foreground:   "#d4d4d4",
@@ -100,7 +122,7 @@ export function TerminalPane({ projectPath, onClose, height }: TerminalPaneProps
   const fitRef       = useRef<FitAddon | null>(null)
   const termIdRef    = useRef<string | null>(null)
   const cleanupRef   = useRef<(() => void) | null>(null)
-  const [_ready, setReady]   = useState(false)
+  const [, setReady]   = useState(false)
   const [exited, setExited] = useState(false)
 
   // ── Boot terminal ────────────────────────────────────────────────────────
@@ -188,12 +210,13 @@ export function TerminalPane({ projectPath, onClose, height }: TerminalPaneProps
     }
   }, [boot])
 
-  // ── Resize observer ───────────────────────────────────────────────────────
+  // ── Fit on height change ────────────────────────────────────────────────
+  const rafRef = useRef(0)
+
   useEffect(() => {
-    const el = containerRef.current
-    if (!el) return
-    const observer = new ResizeObserver(() => {
-      if (fitRef.current) {
+    cancelAnimationFrame(rafRef.current)
+    rafRef.current = requestAnimationFrame(() => {
+      if (fitRef.current && termRef.current) {
         fitRef.current.fit()
         if (termIdRef.current) {
           const dims = fitRef.current.proposeDimensions()
@@ -203,9 +226,9 @@ export function TerminalPane({ projectPath, onClose, height }: TerminalPaneProps
         }
       }
     })
-    observer.observe(el)
-    return () => observer.disconnect()
-  }, [])
+  }, [height])
+
+  const HEADER_H = 28
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
@@ -214,14 +237,15 @@ export function TerminalPane({ projectPath, onClose, height }: TerminalPaneProps
       style={{
         height: `${height}px`,
         background: "#080d18",
-        borderTop: "1px solid var(--border-subtle)"
+        borderTop: "1px solid var(--border-subtle)",
+        overflow: "hidden"
       }}
     >
       {/* Header bar */}
       <div
         className="flex items-center gap-2 px-3 flex-shrink-0"
         style={{
-          height: "28px",
+          height: `${HEADER_H}px`,
           background: "var(--bg-panel)",
           borderBottom: "1px solid var(--border-subtle)"
         }}
@@ -261,8 +285,8 @@ export function TerminalPane({ projectPath, onClose, height }: TerminalPaneProps
       {/* xterm.js container */}
       <div
         ref={containerRef}
-        className="flex-1 overflow-hidden"
-        style={{ padding: "4px 8px" }}
+        className="overflow-hidden"
+        style={{ height: `${Math.max(0, height - HEADER_H)}px`, padding: "4px 8px" }}
         onClick={() => termRef.current?.focus()}
       />
     </div>

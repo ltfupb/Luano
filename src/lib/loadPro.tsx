@@ -18,7 +18,6 @@ function ProPlaceholder({ name }: { name: string }): JSX.Element {
 // ── Panel loader ─────────────────────────────────────────────────────────────
 
 const panelModules = import.meta.glob<Record<string, ComponentType>>([
-  "../studio/StudioPanel.tsx",
   "../analysis/CrossScriptPanel.tsx",
   "../datastore/DataStorePanel.tsx",
   "../topology/TopologyPanel.tsx",
@@ -37,8 +36,23 @@ function loadProPanel(path: string, exportName: string, fallback: string): FC {
   return Wrapper
 }
 
-export const StudioPanel = loadProPanel("../studio/StudioPanel.tsx", "StudioPanel", "Studio Bridge")
-export const CrossScriptPanel = loadProPanel("../analysis/CrossScriptPanel.tsx", "CrossScriptPanel", "Analysis")
+// CrossScriptPanel needs props (onShowTopology), so use typed loader
+function loadProPanelWithProps<P>(path: string, exportName: string, fallback: string): ComponentType<P> {
+  const loader = panelModules[path]
+  if (!loader) {
+    const Placeholder: ComponentType<P> = function ProPanelPlaceholder() { return <ProPlaceholder name={fallback} /> }
+    return Placeholder
+  }
+  const Lazy = lazy(() =>
+    loader().then(m => ({ default: (m[exportName] as ComponentType<P>) ?? (() => <ProPlaceholder name={fallback} />) }))
+  )
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return function ProPanelWrapper(props: P) { return <Suspense fallback={null}><Lazy {...(props as any)} /></Suspense> }
+}
+
+export const CrossScriptPanel = loadProPanelWithProps<{ onShowTopology?: (show: boolean) => void }>(
+  "../analysis/CrossScriptPanel.tsx", "CrossScriptPanel", "Analysis"
+)
 export const DataStorePanel = loadProPanel("../datastore/DataStorePanel.tsx", "DataStorePanel", "DataStore")
 export const TopologyPanel = loadProPanel("../topology/TopologyPanel.tsx", "TopologyPanel", "Topology")
 

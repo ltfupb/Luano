@@ -11,7 +11,7 @@ import { QuickOpen } from "./components/QuickOpen"
 import { FileExplorer } from "./explorer/FileExplorer"
 import { EditorPane } from "./editor/EditorPane"
 import { ChatPanel } from "./ai/ChatPanel"
-import { RojoPanel } from "./rojo/RojoPanel"
+import { SyncPanel } from "./sync/SyncPanel"
 import { TerminalPane } from "./terminal/TerminalPane"
 import { StatusBar } from "./components/StatusBar"
 import { ErrorBoundary } from "./components/ErrorBoundary"
@@ -19,19 +19,13 @@ import { ToastContainer, toast } from "./components/Toast"
 import { TutorialOverlay, shouldShowTutorial } from "./components/TutorialOverlay"
 import { useT } from "./i18n/useT"
 import { usePanelResize } from "./hooks/usePanelResize"
-import { StudioPanel, CrossScriptPanel, DataStorePanel, TopologyPanel } from "./lib/loadPro"
+import { CrossScriptPanel, DataStorePanel, TopologyPanel } from "./lib/loadPro"
 
 const TERMINAL_MIN = 80
 const TERMINAL_MAX = 600
-const TERMINAL_DEFAULT = 220
 
 const SIDEPANEL_MIN = 150
 const SIDEPANEL_MAX = 500
-const SIDEPANEL_DEFAULT = 224
-
-const CHATPANEL_MIN = 240
-const CHATPANEL_MAX = 600
-const CHATPANEL_DEFAULT = 320
 
 function IconChat(): JSX.Element {
   return (
@@ -150,8 +144,8 @@ function WelcomeScreen({
 }
 
 export default function App(): JSX.Element {
-  const { projectPath, openFiles, dirtyFiles, setProject, closeProject, setFileTree, openFile } = useProjectStore()
-  const { setStatus, addLog } = useRojoStore()
+  const { projectPath, dirtyFiles, setProject, closeProject, setFileTree, openFile } = useProjectStore()
+  const { setStatus, setPort } = useRojoStore()
   const { setGlobalSummary, clearMessages, saveProjectChat, loadProjectChat } = useAIStore()
   const theme = useSettingsStore((s) => s.theme)
   const addRecentProject = useSettingsStore((s) => s.addRecentProject)
@@ -161,25 +155,85 @@ export default function App(): JSX.Element {
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme)
   }, [theme])
-  const [activePanel, setActivePanel] = useState<SidePanel>("explorer")
-  const [rightPanelOpen, setRightPanelOpen] = useState(true)
+  const [activePanel, _setActivePanel] = useState<SidePanel>("explorer")
+  const setActivePanel = useCallback((panel: SidePanel) => {
+    _setActivePanel(panel)
+    if (panel !== "analysis") setShowTopology(false)
+  }, [])
+  const rightPanelOpen = useSettingsStore((s) => s.rightPanelOpen)
+  const setRightPanelOpen = useSettingsStore((s) => s.setRightPanelOpen)
   const [settingsOpen, setSettingsOpen] = useState(false)
-  const [terminalOpen, setTerminalOpen] = useState(false)
-  const [terminalHeight, setTerminalHeight] = useState(TERMINAL_DEFAULT)
-  const [sidePanelWidth, setSidePanelWidth] = useState(SIDEPANEL_DEFAULT)
-  const [chatPanelWidth, setChatPanelWidth] = useState(CHATPANEL_DEFAULT)
+  const terminalOpen = useSettingsStore((s) => s.terminalOpen)
+  const setTerminalOpen = useSettingsStore((s) => s.setTerminalOpen)
+  const [terminalHeight, _setTerminalHeight] = useState(() => useSettingsStore.getState().terminalHeight)
+  const [sidePanelWidth, _setSidePanelWidth] = useState(() => useSettingsStore.getState().sidePanelWidth)
+  const [chatPanelWidth, _setChatPanelWidth] = useState(() => useSettingsStore.getState().chatPanelWidth)
   const [quickOpenVisible, setQuickOpenVisible] = useState(false)
+  const [showTopology, setShowTopology] = useState(false)
   const [showTutorial, setShowTutorial] = useState(() => shouldShowTutorial())
+
+  // Sync layout to store on change
+  const storeSetTerminalHeight = useSettingsStore((s) => s.setTerminalHeight)
+  const storeSetSidePanelWidth = useSettingsStore((s) => s.setSidePanelWidth)
+  const storeSetChatPanelWidth = useSettingsStore((s) => s.setChatPanelWidth)
+
+  const setTerminalHeight: React.Dispatch<React.SetStateAction<number>> = useCallback((v) => {
+    _setTerminalHeight((prev) => {
+      const next = typeof v === "function" ? v(prev) : v
+      storeSetTerminalHeight(next)
+      return next
+    })
+  }, [storeSetTerminalHeight])
+  const setSidePanelWidth: React.Dispatch<React.SetStateAction<number>> = useCallback((v) => {
+    _setSidePanelWidth((prev) => {
+      const next = typeof v === "function" ? v(prev) : v
+      storeSetSidePanelWidth(next)
+      return next
+    })
+  }, [storeSetSidePanelWidth])
+  const setChatPanelWidth: React.Dispatch<React.SetStateAction<number>> = useCallback((v) => {
+    _setChatPanelWidth((prev) => {
+      const next = typeof v === "function" ? v(prev) : v
+      storeSetChatPanelWidth(next)
+      return next
+    })
+  }, [storeSetChatPanelWidth])
 
   // Panel resize hooks
   const handleResizeMouseDown = usePanelResize("y", TERMINAL_MIN, TERMINAL_MAX, setTerminalHeight, true)
   const handleSideResizeMouseDown = usePanelResize("x", SIDEPANEL_MIN, SIDEPANEL_MAX, setSidePanelWidth)
-  const handleChatResizeMouseDown = usePanelResize("x", CHATPANEL_MIN, CHATPANEL_MAX, setChatPanelWidth, true)
+  const computeChatLimits = (w: number) => {
+    const min = w >= 2560 ? 600 : w >= 1920 ? 450 : w >= 1280 ? 300 : 240
+    const max = w >= 2560 ? 1200 : w >= 1920 ? 900 : w >= 1280 ? 600 : 480
+    return { min, max }
+  }
+  const [chatPanelMin, setChatPanelMin] = useState(() => computeChatLimits(window.innerWidth).min)
+  const [chatPanelMax, setChatPanelMax] = useState(() => computeChatLimits(window.innerWidth).max)
+  useEffect(() => {
+    const onResize = () => {
+      const { min, max } = computeChatLimits(window.innerWidth)
+      setChatPanelMin(min)
+      setChatPanelMax(max)
+      setChatPanelWidth((w) => Math.max(min, Math.min(w, max)))
+    }
+    window.addEventListener("resize", onResize)
+    return () => window.removeEventListener("resize", onResize)
+  }, [setChatPanelWidth])
+  const handleChatResizeMouseDown = usePanelResize("x", chatPanelMin, chatPanelMax, setChatPanelWidth, true)
 
-  useIpcEvent("rojo:status-changed", (status) => setStatus(status as never))
-  useIpcEvent("rojo:log", (log) => addLog(log as string))
+  useIpcEvent("rojo:status-changed", useCallback((...args: unknown[]) => {
+    setStatus(args[0] as never)
+    if (typeof args[1] === "number") setPort(args[1])
+  }, [setStatus, setPort]))
   useIpcEvent("file:added", () => refreshFileTree())
-  useIpcEvent("file:removed", () => refreshFileTree())
+  useIpcEvent("file:deleted", () => refreshFileTree())
+
+  // ── Sidecar error toasts (LSP, StyLua, Selene) ──────────────────────────
+  useIpcEvent("sidecar:error", useCallback((data: unknown) => {
+    const { tool } = data as { tool: string; message: string }
+    const labels: Record<string, string> = { "luau-lsp": "LSP", stylua: "StyLua", selene: "Selene" }
+    toast(`${labels[tool] ?? tool} ${t("sidecarFailed")}`, "warn")
+  }, [t]))
 
   const refreshFileTree = async () => {
     if (!projectPath) return
@@ -225,11 +279,15 @@ export default function App(): JSX.Element {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // ── 앱 종료 시 채팅 저장 ──────────────────────────────────────────────────────
+  // ── 앱 종료 시 채팅 저장 + 미저장 확인 ────────────────────────────────────────
   useEffect(() => {
-    const handleBeforeUnload = () => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
       const path = useProjectStore.getState().projectPath
       if (path) useAIStore.getState().saveProjectChat(path)
+      const dirty = useProjectStore.getState().dirtyFiles
+      if (dirty.length > 0) {
+        e.preventDefault()
+      }
     }
     window.addEventListener("beforeunload", handleBeforeUnload)
     return () => window.removeEventListener("beforeunload", handleBeforeUnload)
@@ -245,7 +303,7 @@ export default function App(): JSX.Element {
       window.removeEventListener("offline", onOffline)
       window.removeEventListener("online", onOnline)
     }
-  }, [])
+  }, [t])
 
   // ── 전역 단축키 ──────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -267,10 +325,28 @@ export default function App(): JSX.Element {
         setActivePanel("search")
         return
       }
+
+      // Ctrl+W — 현재 탭 닫기
+      if (ctrl && e.key === "w" && !e.shiftKey) {
+        const { activeFile, dirtyFiles: dirty, closeFile } = useProjectStore.getState()
+        if (!activeFile) return
+        e.preventDefault()
+        if (dirty.includes(activeFile)) return // dirty면 무시 (에디터에서 확인 다이얼로그 필요)
+        closeFile(activeFile)
+        return
+      }
+
+      // Ctrl+` — 터미널 토글
+      if (ctrl && e.key === "`") {
+        if (!projectPath) return
+        e.preventDefault()
+        setTerminalOpen(!useSettingsStore.getState().terminalOpen)
+        return
+      }
     }
     window.addEventListener("keydown", handler)
     return () => window.removeEventListener("keydown", handler)
-  }, [projectPath])
+  }, [projectPath, setActivePanel, setTerminalOpen])
 
   const [fileMenuOpen, setFileMenuOpen] = useState(false)
   const fileMenuRef = useRef<HTMLDivElement>(null)
@@ -429,24 +505,33 @@ export default function App(): JSX.Element {
           >
             Settings
           </button>
+          {projectPath && (
+            <button
+              onClick={() => setTerminalOpen(!terminalOpen)}
+              className="px-2.5 h-7 flex items-center rounded-md text-xs transition-all duration-150"
+              style={{ color: terminalOpen ? "var(--text-primary)" : "var(--text-secondary)" }}
+              onMouseEnter={e => { (e.currentTarget).style.background = "var(--bg-elevated)"; (e.currentTarget).style.color = "var(--text-primary)" }}
+              onMouseLeave={e => { if (!terminalOpen) { (e.currentTarget).style.background = "transparent"; (e.currentTarget).style.color = "var(--text-secondary)" } }}
+            >
+              Terminal
+            </button>
+          )}
         </div>
       </div>
 
-      <div className="flex flex-1 overflow-hidden min-h-0">
+      <div className="flex flex-1 overflow-hidden min-h-0 relative">
         {/* Sidebar */}
         {projectPath && (
           <div data-tour="sidebar">
             <Sidebar
               activePanel={activePanel}
               onSelect={setActivePanel}
-              terminalOpen={terminalOpen}
-              onTerminalToggle={() => setTerminalOpen((v) => !v)}
             />
           </div>
         )}
 
         {/* Left panel + resize handle */}
-        {projectPath && activePanel !== "topology" && (
+        {projectPath && (
           <>
             <div
               className="flex-shrink-0 flex flex-col overflow-hidden animate-slide-in-right"
@@ -455,9 +540,8 @@ export default function App(): JSX.Element {
               <ErrorBoundary>
                 {activePanel === "explorer" && <FileExplorer />}
                 {activePanel === "search" && <SearchPanel />}
-                {activePanel === "rojo" && <RojoPanel />}
-                {activePanel === "studio" && <StudioPanel />}
-                {activePanel === "analysis" && <CrossScriptPanel />}
+                {activePanel === "sync" && <SyncPanel />}
+                {activePanel === "analysis" && <CrossScriptPanel onShowTopology={setShowTopology} />}
                 {activePanel === "datastore" && <DataStorePanel />}
               </ErrorBoundary>
             </div>
@@ -480,7 +564,7 @@ export default function App(): JSX.Element {
           {/* Main editor / topology */}
           <div className="flex-1 flex overflow-hidden min-h-0">
             <ErrorBoundary>
-              {projectPath && activePanel === "topology" ? (
+              {projectPath && activePanel === "analysis" && showTopology ? (
                 <TopologyPanel />
               ) : projectPath ? (
                 <EditorPane />
@@ -515,9 +599,12 @@ export default function App(): JSX.Element {
           )}
         </div>
 
-        {/* AI Chat panel + resize handle */}
+        {/* AI Chat panel + resize handle — overlays editor instead of pushing it */}
         {projectPath && rightPanelOpen && (
-          <>
+          <div
+            className="absolute top-0 right-0 bottom-0 flex z-10"
+            style={{ width: `${chatPanelWidth + 3}px` }}
+          >
             <div
               onMouseDown={handleChatResizeMouseDown}
               className="flex-shrink-0 transition-colors duration-100"
@@ -531,14 +618,14 @@ export default function App(): JSX.Element {
             />
             <div
               data-tour="chat-panel"
-              className="flex-shrink-0 flex flex-col overflow-hidden animate-slide-in-right"
-              style={{ width: `${chatPanelWidth}px` }}
+              className="flex-1 flex flex-col overflow-hidden animate-slide-in-right"
+              style={{ background: "var(--bg-panel)" }}
             >
               <ErrorBoundary>
                 <ChatPanel onClose={() => setRightPanelOpen(false)} />
               </ErrorBoundary>
             </div>
-          </>
+          </div>
         )}
 
         {/* Chat toggle when closed */}

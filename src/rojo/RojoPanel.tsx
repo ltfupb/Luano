@@ -1,27 +1,22 @@
 import { useRojoStore } from "../stores/rojoStore"
 import { useProjectStore } from "../stores/projectStore"
-import { useRef, useEffect, useState } from "react"
+import { useState } from "react"
+import { useT } from "../i18n/useT"
+import { TranslationKey } from "../i18n/translations"
 
-const statusConfig: Record<string, { color: string; glow: boolean; label: string }> = {
-  stopped:    { color: "#3a5272", glow: false, label: "Stopped" },
-  starting:   { color: "#f59e0b", glow: false, label: "Starting…" },
-  running:    { color: "#10b981", glow: true,  label: "Serving" },
-  error:      { color: "#e11d48", glow: false, label: "Error" }
+const statusConfig: Record<string, { color: string; glow: boolean; labelKey: TranslationKey }> = {
+  stopped:    { color: "#3a5272", glow: false, labelKey: "rojoStopped" },
+  starting:   { color: "#f59e0b", glow: false, labelKey: "rojoStarting" },
+  running:    { color: "#10b981", glow: true,  labelKey: "rojoServing" },
+  error:      { color: "#e11d48", glow: false, labelKey: "rojoError" }
 }
 
 export function RojoPanel(): JSX.Element {
-  const { status, logs, port, clearLogs } = useRojoStore()
+  const { status, port } = useRojoStore()
   const { projectPath } = useProjectStore()
-  const logsRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    if (logsRef.current) {
-      logsRef.current.scrollTop = logsRef.current.scrollHeight
-    }
-  }, [logs])
-
   const [batchRunning, setBatchRunning] = useState(false)
   const [batchResult, setBatchResult] = useState<string | null>(null)
+  const t = useT()
 
   const cfg = statusConfig[status] ?? statusConfig.stopped
 
@@ -96,7 +91,7 @@ export function RojoPanel(): JSX.Element {
             }}
           />
           <span style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
-            {cfg.label}
+            {t(cfg.labelKey)}
             {status === "running" && port && (
               <span style={{ color: "var(--text-muted)", marginLeft: "4px" }}>:{port}</span>
             )}
@@ -115,17 +110,7 @@ export function RojoPanel(): JSX.Element {
           onMouseEnter={e => (e.currentTarget as HTMLElement).style.opacity = "0.8"}
           onMouseLeave={e => (e.currentTarget as HTMLElement).style.opacity = "1"}
         >
-          {isActive ? "Stop" : "Start serving"}
-        </button>
-
-        <button
-          onClick={clearLogs}
-          className="py-1 px-2 rounded text-xs transition-all duration-100"
-          style={{ color: "var(--text-muted)", fontSize: "11px" }}
-          onMouseEnter={e => (e.currentTarget as HTMLElement).style.color = "var(--text-secondary)"}
-          onMouseLeave={e => (e.currentTarget as HTMLElement).style.color = "var(--text-muted)"}
-        >
-          Clear logs
+          {isActive ? t("stop") : t("startServing")}
         </button>
 
         {/* Batch Operations */}
@@ -133,8 +118,8 @@ export function RojoPanel(): JSX.Element {
           className="pt-2 mt-1 flex flex-col gap-2"
           style={{ borderTop: "1px solid var(--border-subtle)" }}
         >
-          <span style={{ fontSize: "10px", fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--text-muted)" }}>
-            Tools
+          <span style={{ fontSize: "10px", fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--text-secondary)" }}>
+            {t("tools")}
           </span>
           <div className="flex gap-2">
             <button
@@ -147,7 +132,7 @@ export function RojoPanel(): JSX.Element {
                 border: "1px solid rgba(16,185,129,0.25)"
               }}
             >
-              {batchRunning ? "Running…" : "Format All"}
+              {batchRunning ? t("running") : t("formatAll")}
             </button>
             <button
               onClick={handleLintAll}
@@ -159,7 +144,7 @@ export function RojoPanel(): JSX.Element {
                 border: "1px solid rgba(96,165,250,0.25)"
               }}
             >
-              {batchRunning ? "Running…" : "Lint All"}
+              {batchRunning ? t("running") : t("lintAll")}
             </button>
           </div>
           {batchResult && (
@@ -170,29 +155,6 @@ export function RojoPanel(): JSX.Element {
         </div>
       </div>
 
-      {/* Logs */}
-      <div
-        ref={logsRef}
-        className="flex-1 overflow-y-auto px-2 py-1 selectable"
-        style={{ fontFamily: "monospace", fontSize: "11px" }}
-      >
-        {logs.length === 0 ? (
-          <div className="px-1 py-2" style={{ color: "var(--text-muted)" }}>No logs</div>
-        ) : (
-          logs.map((log, i) => (
-            <div
-              key={i}
-              className="py-0.5 leading-relaxed"
-              style={{
-                color: "var(--text-secondary)",
-                borderBottom: "1px solid var(--border-subtle)"
-              }}
-            >
-              {log}
-            </div>
-          ))
-        )}
-      </div>
     </div>
   )
 }

@@ -125,7 +125,6 @@ export async function startLuauLanguageClient(port: number): Promise<void> {
   })
 
   await _client.start()
-  console.log(`[LSP] MonacoLanguageClient started on ws://localhost:${port}`)
 }
 
 export async function stopLuauLanguageClient(): Promise<void> {

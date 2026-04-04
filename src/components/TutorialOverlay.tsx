@@ -21,48 +21,48 @@ const STEPS: TutorialStep[] = [
   {
     target: "file-btn",
     title: "Open a Project",
-    description: "Click File to open an existing Rojo project folder, or create a new one.",
+    description: "Click File to open an existing Rojo project folder, or create a new one from a template.",
     position: "bottom"
   },
   {
     target: "settings-btn",
-    title: "Add Your API Key",
-    description: "Go to Settings and enter your Claude or OpenAI API key to enable AI features.",
+    title: "Settings & API Key",
+    description: "Set your Claude or OpenAI API key, choose a theme (Light, Dark, Tokyo Night), and configure editor preferences.",
     position: "bottom"
   },
   {
     target: "sidebar",
     title: "Navigation",
-    description: "Switch between File Explorer, Search, Rojo, Studio Bridge, and more.",
+    description: "File Explorer, Search, Sync (Rojo + Studio Bridge), Analysis (Perf lint + Topology graph), and DataStore.",
     position: "right"
   },
   {
     target: "editor-area",
     title: "Code Editor",
-    description: "Write Luau code with full autocomplete, type checking, and 30+ Roblox snippets.",
+    description: "Luau editor with autocomplete, type checking, diagnostics, and 30+ Roblox snippets. Split view available for side-by-side editing.",
     position: "center"
   },
   {
     target: "inline-edit-btn",
     title: "Inline AI Edit",
-    description: `Select code and press ${KB} (or click this button) to let AI edit your code directly.`,
+    description: `Select code and press ${KB} to let AI edit inline. The button stays visible even with the chat panel open.`,
     position: "bottom"
   },
   {
     target: "chat-panel",
     title: "AI Assistant",
-    description: "Chat with AI to ask questions or request code edits. Type / for skills like /explain, /fix, /optimize. Use Attach to send files, Plan mode for read-only analysis.",
+    description: "Chat, Plan, or Agent mode. Type / for skills (/explain, /fix, /optimize). Attach files for context. Agent mode edits files directly.",
     position: "left"
   },
   {
     target: "rojo-icon",
-    title: "Sync with Roblox Studio",
-    description: "Start Rojo here to sync your code to Studio in real-time. Make sure to install the Rojo plugin in Studio first (Plugins > Manage Plugins > search \"Rojo\").",
+    title: "Sync with Studio",
+    description: "Start Rojo to sync code in real-time. Install the Studio plugin from the Sync panel to enable live console logs, instance tree, and script execution.",
     position: "right"
   },
   {
     title: "You're Ready!",
-    description: "Start building your Roblox game. You can replay this tutorial anytime from Settings.",
+    description: "Open a project and start building. Your layout, settings, and chat sessions persist across restarts.",
     position: "center"
   }
 ]

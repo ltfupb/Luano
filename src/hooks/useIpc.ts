@@ -6,7 +6,3 @@ export function useIpcEvent(channel: string, callback: (...args: unknown[]) => v
     return cleanup
   }, [channel, callback])
 }
-
-export const api = {
-  get: () => window.api
-}

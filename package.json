@@ -19,7 +19,9 @@
     "package:mac": "electron-vite build && electron-builder --mac",
     "package:linux": "electron-vite build && electron-builder --linux",
     "lint": "eslint \"src/**/*.{ts,tsx}\" \"electron/**/*.ts\"",
-    "typecheck": "tsc -p tsconfig.web.json --noEmit && tsc -p tsconfig.node.json --noEmit"
+    "typecheck": "tsc -p tsconfig.web.json --noEmit && tsc -p tsconfig.node.json --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "devDependencies": {
     "@electron-toolkit/preload": "^3.0.1",
@@ -42,7 +44,8 @@
     "postcss": "^8.4.38",
     "tailwindcss": "^3.4.4",
     "typescript": "^5.5.2",
-    "vite": "^5.3.1"
+    "vite": "^5.3.1",
+    "vitest": "^4.1.2"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.24.3",

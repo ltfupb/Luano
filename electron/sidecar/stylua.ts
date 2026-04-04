@@ -1,5 +1,4 @@
 import { spawnSidecar } from "./index"
-import { readFileSync, writeFileSync } from "fs"
 
 export async function formatFile(filePath: string): Promise<boolean> {
   return new Promise((resolve) => {

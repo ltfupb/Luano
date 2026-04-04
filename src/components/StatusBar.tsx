@@ -2,6 +2,7 @@ import { useState, useEffect } from "react"
 import { useRojoStore } from "../stores/rojoStore"
 import { useProjectStore } from "../stores/projectStore"
 import { useIpcEvent } from "../hooks/useIpc"
+import { useT } from "../i18n/useT"
 
 type UpdateStatus = "idle" | "checking" | "available" | "downloading" | "downloaded" | "error"
 interface UpdateState {
@@ -28,6 +29,7 @@ export function StatusBar(): JSX.Element {
   const { status } = useRojoStore()
   const { activeFile, lspPort } = useProjectStore()
   const [update, setUpdate] = useState<UpdateState>({ status: "idle" })
+  const t = useT()
 
   // Listen for updater status events from main process
   useIpcEvent("updater:status", (data) => {
@@ -35,6 +37,7 @@ export function StatusBar(): JSX.Element {
   })
 
   const [memMB, setMemMB] = useState(0)
+  const [tokens, setTokens] = useState({ input: 0, output: 0, cacheRead: 0 })
 
   // Fetch initial status
   useEffect(() => {
@@ -53,6 +56,16 @@ export function StatusBar(): JSX.Element {
     poll()
     const id = setInterval(poll, 10_000)
     return () => clearInterval(id)
+  }, [])
+
+  // Token usage tracking
+  useEffect(() => {
+    if (typeof window.api.aiGetTokenUsage === "function") {
+      window.api.aiGetTokenUsage().then(setTokens).catch(() => {})
+    }
+    if (typeof window.api.onTokenUsage === "function") {
+      return window.api.onTokenUsage(setTokens)
+    }
   }, [])
 
   const handleUpdateAction = async () => {
@@ -81,7 +94,7 @@ export function StatusBar(): JSX.Element {
             boxShadow: status === "running" ? "0 0 4px #10b981" : "none"
           }}
         />
-        <span style={{ color: "var(--text-muted)" }}>{statusLabel[status] ?? status}</span>
+        <span style={{ color: "var(--text-secondary)" }}>{statusLabel[status] ?? status}</span>
       </div>
 
       {/* Separator */}
@@ -89,7 +102,7 @@ export function StatusBar(): JSX.Element {
 
       {/* LSP port */}
       {lspPort && (
-        <span style={{ color: "var(--text-muted)" }}>LSP :{lspPort}</span>
+        <span style={{ color: "var(--text-secondary)" }}>LSP :{lspPort}</span>
       )}
 
       {/* Update notification — right side */}
@@ -115,11 +128,11 @@ export function StatusBar(): JSX.Element {
                   <polyline points="7 10 12 15 17 10" />
                   <line x1="12" y1="15" x2="12" y2="3" />
                 </svg>
-                v{update.version} available
+                v{update.version} {t("updateAvailable")}
               </>
             )}
             {update.status === "downloading" && (
-              <span>{update.progress ?? 0}% downloading…</span>
+              <span>{update.progress ?? 0}% {t("downloading")}</span>
             )}
             {update.status === "downloaded" && (
               <>
@@ -127,10 +140,28 @@ export function StatusBar(): JSX.Element {
                   <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
                   <polyline points="22 4 12 14.01 9 11.01" />
                 </svg>
-                Restart to update
+                {t("restartToUpdate")}
               </>
             )}
           </button>
+        </>
+      )}
+
+      {/* Token usage */}
+      {(tokens.input > 0 || tokens.output > 0) && (
+        <>
+          <span style={{ color: "var(--border)", userSelect: "none" }}>·</span>
+          <span
+            style={{ color: "var(--text-muted)", cursor: "pointer" }}
+            title={`Input: ${tokens.input.toLocaleString()} | Output: ${tokens.output.toLocaleString()}${tokens.cacheRead ? ` | Cache: ${tokens.cacheRead.toLocaleString()}` : ""}\nClick to reset`}
+            onClick={() => {
+              if (typeof window.api.aiResetTokenUsage === "function") {
+                window.api.aiResetTokenUsage().then(() => setTokens({ input: 0, output: 0, cacheRead: 0 }))
+              }
+            }}
+          >
+            {((tokens.input + tokens.output) / 1000).toFixed(1)}k tok
+          </span>
         </>
       )}
 
@@ -151,7 +182,7 @@ export function StatusBar(): JSX.Element {
       {activeFile && (
         <span
           className={update.status === "available" || update.status === "downloading" || update.status === "downloaded" ? "truncate max-w-[240px]" : "ml-auto truncate max-w-[240px]"}
-          style={{ color: "var(--text-muted)" }}
+          style={{ color: "var(--text-secondary)" }}
         >
           {activeFile.split(/[/\\]/).pop()}
         </span>

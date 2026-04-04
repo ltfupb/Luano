@@ -22,9 +22,57 @@ const ctx = tryRequire<{
 export const buildGlobalSummary = ctx?.buildGlobalSummary
   ?? (async (): Promise<{ globalSummary: string }> => ({ globalSummary: "" }))
 
-export const buildSystemPrompt = ctx?.buildSystemPrompt
-  ?? ((opts: Record<string, any>) =>
-    `You are a Luau/Roblox coding assistant.\n\nProject context:\n${opts.globalSummary ?? ""}`)
+/** Community-edition system prompt — structured like Claude Code's own prompt. */
+function communitySystemPrompt(opts: Record<string, any>): string {
+  const sections: string[] = []
+
+  // ── Identity
+  sections.push(`You are Luano, an AI coding assistant specialized in Roblox (Luau) development.
+You help users write, debug, and improve Luau code. You understand Roblox services, APIs, RemoteEvents, DataStores, and the client/server model.`)
+
+  // ── Context
+  if (opts.globalSummary) {
+    sections.push(`# Project context\n${opts.globalSummary}`)
+  }
+  if (opts.currentFile) {
+    const fileSection = opts.currentFileContent
+      ? `# Active file\nPath: ${opts.currentFile}\n\`\`\`lua\n${opts.currentFileContent.slice(0, 3000)}\n\`\`\``
+      : `# Active file\nPath: ${opts.currentFile}`
+    sections.push(fileSection)
+  }
+  if (opts.docsContext) {
+    sections.push(`# Roblox API reference\n${opts.docsContext}`)
+  }
+  if (opts.bridgeContext) {
+    sections.push(`# Live Studio session\n${opts.bridgeContext}`)
+  }
+  if (opts.attachedFiles?.length) {
+    const files = opts.attachedFiles.map((f: { path: string; content: string }) =>
+      `## ${f.path}\n\`\`\`\n${f.content.slice(0, 2000)}\n\`\`\``
+    ).join("\n\n")
+    sections.push(`# Attached files\n${files}`)
+  }
+
+  // ── Tone and style
+  sections.push(`# Tone and style
+- Be concise and direct. Lead with the answer or action, not reasoning.
+- When you modify files, state which files changed in one short line. Do not explain what the code does unless asked.
+- Do not repeat the user's request back. Do not add summaries of what you did.
+- For simple tasks, a 1-2 sentence response is ideal.
+- Use code blocks for code only, not for file paths or short values.
+- Skip filler phrases: "Sure!", "Of course!", "Here's what I did:", "I've made the following changes:".
+- Match the user's language. If they write in Korean, respond in Korean.`)
+
+  // ── Output efficiency
+  sections.push(`# Output efficiency
+Go straight to the point. Try the simplest approach first. Keep text output brief and direct.
+Focus output on: decisions that need user input, status updates at milestones, and errors that change the plan.
+If you can say it in one sentence, do not use three.`)
+
+  return sections.join("\n\n")
+}
+
+export const buildSystemPrompt = ctx?.buildSystemPrompt ?? communitySystemPrompt
 
 export const buildDocsContext = ctx?.buildDocsContext
   ?? (async (): Promise<string> => "")
@@ -101,12 +149,20 @@ export const clearBridgeLogs = bridge?.clearBridgeLogs ?? (() => {})
 export const queueScript = bridge?.queueScript ?? (() => "")
 export const getCommandResult = bridge?.getCommandResult ?? (() => null)
 
-// ── Agent Checkpoint ────────────────────────────────────────────────────────
+// ── Agent (chat + inline edit + checkpoint) ────────────────────────────────
 
 const agent = tryRequire<{
+  agentChat: (messages: any[], systemPrompt: string, streamChannel: string) => Promise<{ modifiedFiles: string[] }>
+  inlineEdit: (filePath: string, fileContent: string, instruction: string, systemPrompt: string) => Promise<string>
   getLastCheckpoint: () => any
   revertCheckpoint: (checkpoint: any) => string[]
 }>("../ai/agent")
+
+export const agentChat = agent?.agentChat
+  ?? (async (): Promise<{ modifiedFiles: string[] }> => { throw new Error("Agent mode requires Luano Pro") })
+
+export const inlineEdit = agent?.inlineEdit
+  ?? (async (): Promise<string> => { throw new Error("Inline edit requires Luano Pro") })
 
 export const getLastCheckpoint = agent?.getLastCheckpoint ?? (() => null)
 export const revertCheckpoint = agent?.revertCheckpoint ?? (() => [])

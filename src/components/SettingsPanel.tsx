@@ -114,7 +114,7 @@ function KeyField({
               color: isSet ? "var(--text-muted)" : "var(--text-ghost)"
             }}
           >
-            {isSet ? "\u25cf\u25cf\u25cf\u25cf\u25cf\u25cf\u25cf\u25cf\u25cf\u25cf\u25cf\u25cf\u25cf\u25cf\u25cf\u25cf" : "Not configured"}
+            {isSet ? "\u25cf\u25cf\u25cf\u25cf\u25cf\u25cf\u25cf\u25cf\u25cf\u25cf\u25cf\u25cf\u25cf\u25cf\u25cf\u25cf" : t("notConfigured")}
           </div>
           <button
             onClick={() => setEditing(true)}
@@ -137,6 +137,7 @@ function KeyField({
 }
 
 const THEMES = [
+  { id: "light" as const, label: "Light" },
   { id: "dark" as const, label: "Dark" },
   { id: "tokyo-night" as const, label: "Tokyo Night" }
 ]
@@ -155,6 +156,7 @@ function SkillEditor({
   onCancel: () => void
 }): JSX.Element {
   const [form, setForm] = useState<CustomSkill>(skill)
+  const t = useT()
 
   const update = (key: keyof CustomSkill, value: string) => {
     setForm((prev) => ({ ...prev, [key]: value }))
@@ -180,7 +182,7 @@ function SkillEditor({
     >
       <div className="flex gap-2">
         <div className="flex flex-col gap-1" style={{ width: 100 }}>
-          <span style={{ fontSize: "10px", color: "var(--text-muted)" }}>Command</span>
+          <span style={{ fontSize: "10px", color: "var(--text-muted)" }}>{t("skillCommand")}</span>
           <input
             value={form.command}
             onChange={(e) => update("command", e.target.value.toLowerCase().replace(/\s/g, ""))}
@@ -189,7 +191,7 @@ function SkillEditor({
           />
         </div>
         <div className="flex flex-col gap-1 flex-1">
-          <span style={{ fontSize: "10px", color: "var(--text-muted)" }}>Label</span>
+          <span style={{ fontSize: "10px", color: "var(--text-muted)" }}>{t("skillLabel")}</span>
           <input
             value={form.label}
             onChange={(e) => update("label", e.target.value)}
@@ -199,7 +201,7 @@ function SkillEditor({
         </div>
       </div>
       <div className="flex flex-col gap-1">
-        <span style={{ fontSize: "10px", color: "var(--text-muted)" }}>Description</span>
+        <span style={{ fontSize: "10px", color: "var(--text-muted)" }}>{t("skillDescription")}</span>
         <input
           value={form.description}
           onChange={(e) => update("description", e.target.value)}
@@ -209,7 +211,7 @@ function SkillEditor({
       </div>
       <div className="flex flex-col gap-1">
         <span style={{ fontSize: "10px", color: "var(--text-muted)" }}>
-          Prompt <span style={{ opacity: 0.6 }}>({"{selection}"} = code, {"{file}"} = path)</span>
+          {t("skillPrompt")} <span style={{ opacity: 0.6 }}>({"{selection}"} = code, {"{file}"} = path)</span>
         </span>
         <textarea
           value={form.prompt}
@@ -226,7 +228,7 @@ function SkillEditor({
           className="px-3 py-1.5 rounded-md text-xs transition-all duration-100"
           style={{ background: "var(--bg-surface)", color: "var(--text-muted)", border: "1px solid var(--border)" }}
         >
-          Cancel
+          {t("cancel")}
         </button>
         <button
           onClick={() => valid && onSave(form)}
@@ -234,7 +236,7 @@ function SkillEditor({
           className="px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-100 disabled:opacity-30"
           style={{ background: "var(--accent)", color: "white" }}
         >
-          Save
+          {t("save")}
         </button>
       </div>
     </div>
@@ -284,6 +286,7 @@ export function SettingsPanel({ onClose }: SettingsPanelProps): JSX.Element {
     window.api.telemetryIsEnabled().then((v: boolean) => setTelemetryEnabled(v)).catch(() => {})
     window.api.getProStatus().then((s: { isPro: boolean }) => setProStatus(s)).catch(() => {})
     window.api.licenseInfo().then(setLicenseInfo).catch(() => {})
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- init once on mount
   }, [])
 
   const handleClose = () => {
@@ -361,9 +364,9 @@ export function SettingsPanel({ onClose }: SettingsPanelProps): JSX.Element {
           <button
             onClick={handleClose}
             className="w-7 h-7 flex items-center justify-center rounded-lg transition-all duration-100"
-            style={{ color: "var(--text-muted)" }}
+            style={{ color: "var(--text-secondary)" }}
             onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = "var(--bg-elevated)"; (e.currentTarget as HTMLElement).style.color = "var(--text-primary)" }}
-            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = "transparent"; (e.currentTarget as HTMLElement).style.color = "var(--text-muted)" }}
+            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = "transparent"; (e.currentTarget as HTMLElement).style.color = "var(--text-secondary)" }}
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <line x1="18" y1="6" x2="6" y2="18" />
@@ -397,7 +400,7 @@ export function SettingsPanel({ onClose }: SettingsPanelProps): JSX.Element {
 
           {/* Theme */}
           <div className="flex flex-col gap-2">
-            <SectionLabel>Theme</SectionLabel>
+            <SectionLabel>{t("theme")}</SectionLabel>
             <div className="flex gap-2">
               {THEMES.map((t) => (
                 <button
@@ -422,7 +425,7 @@ export function SettingsPanel({ onClose }: SettingsPanelProps): JSX.Element {
 
           {/* Editor */}
           <div className="flex flex-col gap-3">
-            <SectionLabel>Editor</SectionLabel>
+            <SectionLabel>{t("editor")}</SectionLabel>
 
             {/* Auto Save */}
             <label className="flex items-center gap-2.5 cursor-pointer">
@@ -434,13 +437,13 @@ export function SettingsPanel({ onClose }: SettingsPanelProps): JSX.Element {
                 style={{ width: 14, height: 14 }}
               />
               <span style={{ fontSize: "11px", color: "var(--text-secondary)" }}>
-                Auto Save
+                {t("autoSave")}
               </span>
             </label>
 
             {autoSave && (
               <div className="flex items-center gap-2 pl-6">
-                <span style={{ fontSize: "10px", color: "var(--text-muted)", whiteSpace: "nowrap" }}>Delay</span>
+                <span style={{ fontSize: "10px", color: "var(--text-muted)", whiteSpace: "nowrap" }}>{t("delay")}</span>
                 <select
                   value={autoSaveDelay}
                   onChange={(e) => setAutoSaveDelay(Number(e.target.value))}
@@ -462,7 +465,7 @@ export function SettingsPanel({ onClose }: SettingsPanelProps): JSX.Element {
 
             {/* Font Size */}
             <div className="flex items-center gap-2.5">
-              <span style={{ fontSize: "11px", color: "var(--text-secondary)", whiteSpace: "nowrap" }}>Font Size</span>
+              <span style={{ fontSize: "11px", color: "var(--text-secondary)", whiteSpace: "nowrap" }}>{t("fontSize")}</span>
               <input
                 type="range"
                 min={10}
@@ -492,7 +495,7 @@ export function SettingsPanel({ onClose }: SettingsPanelProps): JSX.Element {
 
           {/* AI Provider */}
           <div className="flex flex-col gap-2">
-            <SectionLabel>AI Provider</SectionLabel>
+            <SectionLabel>{t("aiProvider")}</SectionLabel>
             <div className="flex gap-2">
               {(["anthropic", "openai"] as const).map((p) => (
                 <button
@@ -515,7 +518,7 @@ export function SettingsPanel({ onClose }: SettingsPanelProps): JSX.Element {
           {/* Model selector */}
           {currentModels.length > 0 && (
             <div className="flex flex-col gap-2">
-              <SectionLabel>Model</SectionLabel>
+              <SectionLabel>{t("aiModel")}</SectionLabel>
               <select
                 value={model}
                 onChange={(e) => handleSetModel(e.target.value)}
@@ -541,7 +544,7 @@ export function SettingsPanel({ onClose }: SettingsPanelProps): JSX.Element {
           {/* API Keys */}
           {provider === "anthropic" && (
             <KeyField
-              label="Claude API Key"
+              label={t("apiKey")}
               placeholder="sk-ant-api03-\u2026"
               isSet={!!apiKey}
               onSave={async (key) => {
@@ -552,7 +555,7 @@ export function SettingsPanel({ onClose }: SettingsPanelProps): JSX.Element {
           )}
           {provider === "openai" && (
             <KeyField
-              label="OpenAI API Key"
+              label={t("openaiKey")}
               placeholder="sk-proj-\u2026"
               isSet={!!openaiKey}
               onSave={async (key) => {
@@ -568,7 +571,7 @@ export function SettingsPanel({ onClose }: SettingsPanelProps): JSX.Element {
           {/* Skills */}
           <div className="flex flex-col gap-2.5">
             <div className="flex items-center justify-between">
-              <SectionLabel>Skills</SectionLabel>
+              <SectionLabel>{t("skills")}</SectionLabel>
               {projectPath && (
                 <button
                   onClick={() => setEditingSkill({ index: -1, skill: { ...EMPTY_SKILL } })}
@@ -577,14 +580,14 @@ export function SettingsPanel({ onClose }: SettingsPanelProps): JSX.Element {
                   onMouseEnter={e => (e.currentTarget as HTMLElement).style.borderColor = "var(--accent)"}
                   onMouseLeave={e => (e.currentTarget as HTMLElement).style.borderColor = "var(--border)"}
                 >
-                  + New
+                  {t("skillNew")}
                 </button>
               )}
             </div>
 
             {!projectPath && (
               <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>
-                Open a project to manage custom skills
+                {t("skillOpenProject")}
               </span>
             )}
 
@@ -608,7 +611,7 @@ export function SettingsPanel({ onClose }: SettingsPanelProps): JSX.Element {
                   onMouseEnter={e => (e.currentTarget as HTMLElement).style.color = "var(--text-primary)"}
                   onMouseLeave={e => (e.currentTarget as HTMLElement).style.color = "var(--text-muted)"}
                 >
-                  Edit
+                  {t("skillEdit")}
                 </button>
                 <button
                   onClick={() => handleDeleteSkill(i)}
@@ -617,7 +620,7 @@ export function SettingsPanel({ onClose }: SettingsPanelProps): JSX.Element {
                   onMouseEnter={e => (e.currentTarget as HTMLElement).style.color = "#ef4444"}
                   onMouseLeave={e => (e.currentTarget as HTMLElement).style.color = "var(--text-muted)"}
                 >
-                  Delete
+                  {t("skillDelete")}
                 </button>
               </div>
             ))}
@@ -632,8 +635,8 @@ export function SettingsPanel({ onClose }: SettingsPanelProps): JSX.Element {
             )}
 
             {customSkills.length === 0 && !editingSkill && projectPath && (
-              <span style={{ fontSize: "11px", color: "var(--text-ghost)" }}>
-                No custom skills yet. Type / in chat to see built-in skills.
+              <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>
+                {t("skillNone")}
               </span>
             )}
           </div>
@@ -643,7 +646,7 @@ export function SettingsPanel({ onClose }: SettingsPanelProps): JSX.Element {
 
           {/* Telemetry */}
           <div className="flex flex-col gap-2">
-            <SectionLabel>Data</SectionLabel>
+            <SectionLabel>{t("data")}</SectionLabel>
             <label className="flex items-center gap-2.5 cursor-pointer">
               <input
                 type="checkbox"
@@ -657,11 +660,11 @@ export function SettingsPanel({ onClose }: SettingsPanelProps): JSX.Element {
                 style={{ width: 14, height: 14 }}
               />
               <span style={{ fontSize: "11px", color: "var(--text-secondary)" }}>
-                Help improve Luano AI by collecting anonymous usage data
+                {t("telemetryDesc")}
               </span>
             </label>
-            <span style={{ fontSize: "10px", color: "var(--text-ghost)", lineHeight: 1.4 }}>
-              Data is stored locally on your machine. Nothing is sent to any server.
+            <span style={{ fontSize: "10px", color: "var(--text-muted)", lineHeight: 1.4 }}>
+              {t("telemetryNote")}
             </span>
           </div>
 
@@ -670,13 +673,13 @@ export function SettingsPanel({ onClose }: SettingsPanelProps): JSX.Element {
 
           {/* Pro Status + License */}
           <div className="flex flex-col gap-2.5">
-            <SectionLabel>Plan</SectionLabel>
+            <SectionLabel>{t("planTier")}</SectionLabel>
             <div
               className="flex items-center gap-2 rounded-lg px-3 py-2.5"
               style={{ background: "var(--bg-elevated)", border: "1px solid var(--border-subtle)" }}
             >
               <span style={{ fontSize: "12px", fontWeight: 600, color: proStatus?.isPro ? "#10b981" : "var(--text-secondary)" }}>
-                {proStatus?.isPro ? "Pro" : "Community (Free)"}
+                {proStatus?.isPro ? t("pro") : t("communityFree")}
               </span>
               {licenseInfo?.isActive && licenseInfo.customerEmail && (
                 <span style={{ fontSize: "10px", color: "var(--text-muted)", marginLeft: "auto" }}>
@@ -702,7 +705,7 @@ export function SettingsPanel({ onClose }: SettingsPanelProps): JSX.Element {
                   alignSelf: "flex-start"
                 }}
               >
-                Deactivate License
+                {t("deactivateLicense")}
               </button>
             ) : (
               <div className="flex flex-col gap-2">
@@ -711,7 +714,7 @@ export function SettingsPanel({ onClose }: SettingsPanelProps): JSX.Element {
                     type="text"
                     value={licenseKeyInput}
                     onChange={(e) => { setLicenseKeyInput(e.target.value); setLicenseError("") }}
-                    placeholder="Enter license key"
+                    placeholder={t("enterLicenseKey")}
                     className="flex-1 rounded-lg px-3 py-2 transition-all duration-150 focus:outline-none"
                     style={{
                       background: "var(--bg-base)",
@@ -741,15 +744,20 @@ export function SettingsPanel({ onClose }: SettingsPanelProps): JSX.Element {
                     className="px-3 py-2 rounded-lg font-medium transition-all duration-150 disabled:opacity-50"
                     style={{ background: "var(--accent)", color: "white", fontSize: "12px", whiteSpace: "nowrap" }}
                   >
-                    {licenseActivating ? "..." : "Activate"}
+                    {licenseActivating ? "..." : t("activate")}
                   </button>
                 </div>
                 {licenseError && (
                   <span style={{ fontSize: "10px", color: "#f87171" }}>{licenseError}</span>
                 )}
-                <span style={{ fontSize: "10px", color: "var(--text-ghost)", lineHeight: 1.4 }}>
-                  Get a license key at{" "}
-                  <span style={{ color: "var(--accent)" }}>luano.dev</span>
+                <span style={{ fontSize: "10px", color: "var(--text-muted)", lineHeight: 1.4 }}>
+                  {t("getLicenseAt")}{" "}
+                  <a
+                    href="https://luano.dev"
+                    target="_blank"
+                    rel="noreferrer"
+                    style={{ color: "var(--accent)", textDecoration: "underline", cursor: "pointer" }}
+                  >luano.dev</a>
                 </span>
               </div>
             )}
@@ -761,7 +769,7 @@ export function SettingsPanel({ onClose }: SettingsPanelProps): JSX.Element {
           className="px-5 py-3 flex-shrink-0"
           style={{ borderTop: "1px solid var(--border-subtle)" }}
         >
-          <span style={{ fontSize: "10px", color: "var(--text-ghost)" }}>{t("version")}</span>
+          <span style={{ fontSize: "10px", color: "var(--text-muted)" }}>{t("version")}</span>
         </div>
       </div>
     </div>
