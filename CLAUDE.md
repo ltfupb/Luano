@@ -203,9 +203,8 @@ gh run watch <RUN_ID> --repo ltfupb/Luano
 ```
 
 **규칙:**
-- **릴리즈 제목에 반드시 v 접두사** (예: `v0.6.3 — English Comments and Bridge Fix`). `gh release edit --title`로 설정. CI 자동 생성 시 v가 빠지므로 수동 확인 필수.
-- 릴리즈 노트는 영어로 작성
-- 제목 첫줄: 쉼표 없이 간결하게 (예: `v0.6.0 — Light Theme and Split Editor`)
+- **릴리즈 제목은 `vX.Y.Z` 형식만 사용** (예: `v0.6.3`). 부가 설명은 제목에 넣지 말고 본문에 작성. CI 자동 생성 시 v가 빠지므로 `gh release edit --title`로 수동 확인 필수.
+- 릴리즈 노트 본문은 영어로 작성
 - Binaries 테이블 항상 포함
 - .blockmap과 latest.yml은 auto-update용이므로 삭제 금지
 
