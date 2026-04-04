@@ -101,6 +101,17 @@ npx eslint "src/**/*.{ts,tsx}" "electron/**/*.ts" --max-warnings 20
 
 세 명령어 모두 통과해야 CI가 통과한다. **반드시 push 전에 실행할 것.**
 
+### 6. package-lock.json 동기화 확인
+
+`npm install`로 패키지를 추가/업데이트한 뒤 `package-lock.json`이 최신 상태인지 확인해야 한다. CI는 `npm ci`를 사용하므로 `package.json`과 `package-lock.json`이 어긋나면 빌드가 실패한다.
+
+```bash
+npm install          # lock file 동기화
+git diff package-lock.json   # 변경 있으면 함께 커밋
+```
+
+**특히 esbuild, electron 등 네이티브 바이너리 의존성은 lock file 누락 시 모든 플랫폼 빌드가 실패한다.**
+
 ---
 
 ## 릴리즈 히스토리
@@ -180,7 +191,7 @@ gh run watch <RUN_ID> --repo ltfupb/Luano
 - 버전명에 v 접두사 필수 (v0.5.0)
 - 제목 첫줄: 쉼표 없이 간결하게 (예: `v0.5.0 — UX 기본기와 수익화`)
 - Binaries 테이블 항상 포함
-- .blockmap 어셋 삭제, latest.yml은 auto-update용으로 유지
+- .blockmap과 latest.yml은 auto-update용이므로 삭제 금지
 
 ```bash
 gh release edit v0.X.0 --repo ltfupb/Luano --notes "$(cat <<'EOF'
