@@ -26,13 +26,13 @@ export const MODELS: Record<Provider, Array<{ id: string; label: string }>> = {
   ]
 }
 
-// ── 상태 ────────────────────────────────────────────────────────────────────
+// ── State ────────────────────────────────────────────────────────────────────
 
 let anthropicClient: Anthropic | null = null
 let openaiClient: OpenAI | null = null
 let activeAbortController: AbortController | null = null
 
-// ── 토큰 사용량 추적 ──────────────────────────────────────────────────────────
+// ── Token Usage Tracking ──────────────────────────────────────────────────────
 let _tokenUsage = { input: 0, output: 0, cacheRead: 0 }
 
 export function trackUsage(input: number, output: number, cacheRead = 0): void {
@@ -87,7 +87,7 @@ export function _setActiveAbortController(c: AbortController | null): void {
   activeAbortController = c
 }
 
-// ── 설정 API ─────────────────────────────────────────────────────────────────
+// ── Settings API ─────────────────────────────────────────────────────────────
 
 export function setApiKey(key: string): void {
   store.set("apiKey", key)
@@ -109,7 +109,7 @@ export function getOpenAIKey(): string | undefined {
 
 export function setProvider(provider: Provider): void {
   store.set("provider", provider)
-  // 해당 프로바이더의 첫 번째 모델로 초기화
+  // Reset to the provider's default model
   store.set("model", MODELS[provider][0].id)
 }
 
@@ -121,7 +121,7 @@ export function getProviderAndModel(): { provider: Provider; model: string } {
   return { provider: getProvider(), model: getModel() }
 }
 
-// ── Abort 지원 ──────────────────────────────────────────────────────────────
+// ── Abort Support ──────────────────────────────────────────────────────────────
 
 export function abortAgent(): void {
   if (activeAbortController) {
@@ -130,7 +130,7 @@ export function abortAgent(): void {
   }
 }
 
-// ── 타임아웃 유틸 ────────────────────────────────────────────────────────────
+// ── Timeout Utility ────────────────────────────────────────────────────────────
 
 function withTimeout<T>(promise: Promise<T>, ms = 30_000): Promise<T> {
   return Promise.race([
@@ -141,7 +141,7 @@ function withTimeout<T>(promise: Promise<T>, ms = 30_000): Promise<T> {
   ])
 }
 
-// ── 공통 메시지 타입 ─────────────────────────────────────────────────────────
+// ── Common Message Types ─────────────────────────────────────────────────────
 
 export interface ChatMessage {
   role: "user" | "assistant"
@@ -181,7 +181,7 @@ export function toCachedTools<T extends Record<string, any>>(tools: T[]): T[] {
   )
 }
 
-// ── 기본 채팅 ────────────────────────────────────────────────────────────────
+// ── Basic Chat ────────────────────────────────────────────────────────────────
 
 export async function chat(messages: ChatMessage[], systemPrompt: string): Promise<string> {
   const provider = getProvider()
@@ -210,7 +210,7 @@ export async function chat(messages: ChatMessage[], systemPrompt: string): Promi
   return response.content[0].type === "text" ? response.content[0].text : ""
 }
 
-// ── 스트리밍 채팅 ─────────────────────────────────────────────────────────────
+// ── Streaming Chat ─────────────────────────────────────────────────────────────
 
 export async function chatStream(
   messages: ChatMessage[],

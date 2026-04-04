@@ -27,7 +27,7 @@ export class LspManager {
 
       this.proc = sidecar.process
 
-      // stdio ↔ WebSocket 브릿지 시작
+      // Start stdio ↔ WebSocket bridge
       this.bridge = new LspBridge(this.proc, this.port)
       await this.bridge.start()
 

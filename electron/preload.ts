@@ -9,21 +9,21 @@ export interface ToolEvent {
 }
 
 const api = {
-  // ── Pro 상태 ──────────────────────────────────────────────────────────────
+  // ── Pro Status ──────────────────────────────────────────────────────────────
   getProStatus: () => ipcRenderer.invoke("pro:status"),
 
-  // ── 라이센스 ──────────────────────────────────────────────────────────────
+  // ── License ──────────────────────────────────────────────────────────────
   licenseActivate: (key: string) => ipcRenderer.invoke("license:activate", key),
   licenseDeactivate: () => ipcRenderer.invoke("license:deactivate"),
   licenseInfo: () => ipcRenderer.invoke("license:info"),
   licenseValidate: () => ipcRenderer.invoke("license:validate"),
 
-  // ── 프로젝트 ──────────────────────────────────────────────────────────────
+  // ── Project ──────────────────────────────────────────────────────────────
   openFolder: () => ipcRenderer.invoke("project:open-folder"),
   openProject: (path: string) => ipcRenderer.invoke("project:open", path),
   initProject: (path: string) => ipcRenderer.invoke("project:init", path),
 
-  // ── 파일 ──────────────────────────────────────────────────────────────────
+  // ── File ──────────────────────────────────────────────────────────────────
   readFile: (path: string) => ipcRenderer.invoke("file:read", path),
   writeFile: (path: string, content: string) => ipcRenderer.invoke("file:write", path, content),
   readDir: (path: string) => ipcRenderer.invoke("file:read-dir", path),
@@ -41,11 +41,11 @@ const api = {
   rojoStop: () => ipcRenderer.invoke("rojo:stop"),
   rojoGetStatus: () => ipcRenderer.invoke("rojo:status"),
 
-  // ── 린트 ──────────────────────────────────────────────────────────────────
+  // ── Lint ──────────────────────────────────────────────────────────────────
   formatFile: (path: string) => ipcRenderer.invoke("lint:format", path),
   lintFile: (path: string) => ipcRenderer.invoke("lint:check", path),
 
-  // ── AI 키 ──────────────────────────────────────────────────────────────────
+  // ── AI Keys ──────────────────────────────────────────────────────────────────
   aiSetKey: (key: string) => ipcRenderer.invoke("ai:setKey", key),
   aiGetKey: () => ipcRenderer.invoke("ai:get-key"),
   aiSetOpenAIKey: (key: string) => ipcRenderer.invoke("ai:set-openai-key", key),
@@ -61,11 +61,11 @@ const api = {
     return () => ipcRenderer.removeListener("ai:token-usage", handler)
   },
 
-  // ── AI 컨텍스트 ───────────────────────────────────────────────────────────
+  // ── AI Context ───────────────────────────────────────────────────────────
   buildContext: (projectPath: string, filePath?: string) =>
     ipcRenderer.invoke("ai:build-context", projectPath, filePath),
 
-  // ── AI 채팅 ───────────────────────────────────────────────────────────────
+  // ── AI Chat ───────────────────────────────────────────────────────────────
   aiChat: (messages: unknown[], context: unknown) =>
     ipcRenderer.invoke("ai:chat", messages, context),
 
@@ -243,7 +243,7 @@ const api = {
   aiEstimateTokens: (messages: Array<{ role: string; content: string }>): Promise<number> =>
     ipcRenderer.invoke("ai:estimate-tokens", messages),
 
-  // ── 이벤트 리스너 ─────────────────────────────────────────────────────────
+  // ── Event Listeners ─────────────────────────────────────────────────────────
   on: (channel: string, callback: (...args: unknown[]) => void): (() => void) => {
     const handler = (_: unknown, ...args: unknown[]) => callback(...args)
     ipcRenderer.on(channel, handler)

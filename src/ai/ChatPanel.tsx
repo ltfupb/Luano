@@ -895,7 +895,7 @@ export function ChatPanel({ onClose }: ChatPanelProps): JSX.Element {
             style={{
               background: "var(--bg-elevated)",
               color: "var(--text-primary)",
-              fontSize: "14px",
+              fontSize: "12px",
               padding: "8px 10px 0px",
               lineHeight: "1.5",
               display: "block"
@@ -1091,7 +1091,7 @@ const MessageBubble = React.memo(function MessageBubble({ message }: { message: 
         <div
           className="max-w-full rounded-xl px-3 py-2 selectable"
           style={{
-            fontSize: "14px",
+            fontSize: "12px",
             lineHeight: "1.6",
             whiteSpace: "pre-wrap",
             wordBreak: "break-word",
@@ -1112,7 +1112,7 @@ const MessageBubble = React.memo(function MessageBubble({ message }: { message: 
                 key={i}
                 className="rounded-xl px-3 py-2 selectable"
                 style={{
-                  fontSize: "14px",
+                  fontSize: "12px",
                   lineHeight: "1.65",
                   whiteSpace: "pre-wrap",
                   wordBreak: "break-word",

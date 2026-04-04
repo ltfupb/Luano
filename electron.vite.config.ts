@@ -13,6 +13,7 @@ if (isPro) {
     "electron/ai/tools.ts",
     "electron/ai/context.ts",
     "electron/ai/rag.ts",
+    "electron/bridge/server.ts",
     "electron/mcp/client.ts",
     "electron/topology/analyzer.ts",
     "electron/analysis/cross-script.ts",

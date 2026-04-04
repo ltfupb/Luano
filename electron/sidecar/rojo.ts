@@ -18,7 +18,7 @@ export class RojoManager {
     this.stop()
     this.projectPath = projectPath
 
-    // default.project.json이 없으면 시작하지 않음
+    // Skip if no default.project.json
     if (!existsSync(join(projectPath, "default.project.json"))) {
       this.status = "stopped"
       this.notifyStatus()

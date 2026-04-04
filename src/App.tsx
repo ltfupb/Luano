@@ -263,19 +263,19 @@ export default function App(): JSX.Element {
     }
   }, [setProject, setGlobalSummary, addRecentProject])
 
-  // ── 세션 복원 — 앱 재시작 시 마지막 프로젝트 + 열린 파일 복원 ────────────
+  // ── Session Restore — reopen last project + files on restart ────────────
   useEffect(() => {
     const { projectPath: savedPath, openFiles: savedOpenFiles } = useProjectStore.getState()
     if (!savedPath) return
 
     openPath(savedPath).then(async (ok) => {
       if (!ok) return
-      // 이전에 열려 있던 파일들 내용 재로딩
+      // Reload previously open files
       for (const filePath of savedOpenFiles) {
         try {
           const content = await window.api.readFile(filePath)
           openFile(filePath, content ?? "")
-        } catch { /* 파일이 삭제된 경우 skip */ }
+        } catch { /* Skip if file was deleted */ }
       }
       // Restore chat history for this project
       loadProjectChat(savedPath)
@@ -283,7 +283,7 @@ export default function App(): JSX.Element {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // ── 앱 종료 시 채팅 저장 + 미저장 확인 ────────────────────────────────────────
+  // ── Save chat + check unsaved on app exit ────────────────────────────────────
   useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
       const path = useProjectStore.getState().projectPath
@@ -317,7 +317,7 @@ export default function App(): JSX.Element {
     }
   }, [])
 
-  // ── 오프라인 감지 ────────────────────────────────────────────────────────────
+  // ── Offline Detection ────────────────────────────────────────────────────────
   useEffect(() => {
     const onOffline = () => toast(t("offlineWarning"), "warn")
     const onOnline = () => toast(t("onlineRestored"), "info")
@@ -329,12 +329,12 @@ export default function App(): JSX.Element {
     }
   }, [t])
 
-  // ── 전역 단축키 ──────────────────────────────────────────────────────────────
+  // ── Global Keyboard Shortcuts ──────────────────────────────────────────────
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       const ctrl = e.ctrlKey || e.metaKey
 
-      // Ctrl+P — 빠른 파일 열기
+      // Ctrl+P — Quick file open
       if (ctrl && e.key === "p" && !e.shiftKey) {
         if (!projectPath) return
         e.preventDefault()
@@ -342,7 +342,7 @@ export default function App(): JSX.Element {
         return
       }
 
-      // Ctrl+Shift+F — 파일 내 검색
+      // Ctrl+Shift+F — Search in files
       if (ctrl && e.shiftKey && e.key === "F") {
         if (!projectPath) return
         e.preventDefault()
@@ -350,17 +350,17 @@ export default function App(): JSX.Element {
         return
       }
 
-      // Ctrl+W — 현재 탭 닫기
+      // Ctrl+W — Close current tab
       if (ctrl && e.key === "w" && !e.shiftKey) {
         const { activeFile, dirtyFiles: dirty, closeFile } = useProjectStore.getState()
         if (!activeFile) return
         e.preventDefault()
-        if (dirty.includes(activeFile)) return // dirty면 무시 (에디터에서 확인 다이얼로그 필요)
+        if (dirty.includes(activeFile)) return // Skip dirty files (needs confirmation dialog)
         closeFile(activeFile)
         return
       }
 
-      // Ctrl+` — 터미널 토글
+      // Ctrl+` — Toggle terminal
       if (ctrl && e.key === "`") {
         if (!projectPath) return
         e.preventDefault()

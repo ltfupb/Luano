@@ -7,7 +7,7 @@ import { loader } from "@monaco-editor/react"
 import * as monaco from "monaco-editor"
 import editorWorker from "monaco-editor/esm/vs/editor/editor.worker?worker"
 
-// CDN 대신 로컬 번들 사용 (CSP 우회)
+// Use local bundle instead of CDN (CSP bypass)
 ;(self as unknown as { MonacoEnvironment: unknown }).MonacoEnvironment = {
   getWorker() {
     return new editorWorker()

@@ -186,7 +186,7 @@ function spawnPty(id: string, sender: WebContents, cwd?: string): void {
 }
 
 export function registerIpcHandlers(): void {
-  // ── Pro 상태 ──────────────────────────────────────────────────────────────
+  // ── Pro Status ──────────────────────────────────────────────────────────────
   ipcMain.handle("pro:status", () => ({
     isPro: isPro(),
     features: {
@@ -201,13 +201,13 @@ export function registerIpcHandlers(): void {
     }
   }))
 
-  // ── 라이센스 ──────────────────────────────────────────────────────────────
+  // ── License ──────────────────────────────────────────────────────────────
   ipcMain.handle("license:activate", (_, key: string) => activateLicense(key))
   ipcMain.handle("license:deactivate", () => deactivateLicense())
   ipcMain.handle("license:info", () => getLicenseInfo())
   ipcMain.handle("license:validate", async () => ({ valid: await revalidateLicense() }))
 
-  // ── 프로젝트 ──────────────────────────────────────────────────────────────
+  // ── Project ──────────────────────────────────────────────────────────────
   ipcMain.handle("project:open-folder", async () => {
     const result = await dialog.showOpenDialog({ properties: ["openDirectory"] })
     if (result.canceled || result.filePaths.length === 0) return null
@@ -221,7 +221,7 @@ export function registerIpcHandlers(): void {
     return { success: true, lspPort: lspManager.getPort() }
   })
 
-  // ── 파일 ──────────────────────────────────────────────────────────────────
+  // ── File ──────────────────────────────────────────────────────────────────
   ipcMain.handle("file:read", (_, filePath: string) => readFile(filePath))
   ipcMain.handle("file:write", (_, filePath: string, content: string) => {
     // Telemetry: if this file was AI-generated, record the diff
@@ -267,7 +267,7 @@ export function registerIpcHandlers(): void {
   ipcMain.handle("file:move", async (_, srcPath: string) => {
     const result = await dialog.showOpenDialog({
       properties: ["openDirectory"],
-      title: "이동할 폴더 선택"
+      title: "Select destination folder"
     })
     if (result.canceled || result.filePaths.length === 0) return { success: false, canceled: true }
     const destPath = moveEntry(srcPath, result.filePaths[0])
@@ -293,7 +293,7 @@ export function registerIpcHandlers(): void {
   })
   ipcMain.handle("rojo:status", () => rojoManager.getStatus())
 
-  // ── 린트/포맷 ─────────────────────────────────────────────────────────────
+  // ── Lint/Format ─────────────────────────────────────────────────────────────
   ipcMain.handle("lint:format", async (_, filePath: string) => {
     const success = await formatFile(filePath)
     return { success }
@@ -302,7 +302,7 @@ export function registerIpcHandlers(): void {
     return lintFile(filePath)
   })
 
-  // ── AI 키 관리 ────────────────────────────────────────────────────────────
+  // ── AI Key Management ────────────────────────────────────────────────────────
   ipcMain.handle("ai:setKey", (_, key: string) => {
     setApiKey(key)
     return { success: true }
@@ -332,13 +332,13 @@ export function registerIpcHandlers(): void {
     return { success: true }
   })
 
-  // ── AI 컨텍스트 ───────────────────────────────────────────────────────────
+  // ── AI Context ───────────────────────────────────────────────────────────
   ipcMain.handle("ai:build-context", async (_, projectPath: string) => {
     const globalSummary = await buildGlobalSummary(projectPath)
     return { globalSummary }
   })
 
-  // ── AI 채팅 (기본) ────────────────────────────────────────────────────────
+  // ── AI Chat (Basic) ────────────────────────────────────────────────────────
   ipcMain.handle("ai:chat", async (_, messages: unknown[], contextData: unknown) => {
     const ctx = contextData as AIContext
     return chat(messages as never, buildFullSystemPrompt(ctx))
@@ -525,7 +525,7 @@ export function registerIpcHandlers(): void {
     }
   })
 
-  // ── 파일 검색 ─────────────────────────────────────────────────────────────
+  // ── File Search ─────────────────────────────────────────────────────────────
   ipcMain.handle("file:search", (_, projectPath: string, query: string) => {
     if (!query.trim()) return []
     const results: Array<{ file: string; line: number; text: string }> = []

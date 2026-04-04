@@ -11,7 +11,7 @@ export function watchProject(projectPath: string): void {
   stopWatcher()
 
   watcher = chokidar.watch(join(projectPath, "src"), {
-    ignored: /(^|[/\\])\../, // dotfiles 무시
+    ignored: /(^|[/\\])\../, // Ignore dotfiles
     persistent: true,
     ignoreInitial: true
   })
@@ -47,7 +47,7 @@ export function watchProject(projectPath: string): void {
 
 async function handleFileChange(filePath: string, projectRoot: string): Promise<void> {
   try {
-    // StyLua 포맷
+    // StyLua format
     await formatFile(filePath)
   } catch (err) {
     console.warn("[Watcher] StyLua format failed:", err)
@@ -57,10 +57,10 @@ async function handleFileChange(filePath: string, projectRoot: string): Promise<
   }
 
   try {
-    // Selene 린트
+    // Selene lint
     const diagnostics = await lintFile(filePath, projectRoot)
 
-    // 결과 renderer에 전송
+    // Send results to renderer
     BrowserWindow.getAllWindows().forEach((win) => {
       win.webContents.send("lint:diagnostics", { file: filePath, diagnostics })
     })

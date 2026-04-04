@@ -1,8 +1,8 @@
 import { ChildProcess } from "child_process"
 import { WebSocketServer, WebSocket } from "ws"
 
-// luau-lsp의 stdio를 WebSocket으로 브릿지
-// Monaco languageclient가 WebSocket으로 LSP에 연결할 수 있게 함
+// Bridges luau-lsp stdio to WebSocket
+// Allows Monaco languageclient to connect to LSP via WebSocket
 export class LspBridge {
   private wss: WebSocketServer | null = null
   private clients: Set<WebSocket> = new Set()
@@ -21,7 +21,7 @@ export class LspBridge {
         this.clients.add(ws)
 
         ws.on("message", (data) => {
-          // 클라이언트 → luau-lsp stdin
+          // Client → luau-lsp stdin
           const msg = data.toString()
           this.lspProcess.stdin?.write(msg)
         })
@@ -29,7 +29,7 @@ export class LspBridge {
         ws.on("close", () => this.clients.delete(ws))
       })
 
-      // luau-lsp stdout → 클라이언트
+      // luau-lsp stdout → Client
       this.lspProcess.stdout?.on("data", (chunk: Buffer) => {
         this.buffer += chunk.toString()
         this.processBuffer()
@@ -38,7 +38,7 @@ export class LspBridge {
   }
 
   private processBuffer(): void {
-    // LSP는 Content-Length 헤더 기반 메시지 프레이밍 사용
+    // LSP uses Content-Length header-based message framing
     while (true) {
       const headerEnd = this.buffer.indexOf("\r\n\r\n")
       if (headerEnd === -1) break
@@ -54,7 +54,7 @@ export class LspBridge {
       const body = this.buffer.slice(bodyStart, bodyStart + contentLength)
       const fullMessage = `${header}\r\n\r\n${body}`
 
-      // 모든 연결된 클라이언트에 전송
+      // Broadcast to all connected clients
       this.clients.forEach((ws) => {
         if (ws.readyState === WebSocket.OPEN) {
           ws.send(fullMessage)

@@ -115,7 +115,7 @@ export const translations = {
     enterLicenseKey: "Enter license key",
     activate: "Activate",
     getLicenseAt: "Get a license key at",
-    version: "Luano v0.5.0",
+    version: "Luano v0.6.3",
 
     // EditorPane
     openFile: "Open a file to edit",
@@ -286,7 +286,7 @@ export const translations = {
     enterLicenseKey: "라이선스 키 입력",
     activate: "활성화",
     getLicenseAt: "라이선스 키 구매:",
-    version: "Luano v0.5.0",
+    version: "Luano v0.6.3",
 
     openFile: "파일을 열어 편집하세요",
 

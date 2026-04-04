@@ -1,11 +1,11 @@
 // src/components/QuickOpen.tsx
-// Ctrl+P 빠른 파일 열기 — 프로젝트 내 모든 파일 퍼지 검색
+// Ctrl+P quick file open — fuzzy search all project files
 
 import { useState, useEffect, useRef, useCallback } from "react"
 import { createPortal } from "react-dom"
 import { useProjectStore, FileEntry } from "../stores/projectStore"
 
-// ── 파일 트리 평탄화 ────────────────────────────────────────────────────────
+// ── Flatten file tree ────────────────────────────────────────────────────────
 
 function flattenTree(entries: FileEntry[], result: FileEntry[] = []): FileEntry[] {
   for (const e of entries) {
@@ -18,7 +18,7 @@ function flattenTree(entries: FileEntry[], result: FileEntry[] = []): FileEntry[
   return result
 }
 
-// ── 퍼지 점수 — 낮을수록 좋음 ───────────────────────────────────────────────
+// ── Fuzzy score — lower is better ───────────────────────────────────────────
 
 function fuzzyScore(text: string, query: string): number {
   const t = text.toLowerCase()

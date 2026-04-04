@@ -5,7 +5,7 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync } from "fs"
 // Keys that contain secrets and should be encrypted at rest
 const ENCRYPTED_KEYS = new Set(["apiKey", "openaiKey"])
 
-// electron-store 대체 — 단순 JSON 파일 기반 저장소 + safeStorage 암호화
+// Simple JSON file-based store with safeStorage encryption (replaces electron-store)
 class SimpleStore {
   private data: Record<string, unknown> = {}
   private filePath: string

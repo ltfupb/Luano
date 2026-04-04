@@ -7,8 +7,10 @@
 
 /* eslint-disable @typescript-eslint/no-require-imports, @typescript-eslint/no-explicit-any */
 
+import { join } from "path"
+
 function tryRequire<T>(id: string): T | null {
-  try { return require(id) } catch { return null }
+  try { return require(join(__dirname, id)) } catch { return null }
 }
 
 // ── AI Context ──────────────────────────────────────────────────────────────

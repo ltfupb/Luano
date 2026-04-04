@@ -1,5 +1,5 @@
 // src/components/SearchPanel.tsx
-// 프로젝트 전체 파일 텍스트 검색 (Ctrl+Shift+F)
+// Project-wide text search (Ctrl+Shift+F)
 
 import { useState, useRef, useCallback } from "react"
 import { useProjectStore } from "../stores/projectStore"

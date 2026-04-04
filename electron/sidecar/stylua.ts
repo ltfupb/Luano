@@ -21,7 +21,7 @@ export async function formatContent(content: string): Promise<string> {
       if (code === 0) {
         resolve(output.join(""))
       } else {
-        resolve(content) // 포맷 실패 시 원본 반환
+        resolve(content) // Return original on format failure
       }
     })
   })

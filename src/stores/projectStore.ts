@@ -98,7 +98,7 @@ export const useProjectStore = create<ProjectStore>()(
     {
       name: "luano-project",
       storage: createJSONStorage(() => localStorage),
-      // 파일 내용은 용량이 크므로 제외 — 재시작 시 재로딩
+      // Exclude file contents (too large) — reloaded on restart
       partialize: (state) => ({
         projectPath: state.projectPath,
         openFiles: state.openFiles,

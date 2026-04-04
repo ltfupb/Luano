@@ -67,12 +67,12 @@ interface BridgeCommandResult {
 // ── Window.api augmentation ───────────────────────────────────────────────────
 interface Window {
   api: {
-    // 프로젝트
+    // Project
     openFolder: () => Promise<string | null>
     openProject: (path: string) => Promise<{ success: boolean; lspPort: number }>
     initProject: (path: string) => Promise<{ success: boolean }>
 
-    // 파일
+    // File
     readFile: (path: string) => Promise<string>
     writeFile: (path: string, content: string) => Promise<{ success: boolean }>
     readDir: (path: string) => Promise<import("./stores/projectStore").FileEntry[]>
@@ -89,11 +89,11 @@ interface Window {
     rojoStop: () => Promise<{ success: boolean }>
     rojoGetStatus: () => Promise<string>
 
-    // 린트
+    // Lint
     formatFile: (path: string) => Promise<{ success: boolean }>
     lintFile: (path: string) => Promise<unknown>
 
-    // AI 키
+    // AI Keys
     aiSetKey: (key: string) => Promise<{ success: boolean }>
     aiGetKey: () => Promise<string | null>
     aiSetOpenAIKey: (key: string) => Promise<{ success: boolean }>
@@ -114,10 +114,10 @@ interface Window {
     aiResetTokenUsage: () => Promise<{ success: boolean }>
     onTokenUsage: (cb: (usage: { input: number; output: number; cacheRead: number }) => void) => () => void
 
-    // AI 컨텍스트
+    // AI Context
     buildContext: (projectPath: string, filePath?: string) => Promise<{ globalSummary: string }>
 
-    // AI 채팅
+    // AI Chat
     aiChat: (messages: unknown[], context: unknown) => Promise<string>
     aiChatStream: (
       messages: unknown[],
@@ -293,7 +293,7 @@ interface Window {
     telemetrySetEnabled: (enabled: boolean) => Promise<{ success: boolean }>
     telemetryStats: () => Promise<{ diffs: number; queries: number; errorFixes: number } | null>
 
-    // 이벤트
+    // Events
     on: (channel: string, callback: (...args: unknown[]) => void) => () => void
     off: (channel: string) => void
   }
