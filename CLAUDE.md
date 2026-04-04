@@ -31,7 +31,7 @@ npm run package  # electron-builder로 배포용 인스톨러 생성
 
 - TypeScript strict 모드
 - Zustand 스토어: `persist` 플러그인으로 세션 복구
-- Tailwind 다크 테마: surface/ink/accent/border 커스텀 색상
+- Tailwind 테마 3종 (Dark / Light / Tokyo Night): CSS 커스텀 변수 기반, `data-theme` 속성으로 전환
 - 사이드카 바이너리: `spawnSidecar()` 헬퍼 사용, 크래시 시 자동 재시작 (지수 백오프)
 - IPC 핸들러명 컨벤션: `"domain:action"` (예: `"ai:chat-stream"`, `"project:open-folder"`)
 
@@ -116,6 +116,7 @@ git diff package-lock.json   # 변경 있으면 함께 커밋
 
 ## 릴리즈 히스토리
 
+- **v0.6.0** — Light Theme + Split Editor + UX Polish
 - **v0.5.0** — UX 기본기 + 수익화 + AI 품질 강화
 - **v0.4.0** — AI 코드 품질 개선 + Welcome 화면 + Full API RAG
 - **v0.3.0** — Free/Pro 분리 + Studio 플러그인 + 멀티 AI
@@ -188,8 +189,9 @@ gh run watch <RUN_ID> --repo ltfupb/Luano
 ```
 
 **규칙:**
-- 버전명에 v 접두사 필수 (v0.5.0)
-- 제목 첫줄: 쉼표 없이 간결하게 (예: `v0.5.0 — UX 기본기와 수익화`)
+- 버전명에 v 접두사 필수 (v0.6.0)
+- 릴리즈 노트는 영어로 작성
+- 제목 첫줄: 쉼표 없이 간결하게 (예: `v0.6.0 — Light Theme and Split Editor`)
 - Binaries 테이블 항상 포함
 - .blockmap과 latest.yml은 auto-update용이므로 삭제 금지
 
