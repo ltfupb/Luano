@@ -116,7 +116,7 @@ AI is optional — the editor, LSP, Rojo, Selene, and StyLua all work without an
 
 ## Plans
 
-|  | **Community (Free)** | **Pro** |
+|  | **Free** | **Pro** |
 | --- | --- | --- |
 | Monaco Editor + Luau LSP | ✅ | ✅ |
 | Rojo, Selene, StyLua bundled | ✅ | ✅ |
@@ -135,7 +135,7 @@ AI is optional — the editor, LSP, Rojo, Selene, and StyLua all work without an
 | DataStore schema generator | — | ✅ |
 | Managed AI (no key needed) | — | Coming Soon |
 
-The Community edition is fully open-source and free forever.
+The free plan is free forever.
 
 ---
 
