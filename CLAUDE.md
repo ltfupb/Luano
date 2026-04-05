@@ -248,3 +248,12 @@ Key routing rules:
 - Architecture review → invoke plan-eng-review
 - Save progress, checkpoint, resume → invoke checkpoint
 - Code quality, health check → invoke health
+
+---
+
+## Health Stack
+
+- typecheck-web: npx tsc -p tsconfig.web.json --noEmit
+- typecheck-node: npx tsc -p tsconfig.node.json --noEmit
+- lint: npx eslint "src/**/*.{ts,tsx}" "electron/**/*.ts" --max-warnings 20
+- test: npx vitest run
