@@ -1,4 +1,4 @@
-import { resolve, normalize } from "path"
+import { resolve, normalize, sep } from "path"
 
 /**
  * Validate that a file path is within the allowed project boundary.
@@ -11,7 +11,7 @@ export function validatePath(filePath: string, projectRoot: string): string {
   const normalized = normalize(resolve(projectRoot, filePath))
   const normalizedRoot = normalize(resolve(projectRoot))
 
-  if (!normalized.startsWith(normalizedRoot)) {
+  if (normalized !== normalizedRoot && !normalized.startsWith(normalizedRoot + sep)) {
     throw new Error(`Path traversal blocked: ${filePath} is outside project root`)
   }
 

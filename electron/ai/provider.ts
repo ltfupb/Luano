@@ -147,7 +147,8 @@ function is429(err: unknown): number | null {
   const status = (err as { status?: number })?.status
   if (status === 429) {
     const retryAfter = (err as { headers?: Record<string, string> })?.headers?.["retry-after"]
-    return retryAfter ? Math.min(Number(retryAfter), 30) : 5
+    const parsed = Number(retryAfter)
+    return (!isNaN(parsed) && parsed > 0) ? Math.min(parsed, 30) : 5
   }
   return null
 }

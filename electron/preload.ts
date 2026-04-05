@@ -10,7 +10,7 @@ export interface ToolEvent {
 
 /** Channels the renderer is allowed to listen on via on()/off() */
 const ALLOWED_CHANNELS = [
-  "file:changed",
+  "file:",
   "bridge:update",
   "ai:token-usage",
   "ai:stream:",
@@ -19,7 +19,9 @@ const ALLOWED_CHANNELS = [
   "terminal:data:",
   "terminal:exit:",
   "rojo:status",
-  "updater:"
+  "updater:",
+  "sidecar:",
+  "lint:"
 ]
 
 const api = {
