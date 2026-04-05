@@ -127,6 +127,7 @@ npm install --package-lock-only
 
 ## 릴리즈 히스토리
 
+- **v0.6.4** — Security + Stability + Test Coverage
 - **v0.6.3** — English Comments + Bridge Fix
 - **v0.6.2** — Code Optimization + Refactoring
 - **v0.6.1** — CI Fix + Vitest Downgrade
