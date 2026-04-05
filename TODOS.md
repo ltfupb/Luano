@@ -64,6 +64,22 @@
 
 ---
 
+## P2 — Feature
+
+### AI Code Review (built-in skill)
+**What:** 빌트인 스킬 `/review`로 AI가 현재 파일(또는 변경된 파일들)의 버그, 보안 이슈, 안티패턴을 짚어줌. 별도 UI 없이 채팅에서 사용.
+**Why:** 경쟁사 중 이 기능 있는 곳 없음. 스킬 시스템 이미 있으므로 추가 UI 불필요. Free tier 가능.
+**Effort:** M (human: ~3 days / CC: ~30min)
+**Depends on:** None
+
+### 실시간 협업 (Multiplayer)
+**What:** 같은 프로젝트를 여러 명이 동시에 편집. Roblox 팀 개발 워크플로우에 맞춤.
+**Why:** Roblox Studio 자체에 실시간 협업 없음. 경쟁 에디터 중에도 없음. 팀 개발하는 Roblox 스튜디오에게 킬러 피처.
+**Effort:** XL (human: ~2-3 weeks / CC: ~3-4h). CRDT 또는 OT 필요.
+**Depends on:** 서버 인프라 또는 P2P 아키텍처 결정
+
+---
+
 ## P3 — Strategy
 
 ### Strategic direction decision for v0.7.0

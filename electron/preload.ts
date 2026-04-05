@@ -8,6 +8,20 @@ export interface ToolEvent {
   success: boolean
 }
 
+/** Channels the renderer is allowed to listen on via on()/off() */
+const ALLOWED_CHANNELS = [
+  "file:changed",
+  "bridge:update",
+  "ai:token-usage",
+  "ai:stream:",
+  "ai:agent:",
+  "agent:checkpoint-available",
+  "terminal:data:",
+  "terminal:exit:",
+  "rojo:status",
+  "updater:"
+]
+
 const api = {
   // ── Pro Status ──────────────────────────────────────────────────────────────
   getProStatus: () => ipcRenderer.invoke("pro:status"),
@@ -245,11 +259,18 @@ const api = {
 
   // ── Event Listeners ─────────────────────────────────────────────────────────
   on: (channel: string, callback: (...args: unknown[]) => void): (() => void) => {
+    if (!ALLOWED_CHANNELS.some((prefix) => channel.startsWith(prefix))) {
+      console.warn(`[preload] Blocked listen on unauthorized channel: ${channel}`)
+      return () => {}
+    }
     const handler = (_: unknown, ...args: unknown[]) => callback(...args)
     ipcRenderer.on(channel, handler)
     return () => { ipcRenderer.removeListener(channel, handler) }
   },
-  off: (channel: string) => ipcRenderer.removeAllListeners(channel)
+  off: (channel: string) => {
+    if (!ALLOWED_CHANNELS.some((prefix) => channel.startsWith(prefix))) return
+    ipcRenderer.removeAllListeners(channel)
+  }
 }
 
 if (process.contextIsolated) {

@@ -1,6 +1,7 @@
-import { app, safeStorage } from "electron"
+import { app, safeStorage, dialog } from "electron"
 import { join } from "path"
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "fs"
+import { log } from "./logger"
 
 // Keys that contain secrets and should be encrypted at rest
 const ENCRYPTED_KEYS = new Set(["apiKey", "openaiKey"])
@@ -22,7 +23,8 @@ class SimpleStore {
       if (existsSync(this.filePath)) {
         this.data = JSON.parse(readFileSync(this.filePath, "utf-8"))
       }
-    } catch {
+    } catch (err) {
+      log.warn("Config file corrupted or unreadable, starting fresh", err)
       this.data = {}
     }
   }
@@ -30,7 +32,13 @@ class SimpleStore {
   private save(): void {
     try {
       writeFileSync(this.filePath, JSON.stringify(this.data, null, 2), "utf-8")
-    } catch {}
+    } catch (err) {
+      log.error("Failed to save config", err)
+      dialog.showErrorBox(
+        "Settings Save Failed",
+        `Could not save settings to ${this.filePath}. Changes may be lost on restart.`
+      )
+    }
   }
 
   /** Encrypt a string using OS keychain via safeStorage */

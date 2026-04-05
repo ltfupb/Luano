@@ -68,7 +68,7 @@ export function getAnthropicClient(): Anthropic {
   if (!anthropicClient) {
     const apiKey = store.get("apiKey") as string | undefined
     if (!apiKey) throw new Error("Anthropic API key not set")
-    anthropicClient = new Anthropic({ apiKey })
+    anthropicClient = new Anthropic({ apiKey, timeout: 60_000 })
   }
   return anthropicClient
 }
@@ -77,7 +77,7 @@ export function getOpenAIClient(): OpenAI {
   if (!openaiClient) {
     const apiKey = store.get("openaiKey") as string | undefined
     if (!apiKey) throw new Error("OpenAI API key not set")
-    openaiClient = new OpenAI({ apiKey })
+    openaiClient = new OpenAI({ apiKey, timeout: 60_000 })
   }
   return openaiClient
 }
@@ -141,6 +141,29 @@ function withTimeout<T>(promise: Promise<T>, ms = 30_000): Promise<T> {
   ])
 }
 
+// ── Rate Limit Retry ──────────────────────────────────────────────────────────
+
+function is429(err: unknown): number | null {
+  const status = (err as { status?: number })?.status
+  if (status === 429) {
+    const retryAfter = (err as { headers?: Record<string, string> })?.headers?.["retry-after"]
+    return retryAfter ? Math.min(Number(retryAfter), 30) : 5
+  }
+  return null
+}
+
+async function withRetry<T>(fn: () => Promise<T>, maxRetries = 2): Promise<T> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await fn()
+    } catch (err) {
+      const waitSec = is429(err)
+      if (waitSec === null || attempt >= maxRetries) throw err
+      await new Promise((r) => setTimeout(r, waitSec * 1000))
+    }
+  }
+}
+
 // ── Common Message Types ─────────────────────────────────────────────────────
 
 export interface ChatMessage {
@@ -188,20 +211,20 @@ export async function chat(messages: ChatMessage[], systemPrompt: string): Promi
   const model = getModel()
 
   if (provider === "openai") {
-    const response = await withTimeout(getOpenAIClient().chat.completions.create({
+    const response = await withRetry(() => withTimeout(getOpenAIClient().chat.completions.create({
       model,
       max_tokens: 8192,
       messages: [{ role: "system", content: systemPrompt }, ...messages]
-    }))
+    })))
     return response.choices[0]?.message?.content ?? ""
   }
 
-  const response = await withTimeout(getAnthropicClient().messages.create({
+  const response = await withRetry(() => withTimeout(getAnthropicClient().messages.create({
     model,
     max_tokens: 8192,
     system: toCachedSystem(systemPrompt),
     messages
-  }))
+  })))
   trackUsage(
     response.usage.input_tokens,
     response.usage.output_tokens,
@@ -233,12 +256,12 @@ export async function chatStream(
 
   try {
     if (provider === "openai") {
-      const stream = await getOpenAIClient().chat.completions.create({
+      const stream = await withTimeout(getOpenAIClient().chat.completions.create({
         model,
         max_tokens: 8192,
         stream: true,
         messages: [{ role: "system", content: systemPrompt }, ...messages]
-      })
+      }), 60_000)
       for await (const chunk of stream) {
         const text = chunk.choices[0]?.delta?.content
         if (text) send(text)
@@ -266,7 +289,13 @@ export async function chatStream(
     )
     send(null)
   } catch (err) {
-    sendError(err)
+    const waitSec = is429(err)
+    if (waitSec !== null) {
+      send(`\n\nRate limited. Please wait ${waitSec}s and try again.`)
+      send(null)
+    } else {
+      sendError(err)
+    }
   }
 }
 

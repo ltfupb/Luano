@@ -67,6 +67,24 @@ export const BUILT_IN_SKILLS: Skill[] = [
     prompt: "Convert this Lua code to modern Luau. Use type annotations, string interpolation, table.create, task library, and other Luau improvements.\n\n```lua\n{selection}\n```"
   },
   {
+    command: "/review",
+    label: "Code Review",
+    description: "Review code for bugs, anti-patterns, and improvements",
+    prompt: `Review this Luau code like a senior engineer. Check for:
+1. Bugs and logic errors
+2. Roblox anti-patterns (yielding in wrong context, memory leaks, unanchored parts)
+3. Security issues (unvalidated remote inputs, client trust)
+4. Performance problems (unnecessary loops, missing Debris, Connect without Disconnect)
+5. Code style and readability
+
+For each issue found, state: severity (bug/warning/suggestion), the exact line, what's wrong, and how to fix it.
+If the code is clean, say so briefly.
+
+\`\`\`luau
+{selection}
+\`\`\``
+  },
+  {
     command: "/scaffold",
     label: "Scaffold",
     description: "Generate boilerplate for a new system",
