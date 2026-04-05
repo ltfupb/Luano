@@ -6,11 +6,8 @@
 
 ## P1 — Security
 
-### AI path traversal protection
-**What:** AI agent tools (`edit_file`, `create_file`, `delete_file`) have no boundary checks. The agent could write/delete files outside the project directory.
-**Why:** If the AI hallucinates a system path, nothing prevents it from executing. Combined with `sandbox: false` in webPreferences, this is a real risk.
-**Effort:** M (human: ~4h / CC: ~15min)
-**Depends on:** None
+### ~~AI path traversal protection~~ ✅ (v0.6.5)
+Done. `electron/file/sandbox.ts` validates all agent file tool paths against project root.
 
 ### Auto-updater code signing verification
 **What:** `electron-updater` installs updates from GitHub Releases. No explicit signature verification mentioned.
@@ -18,33 +15,21 @@
 **Effort:** M (human: ~1 day / CC: ~30min)
 **Depends on:** Code signing certificate
 
-### IPC channel allowlist in preload
-**What:** The generic `on`/`off` API in preload.ts lets the renderer listen to any IPC channel. Should restrict to an explicit allowlist.
-**Why:** Reduces attack surface if renderer is compromised. Defense in depth.
-**Effort:** S (human: ~2h / CC: ~10min)
-**Depends on:** None
+### ~~IPC channel allowlist in preload~~ ✅ (v0.6.5)
+Done. `ALLOWED_CHANNELS` prefix list in `preload.ts`, unauthorized channels blocked with console warning.
 
 ---
 
 ## P2 — Reliability
 
-### store.ts silent write failure handling
-**What:** `store.ts` `save()` method has `catch {}` that silently swallows all write errors. If disk is full or file locked, API key changes are lost without user knowing.
-**Why:** User thinks settings are saved, but they're gone on restart. Silent data loss.
-**Effort:** S (human: ~2h / CC: ~10min)
-**Depends on:** None
+### ~~store.ts silent write failure handling~~ ✅ (v0.6.5)
+Done. `store.ts` now logs errors and shows dialog on write failure.
 
-### AI request timeout
-**What:** `chatStream` in provider.ts has no timeout. A hung API call blocks the UI indefinitely.
-**Why:** User sees a frozen AI chat with no way to recover except force-quitting.
-**Effort:** S (human: ~1h / CC: ~5min)
-**Depends on:** None
+### ~~AI request timeout~~ ✅ (v0.6.5)
+Done. 60s timeout on both Anthropic and OpenAI clients. `withTimeout` on streaming initial connection.
 
-### AI 429 rate limit handling
-**What:** Claude/OpenAI 429 responses are not specifically handled. User gets a generic error.
-**Why:** Rate limiting is common during heavy use. A specific message ("Rate limited, retrying in Xs") is much better UX.
-**Effort:** S (human: ~2h / CC: ~10min)
-**Depends on:** None
+### ~~AI 429 rate limit handling~~ ✅ (v0.6.5)
+Done. `withRetry` for non-streaming (2 retries), specific rate limit message for streaming.
 
 ---
 
@@ -66,11 +51,8 @@
 
 ## P2 — Feature
 
-### AI Code Review (built-in skill)
-**What:** 빌트인 스킬 `/review`로 AI가 현재 파일(또는 변경된 파일들)의 버그, 보안 이슈, 안티패턴을 짚어줌. 별도 UI 없이 채팅에서 사용.
-**Why:** 경쟁사 중 이 기능 있는 곳 없음. 스킬 시스템 이미 있으므로 추가 UI 불필요. Free tier 가능.
-**Effort:** M (human: ~3 days / CC: ~30min)
-**Depends on:** None
+### ~~AI Code Review (built-in skill)~~ ✅ (v0.6.5)
+Done. `/review` built-in skill in `src/ai/skills.ts`.
 
 ### 실시간 협업 (Multiplayer)
 **What:** 같은 프로젝트를 여러 명이 동시에 편집. Roblox 팀 개발 워크플로우에 맞춤.
