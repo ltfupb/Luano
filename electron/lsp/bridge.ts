@@ -15,7 +15,7 @@ export class LspBridge {
 
   async start(): Promise<void> {
     return new Promise((resolve) => {
-      this.wss = new WebSocketServer({ port: this.port }, () => resolve())
+      this.wss = new WebSocketServer({ host: "127.0.0.1", port: this.port }, () => resolve())
 
       this.wss.on("connection", (ws) => {
         this.clients.add(ws)

@@ -18,6 +18,7 @@ interface LicenseData {
   customerName: string
   customerEmail: string
   activatedAt: string
+  lastValidatedAt?: string
 }
 
 interface LSActivateResponse {
@@ -98,7 +99,8 @@ export async function activateLicense(key: string): Promise<{
       valid: true,
       customerName: data.meta.customer_name,
       customerEmail: data.meta.customer_email,
-      activatedAt: new Date().toISOString()
+      activatedAt: new Date().toISOString(),
+      lastValidatedAt: new Date().toISOString()
     })
 
     return {
@@ -128,7 +130,7 @@ export async function validateLicense(): Promise<boolean> {
     const data = await res.json() as LSValidateResponse
 
     if (data.valid && data.meta?.product_id === LUANO_PRODUCT_ID) {
-      storeLicense({ ...license, valid: true })
+      storeLicense({ ...license, valid: true, lastValidatedAt: new Date().toISOString() })
       return true
     }
 
@@ -136,8 +138,18 @@ export async function validateLicense(): Promise<boolean> {
     storeLicense({ ...license, valid: false })
     return false
   } catch {
-    // Network error — trust cached validity (offline grace)
-    return license.valid
+    // Network error — 7-day offline grace period
+    if (!license.valid) return false
+    const lastValidated = license.lastValidatedAt
+      ? new Date(license.lastValidatedAt).getTime()
+      : 0
+    const sevenDays = 7 * 24 * 60 * 60 * 1000
+    if (lastValidated > 0 && Date.now() - lastValidated < sevenDays) {
+      return true
+    }
+    // Grace expired or no timestamp (pre-migration) — require revalidation
+    storeLicense({ ...license, valid: false })
+    return false
   }
 }
 

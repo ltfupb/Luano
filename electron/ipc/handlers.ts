@@ -10,7 +10,7 @@ import { lintFile } from "../sidecar/selene"
 import { formatFile } from "../sidecar/stylua"
 import {
   chat, chatStream, planChat, abortAgent,
-  setApiKey,
+  setApiKey, getApiKey,
   setOpenAIKey, getOpenAIKey,
   setProvider, setModel, getProviderAndModel,
   MODELS, getTokenUsage, resetTokenUsage
@@ -19,7 +19,7 @@ import { isPro, hasFeature, type ProFeature } from "../pro"
 import { activateLicense, deactivateLicense, getLicenseInfo, validateLicense as revalidateLicense } from "../pro/license"
 import {
   getMemories, addMemory, updateMemory, deleteMemory,
-  buildMemoryContext, loadInstructions,
+  buildMemoryIndex, buildMemoryContext, loadInstructions,
   buildMemoryDetectPrompt, parseMemoryDetectResponse,
   estimateMessagesTokens, buildCompressionPrompt,
   type MemoryType
@@ -35,7 +35,7 @@ import {
   getConsoleOutput, isStudioConnected,
   telemetryEnabled, setTelemetry, telemetryStats, recordDiff, recordQuery,
   getBridgeTree, getBridgeLogs, isBridgeConnected, clearBridgeLogs,
-  queueScript, getCommandResult,
+  queueScript, getCommandResult, getBridgeToken,
   getLastCheckpoint, revertCheckpoint,
   evaluateCode, evaluateFiles,
   type DataStoreSchema
@@ -108,8 +108,8 @@ function buildFullSystemPrompt(
   if (ctx.projectPath) {
     const instructions = loadInstructions(ctx.projectPath)
     if (instructions) layers.push(`# Project instructions\n${instructions}`)
-    const memory = buildMemoryContext(ctx.projectPath)
-    if (memory) layers.push(memory)
+    const memoryIndex = buildMemoryIndex(ctx.projectPath)
+    if (memoryIndex) layers.push(memoryIndex)
   }
 
   if (opts?.includeProgress && ctx.projectPath) {
@@ -158,6 +158,14 @@ interface PtyEntry {
   sender: WebContents
 }
 const ptyMap = new Map<string, PtyEntry>()
+
+/** Kill all active PTY processes (called on app quit) */
+export function cleanupPtys(): void {
+  for (const [id, entry] of ptyMap) {
+    try { entry.proc.kill() } catch { /* already dead */ }
+    ptyMap.delete(id)
+  }
+}
 
 function spawnPty(id: string, sender: WebContents, cwd?: string): void {
   const shell = process.platform === "win32" ? "powershell.exe" : (process.env["SHELL"] ?? "bash")
@@ -307,6 +315,10 @@ export function registerIpcHandlers(): void {
     setApiKey(key)
     return { success: true }
   })
+  ipcMain.handle("ai:get-key", () => {
+    const key = getApiKey()
+    return key ? "***set***" : null
+  })
   ipcMain.handle("ai:set-openai-key", (_, key: string) => {
     setOpenAIKey(key)
     return { success: true }
@@ -333,9 +345,9 @@ export function registerIpcHandlers(): void {
   })
 
   // ── AI Context ───────────────────────────────────────────────────────────
-  ipcMain.handle("ai:build-context", async (_, projectPath: string) => {
+  ipcMain.handle("ai:build-context", async (_, projectPath: string, filePath?: string) => {
     const globalSummary = await buildGlobalSummary(projectPath)
-    return { globalSummary }
+    return { globalSummary, filePath: filePath ?? null }
   })
 
   // ── AI Chat (Basic) ────────────────────────────────────────────────────────
@@ -461,6 +473,9 @@ export function registerIpcHandlers(): void {
   })
 
   // ── Live Bridge [Pro] ─────────────────────────────────────────────────────
+  ipcMain.handle("bridge:get-token", () => {
+    return getBridgeToken()
+  })
   ipcMain.handle("bridge:get-tree", () => {
     if (!hasFeature("studio-bridge")) return PRO_REQUIRED("studio-bridge")
     return getBridgeTree()

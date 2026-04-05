@@ -3,7 +3,7 @@ import { join } from "path"
 import { mkdirSync, rmSync, existsSync, readFileSync } from "fs"
 import {
   getMemories, addMemory, updateMemory, deleteMemory,
-  getMemoriesByType, buildMemoryContext,
+  getMemoriesByType, buildMemoryContext, buildMemoryIndex, buildMemoryDetail,
   loadInstructions,
   buildMemoryDetectPrompt, parseMemoryDetectResponse,
   estimateTokens, estimateMessagesTokens,
@@ -78,9 +78,9 @@ describe("Memory CRUD", () => {
   })
 })
 
-describe("buildMemoryContext", () => {
-  it("returns empty string when no memories", () => {
-    expect(buildMemoryContext(TEST_DIR)).toBe("")
+describe("buildMemoryContext (legacy)", () => {
+  it("returns 'No memories stored.' when no memories", () => {
+    expect(buildMemoryContext(TEST_DIR)).toBe("No memories stored.")
   })
 
   it("groups memories by type", () => {
@@ -89,13 +89,57 @@ describe("buildMemoryContext", () => {
     addMemory(TEST_DIR, "project", "using Knit framework")
 
     const ctx = buildMemoryContext(TEST_DIR)
-    expect(ctx).toContain("[Memories from previous sessions]")
+    expect(ctx).toContain("[Full memory detail]")
     expect(ctx).toContain("User:")
     expect(ctx).toContain("likes TypeScript")
     expect(ctx).toContain("Feedback:")
     expect(ctx).toContain("no trailing summaries")
     expect(ctx).toContain("Project notes:")
     expect(ctx).toContain("using Knit framework")
+  })
+})
+
+describe("buildMemoryIndex (Layer 1)", () => {
+  it("returns empty string when no memories", () => {
+    expect(buildMemoryIndex(TEST_DIR)).toBe("")
+  })
+
+  it("returns short pointers with memory IDs", () => {
+    addMemory(TEST_DIR, "user", "likes TypeScript")
+    addMemory(TEST_DIR, "feedback", "no trailing summaries")
+
+    const idx = buildMemoryIndex(TEST_DIR)
+    expect(idx).toContain("[Memories")
+    expect(idx).toContain("User:")
+    expect(idx).toContain("Feedback:")
+    expect(idx).toMatch(/\[mem_/)
+  })
+
+  it("truncates long content to ~80 chars", () => {
+    const longContent = "A".repeat(200)
+    addMemory(TEST_DIR, "user", longContent)
+
+    const idx = buildMemoryIndex(TEST_DIR)
+    expect(idx).toContain("…")
+    expect(idx).not.toContain("A".repeat(200))
+  })
+})
+
+describe("buildMemoryDetail (Layer 2)", () => {
+  it("returns 'No memories stored.' when empty", () => {
+    expect(buildMemoryDetail(TEST_DIR)).toBe("No memories stored.")
+  })
+
+  it("looks up single memory by ID", () => {
+    const mem = addMemory(TEST_DIR, "user", "likes TypeScript")
+    const detail = buildMemoryDetail(TEST_DIR, mem.id)
+    expect(detail).toContain("likes TypeScript")
+    expect(detail).toContain("[user]")
+  })
+
+  it("returns not found for bad ID when memories exist", () => {
+    addMemory(TEST_DIR, "user", "some memory")
+    expect(buildMemoryDetail(TEST_DIR, "mem_fake")).toBe("Memory mem_fake not found.")
   })
 })
 

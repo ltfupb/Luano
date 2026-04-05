@@ -148,13 +148,13 @@ export function StatusBar(): JSX.Element {
         </>
       )}
 
-      {/* Token usage */}
+      {/* Token usage + cache hit rate */}
       {(tokens.input > 0 || tokens.output > 0) && (
         <>
           <span style={{ color: "var(--border)", userSelect: "none" }}>·</span>
           <span
             style={{ color: "var(--text-muted)", cursor: "pointer" }}
-            title={`Input: ${tokens.input.toLocaleString()} | Output: ${tokens.output.toLocaleString()}${tokens.cacheRead ? ` | Cache: ${tokens.cacheRead.toLocaleString()}` : ""}\nClick to reset`}
+            title={`Input: ${tokens.input.toLocaleString()} | Output: ${tokens.output.toLocaleString()}${tokens.cacheRead ? ` | Cache read: ${tokens.cacheRead.toLocaleString()}` : ""}\n${tokens.cacheRead && tokens.input ? `Cache hit: ${Math.round((tokens.cacheRead / (tokens.input + tokens.cacheRead)) * 100)}%` : "No cache data"}\nClick to reset`}
             onClick={() => {
               if (typeof window.api.aiResetTokenUsage === "function") {
                 window.api.aiResetTokenUsage().then(() => setTokens({ input: 0, output: 0, cacheRead: 0 }))
@@ -162,6 +162,11 @@ export function StatusBar(): JSX.Element {
             }}
           >
             {((tokens.input + tokens.output) / 1000).toFixed(1)}k tok
+            {tokens.cacheRead > 0 && tokens.input > 0 && (
+              <span style={{ color: "#10b981", marginLeft: 4 }}>
+                {Math.round((tokens.cacheRead / (tokens.input + tokens.cacheRead)) * 100)}%
+              </span>
+            )}
           </span>
         </>
       )}

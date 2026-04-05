@@ -102,15 +102,19 @@ export function deleteMemory(projectPath: string, id: string): boolean {
   return true
 }
 
-// ── Context Builder ─────────────────────────────────────────────────────────
+// ── Context Builder (2-tier: index always loaded, detail on demand) ─────────
 
-const MAX_MEMORY_TOKENS = 600
+/** Max tokens for the always-loaded index layer */
+const MAX_INDEX_TOKENS = 300
+
+/** Max tokens for the full detail layer */
+const MAX_DETAIL_TOKENS = 600
 
 /**
- * Build a memory context string for injection into AI system prompt.
- * Groups by type, caps total length.
+ * Layer 1: Lightweight index — always injected into system prompt.
+ * One-line pointer per memory (~15 chars each). Keeps prompt small.
  */
-export function buildMemoryContext(projectPath: string): string {
+export function buildMemoryIndex(projectPath: string): string {
   const memories = getMemories(projectPath)
   if (memories.length === 0) return ""
 
@@ -119,7 +123,49 @@ export function buildMemoryContext(projectPath: string): string {
     groups[m.type].push(m)
   }
 
-  const lines: string[] = ["[Memories from previous sessions]"]
+  const lines: string[] = ["[Memories — use search_docs or ask for detail if needed]"]
+
+  for (const [type, label] of [["feedback", "Feedback"], ["user", "User"], ["project", "Project"]] as const) {
+    const items = groups[type]
+    if (items.length > 0) {
+      lines.push(`${label}:`)
+      items.forEach((m) => {
+        // Truncate to ~80 chars for index
+        const short = m.content.length > 80 ? m.content.slice(0, 77) + "…" : m.content
+        lines.push(`- [${m.id}] ${short}`)
+      })
+    }
+  }
+
+  let result = lines.join("\n")
+  if (result.length > MAX_INDEX_TOKENS * 4) {
+    result = result.slice(0, MAX_INDEX_TOKENS * 4) + "\n…(more memories available)"
+  }
+  return result
+}
+
+/**
+ * Layer 2: Full detail — loaded on demand (e.g., when agent needs specifics).
+ * Returns complete memory content grouped by type.
+ */
+export function buildMemoryDetail(projectPath: string, memoryId?: string): string {
+  const memories = getMemories(projectPath)
+  if (memories.length === 0) return "No memories stored."
+
+  // Single memory lookup
+  if (memoryId) {
+    const mem = memories.find((m) => m.id === memoryId)
+    if (!mem) return `Memory ${memoryId} not found.`
+    return `[${mem.type}] ${mem.content} (created: ${mem.createdAt})`
+  }
+
+  // Full dump
+  const groups: Record<MemoryType, Memory[]> = { user: [], project: [], feedback: [] }
+  for (const m of memories) {
+    groups[m.type].push(m)
+  }
+
+  const lines: string[] = ["[Full memory detail]"]
 
   if (groups.user.length > 0) {
     lines.push("User:")
@@ -135,11 +181,17 @@ export function buildMemoryContext(projectPath: string): string {
   }
 
   let result = lines.join("\n")
-  // Rough token cap (~4 chars per token)
-  if (result.length > MAX_MEMORY_TOKENS * 4) {
-    result = result.slice(0, MAX_MEMORY_TOKENS * 4) + "\n…(truncated)"
+  if (result.length > MAX_DETAIL_TOKENS * 4) {
+    result = result.slice(0, MAX_DETAIL_TOKENS * 4) + "\n…(truncated)"
   }
   return result
+}
+
+/**
+ * Legacy compatibility — returns full context (used where index isn't enough).
+ */
+export function buildMemoryContext(projectPath: string): string {
+  return buildMemoryDetail(projectPath)
 }
 
 // ── Project Instructions ────────────────────────────────────────────────────

@@ -29,7 +29,7 @@ export class RojoManager {
     this.notifyStatus()
 
     try {
-      const sidecar = spawnSidecar("rojo", ["serve", "default.project.json", "--address", "0.0.0.0"], {
+      const sidecar = spawnSidecar("rojo", ["serve", "default.project.json", "--address", "127.0.0.1"], {
         cwd: projectPath,
         onData: (data) => {
           this.restartCount = 0

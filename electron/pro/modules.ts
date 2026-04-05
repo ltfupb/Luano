@@ -140,6 +140,7 @@ const bridge = tryRequire<{
   clearBridgeLogs: () => void
   queueScript: (code: string) => string
   getCommandResult: (id: string) => any
+  getBridgeToken: () => string
 }>("../bridge/server")
 
 export const startBridgeServer = bridge?.startBridgeServer ?? (() => {})
@@ -150,6 +151,7 @@ export const isBridgeConnected = bridge?.isBridgeConnected ?? (() => false)
 export const clearBridgeLogs = bridge?.clearBridgeLogs ?? (() => {})
 export const queueScript = bridge?.queueScript ?? (() => "")
 export const getCommandResult = bridge?.getCommandResult ?? (() => null)
+export const getBridgeToken = bridge?.getBridgeToken ?? (() => "")
 
 // ── Agent (chat + inline edit + checkpoint) ────────────────────────────────
 
