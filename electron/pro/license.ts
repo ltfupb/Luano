@@ -9,7 +9,7 @@ import { hostname } from "os"
 import { store } from "../store"
 
 const LS_API = "https://api.lemonsqueezy.com/v1/licenses"
-const LUANO_PRODUCT_ID = 937319
+const LUANO_PRODUCT_ID = 937627
 
 interface LicenseData {
   key: string
