@@ -48,6 +48,7 @@ npm run package  # electron-builder로 배포용 인스톨러 생성
 **gitignore된 Pro 파일 목록:**
 ```
 electron/pro/impl.ts
+electron/pro/internal-keys.ts
 electron/ai/agent.ts
 electron/ai/tools.ts
 electron/ai/context.ts
@@ -127,6 +128,7 @@ npm install --package-lock-only
 
 ## 릴리즈 히스토리
 
+- **v0.7.4** — Security and Onboarding Fixes
 - **v0.7.3** — Crash Reporting and Toolchain Auto-Update
 - **v0.7.1** — Gemini and Local Model Support
 - **v0.7.0** — Customizable Toolchain and Multi-Tool Support

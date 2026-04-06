@@ -274,7 +274,10 @@ export default function App(): JSX.Element {
     if (!savedPath) return
 
     openPath(savedPath).then(async (ok) => {
-      if (!ok) return
+      if (!ok) {
+        closeProject()
+        return
+      }
       // Reload previously open files
       for (const filePath of savedOpenFiles) {
         try {

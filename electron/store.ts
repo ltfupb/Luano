@@ -4,7 +4,7 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync } from "fs"
 import { log } from "./logger"
 
 // Keys that contain secrets and should be encrypted at rest
-const ENCRYPTED_KEYS = new Set(["apiKey", "openaiKey"])
+const ENCRYPTED_KEYS = new Set(["apiKey", "openaiKey", "geminiKey"])
 
 // Simple JSON file-based store with safeStorage encryption (replaces electron-store)
 class SimpleStore {

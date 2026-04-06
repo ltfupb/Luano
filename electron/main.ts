@@ -2,6 +2,7 @@ import { app, BrowserWindow, dialog, shell } from "electron"
 import { initSentry } from "./sentry"
 import { log } from "./logger"
 
+app.setName("Luano")
 initSentry()
 import { join } from "path"
 import { electronApp, optimizer, is } from "@electron-toolkit/utils"
