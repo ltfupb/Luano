@@ -263,6 +263,21 @@ export interface ChatMessage {
   content: string
 }
 
+// ── Provider Helpers ─────────────────────────────────────────────────────────
+
+function getOpenAICompat(): { client: OpenAI; timeout: number } {
+  return getProvider() === "local"
+    ? { client: getLocalClient(), timeout: 120_000 }
+    : { client: getOpenAIClient(), timeout: 60_000 }
+}
+
+function toGeminiContents(messages: ChatMessage[]) {
+  return messages.map(m => ({
+    role: m.role === "assistant" ? "model" as const : "user" as const,
+    parts: [{ text: m.content }]
+  }))
+}
+
 // ── Prompt Caching (Anthropic cache_control) ────────────────────────────────
 
 type CachedTextBlock = {
@@ -303,31 +318,24 @@ export async function chat(messages: ChatMessage[], systemPrompt: string): Promi
   const model = getModel()
 
   if (provider === "openai" || provider === "local") {
-    const client = provider === "local" ? getLocalClient() : getOpenAIClient()
+    const { client, timeout } = getOpenAICompat()
     const response = await withRetry(() => withTimeout(client.chat.completions.create({
-      model,
-      max_tokens: 8192,
+      model, max_tokens: 8192,
       messages: [{ role: "system", content: systemPrompt }, ...messages]
-    }), provider === "local" ? 120_000 : 30_000))
+    }), timeout))
     return response.choices[0]?.message?.content ?? ""
   }
 
   if (provider === "gemini") {
-    const geminiModel = getGeminiModel(systemPrompt)
-    const contents = messages.map(m => ({
-      role: m.role === "assistant" ? "model" as const : "user" as const,
-      parts: [{ text: m.content }]
-    }))
     const response = await withRetry(() => withTimeout(
-      geminiModel.generateContent({ contents }),
+      getGeminiModel(systemPrompt).generateContent({ contents: toGeminiContents(messages) }),
       60_000
     ))
     return response.response.text()
   }
 
   const response = await withRetry(() => withTimeout(getAnthropicClient().messages.create({
-    model,
-    max_tokens: 8192,
+    model, max_tokens: 8192,
     system: toCachedSystem(systemPrompt),
     messages
   })))
@@ -362,13 +370,11 @@ export async function chatStream(
 
   try {
     if (provider === "openai" || provider === "local") {
-      const client = provider === "local" ? getLocalClient() : getOpenAIClient()
+      const { client, timeout } = getOpenAICompat()
       const stream = await withTimeout(client.chat.completions.create({
-        model,
-        max_tokens: 8192,
-        stream: true,
+        model, max_tokens: 8192, stream: true,
         messages: [{ role: "system", content: systemPrompt }, ...messages]
-      }), provider === "local" ? 120_000 : 60_000)
+      }), timeout)
       for await (const chunk of stream) {
         const text = chunk.choices[0]?.delta?.content
         if (text) send(text)
@@ -378,13 +384,8 @@ export async function chatStream(
     }
 
     if (provider === "gemini") {
-      const geminiModel = getGeminiModel(systemPrompt)
-      const contents = messages.map(m => ({
-        role: m.role === "assistant" ? "model" as const : "user" as const,
-        parts: [{ text: m.content }]
-      }))
       const result = await withTimeout(
-        geminiModel.generateContentStream({ contents }),
+        getGeminiModel(systemPrompt).generateContentStream({ contents: toGeminiContents(messages) }),
         60_000
       )
       for await (const chunk of result.stream) {
