@@ -84,12 +84,17 @@ export function ToolchainPanel({ onClose }: ToolchainPanelProps): JSX.Element {
     setTimeout(onClose, 180)
   }
 
+  const [installError, setInstallError] = useState<string | null>(null)
+
   const handleInstall = async (toolId: string) => {
+    setInstallError(null)
     setDownloading(prev => new Set(prev).add(toolId))
     const result = await window.api.toolchainDownload(toolId)
     setDownloading(prev => { const n = new Set(prev); n.delete(toolId); return n })
     if (result.success) {
       setInstalled(prev => ({ ...prev, [toolId]: true }))
+    } else {
+      setInstallError(result.error ?? "Install failed")
     }
   }
 
@@ -378,6 +383,14 @@ export function ToolchainPanel({ onClose }: ToolchainPanelProps): JSX.Element {
                       >
                         {t("toolchainRemove")}
                       </button>
+                    )}
+                    {installError && (
+                      <div
+                        className="px-2.5 py-2 rounded-md text-[10px] leading-relaxed"
+                        style={{ background: "rgba(248,113,113,0.1)", color: "#f87171", border: "1px solid rgba(248,113,113,0.2)" }}
+                      >
+                        {installError}
+                      </div>
                     )}
                   </div>
                 </>
