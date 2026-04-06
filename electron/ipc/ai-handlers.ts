@@ -4,6 +4,11 @@ import {
   chat, chatStream, planChat, abortAgent,
   setApiKey, getApiKey,
   setOpenAIKey, getOpenAIKey,
+  setGeminiKey, getGeminiKey,
+  setLocalEndpoint, getLocalEndpoint,
+  setLocalKey, getLocalKey,
+  setLocalModel, getLocalModel,
+  fetchLocalModels,
   setProvider, setModel, getProviderAndModel,
   MODELS, getTokenUsage, resetTokenUsage
 } from "../ai/provider"
@@ -47,8 +52,35 @@ export function registerAIHandlers(): void {
     const key = getOpenAIKey()
     return key ? "***set***" : null
   })
+  ipcMain.handle("ai:set-gemini-key", (_, key: string) => {
+    setGeminiKey(key)
+    return { success: true }
+  })
+  ipcMain.handle("ai:get-gemini-key", () => {
+    const key = getGeminiKey()
+    return key ? "***set***" : null
+  })
+  ipcMain.handle("ai:set-local-endpoint", (_, endpoint: string) => {
+    setLocalEndpoint(endpoint)
+    return { success: true }
+  })
+  ipcMain.handle("ai:get-local-endpoint", () => getLocalEndpoint())
+  ipcMain.handle("ai:set-local-key", (_, key: string) => {
+    setLocalKey(key)
+    return { success: true }
+  })
+  ipcMain.handle("ai:get-local-key", () => {
+    const key = getLocalKey()
+    return key || null
+  })
+  ipcMain.handle("ai:set-local-model", (_, model: string) => {
+    setLocalModel(model)
+    return { success: true }
+  })
+  ipcMain.handle("ai:get-local-model", () => getLocalModel())
+  ipcMain.handle("ai:fetch-local-models", () => fetchLocalModels())
   ipcMain.handle("ai:set-provider", (_, provider: string) => {
-    setProvider(provider as "anthropic" | "openai")
+    setProvider(provider as "anthropic" | "openai" | "gemini" | "local")
     return { success: true }
   })
   ipcMain.handle("ai:set-model", (_, model: string) => {

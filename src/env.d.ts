@@ -98,6 +98,15 @@ interface Window {
     aiGetKey: () => Promise<string | null>
     aiSetOpenAIKey: (key: string) => Promise<{ success: boolean }>
     aiGetOpenAIKey: () => Promise<string | null>
+    aiSetGeminiKey: (key: string) => Promise<{ success: boolean }>
+    aiGetGeminiKey: () => Promise<string | null>
+    aiSetLocalEndpoint: (endpoint: string) => Promise<{ success: boolean }>
+    aiGetLocalEndpoint: () => Promise<string>
+    aiSetLocalKey: (key: string) => Promise<{ success: boolean }>
+    aiGetLocalKey: () => Promise<string | null>
+    aiSetLocalModel: (model: string) => Promise<{ success: boolean }>
+    aiGetLocalModel: () => Promise<string>
+    aiFetchLocalModels: () => Promise<Array<{ id: string; label: string }>>
     aiSetProvider: (provider: string) => Promise<{ success: boolean }>
     aiSetModel: (model: string) => Promise<{ success: boolean }>
     aiGetProviderModel: () => Promise<{
@@ -106,6 +115,8 @@ interface Window {
       models: {
         anthropic: Array<{ id: string; label: string }>
         openai: Array<{ id: string; label: string }>
+        gemini: Array<{ id: string; label: string }>
+        local: Array<{ id: string; label: string }>
       }
     }>
 

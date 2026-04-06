@@ -15,6 +15,9 @@ interface SettingsStore {
   theme: AppTheme
   apiKey: string
   openaiKey: string
+  geminiKey: string
+  localEndpoint: string
+  localModel: string
   provider: string
   model: string
   autoSave: boolean
@@ -32,6 +35,9 @@ interface SettingsStore {
   setTheme: (theme: AppTheme) => void
   setApiKey: (key: string) => void
   setOpenAIKey: (key: string) => void
+  setGeminiKey: (key: string) => void
+  setLocalEndpoint: (endpoint: string) => void
+  setLocalModel: (model: string) => void
   setProvider: (provider: string) => void
   setModel: (model: string) => void
   setAutoSave: (enabled: boolean) => void
@@ -54,6 +60,9 @@ export const useSettingsStore = create<SettingsStore>()(
       theme: "tokyo-night" as AppTheme,
       apiKey: "",
       openaiKey: "",
+      geminiKey: "",
+      localEndpoint: "http://localhost:11434/v1",
+      localModel: "",
       provider: "anthropic",
       model: "claude-sonnet-4-6",
       autoSave: true,
@@ -70,6 +79,9 @@ export const useSettingsStore = create<SettingsStore>()(
       setTheme: (theme) => set({ theme }),
       setApiKey: (apiKey) => set({ apiKey }),
       setOpenAIKey: (openaiKey) => set({ openaiKey }),
+      setGeminiKey: (geminiKey) => set({ geminiKey }),
+      setLocalEndpoint: (localEndpoint) => set({ localEndpoint }),
+      setLocalModel: (localModel) => set({ localModel }),
       setProvider: (provider) => set({ provider }),
       setModel: (model) => set({ model }),
       setAutoSave: (autoSave) => set({ autoSave }),
@@ -98,6 +110,9 @@ export const useSettingsStore = create<SettingsStore>()(
         theme: state.theme,
         apiKey: state.apiKey,
         openaiKey: state.openaiKey,
+        geminiKey: state.geminiKey,
+        localEndpoint: state.localEndpoint,
+        localModel: state.localModel,
         provider: state.provider,
         model: state.model,
         autoSave: state.autoSave,

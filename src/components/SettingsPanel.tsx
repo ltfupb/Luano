@@ -13,7 +13,7 @@ const LANGUAGES = [
 ]
 
 interface ModelEntry { id: string; label: string }
-interface ProviderModels { anthropic: ModelEntry[]; openai: ModelEntry[] }
+interface ProviderModels { anthropic: ModelEntry[]; openai: ModelEntry[]; gemini: ModelEntry[]; local: ModelEntry[] }
 
 interface CustomSkill {
   command: string
@@ -248,7 +248,8 @@ function SkillEditor({
 export function SettingsPanel({ onClose }: SettingsPanelProps): JSX.Element {
   const {
     language, setLanguage, theme, setTheme,
-    apiKey, setApiKey, openaiKey, setOpenAIKey,
+    apiKey, setApiKey, openaiKey, setOpenAIKey, geminiKey, setGeminiKey,
+    localEndpoint, setLocalEndpoint, localModel, setLocalModel,
     provider, setProvider, model, setModel,
     autoSave, setAutoSave, autoSaveDelay, setAutoSaveDelay,
     fontSize, setFontSize,
@@ -256,7 +257,8 @@ export function SettingsPanel({ onClose }: SettingsPanelProps): JSX.Element {
   } = useSettingsStore()
   const { projectPath } = useProjectStore()
   const t = useT()
-  const [models, setModels] = useState<ProviderModels>({ anthropic: [], openai: [] })
+  const [models, setModels] = useState<ProviderModels>({ anthropic: [], openai: [], gemini: [], local: [] })
+  const [localModelsLoading, setLocalModelsLoading] = useState(false)
   const [visible, setVisible] = useState(false)
   const [customSkills, setCustomSkills] = useState<CustomSkill[]>([])
   const [editingSkill, setEditingSkill] = useState<{ index: number; skill: CustomSkill } | null>(null)
@@ -523,8 +525,8 @@ export function SettingsPanel({ onClose }: SettingsPanelProps): JSX.Element {
           {/* AI Provider */}
           <div className="flex flex-col gap-2">
             <SectionLabel>{t("aiProvider")}</SectionLabel>
-            <div className="flex gap-2">
-              {(["anthropic", "openai"] as const).map((p) => (
+            <div className="flex gap-2 flex-wrap">
+              {(["anthropic", "openai", "gemini", "local"] as const).map((p) => (
                 <button
                   key={p}
                   onClick={() => handleSetProvider(p)}
@@ -536,14 +538,14 @@ export function SettingsPanel({ onClose }: SettingsPanelProps): JSX.Element {
                     fontWeight: provider === p ? 500 : 400
                   }}
                 >
-                  {p === "anthropic" ? "Anthropic" : "OpenAI"}
+                  {{ anthropic: "Anthropic", openai: "OpenAI", gemini: "Gemini", local: "Local" }[p]}
                 </button>
               ))}
             </div>
           </div>
 
-          {/* Model selector */}
-          {currentModels.length > 0 && (
+          {/* Model selector (cloud providers) */}
+          {provider !== "local" && currentModels.length > 0 && (
             <div className="flex flex-col gap-2">
               <SectionLabel>{t("aiModel")}</SectionLabel>
               <select
@@ -590,6 +592,110 @@ export function SettingsPanel({ onClose }: SettingsPanelProps): JSX.Element {
                 setOpenAIKey(key)
               }}
             />
+          )}
+          {provider === "gemini" && (
+            <KeyField
+              label={t("geminiKey")}
+              placeholder="AIza\u2026"
+              isSet={!!geminiKey}
+              onSave={async (key) => {
+                await window.api.aiSetGeminiKey(key)
+                setGeminiKey(key)
+              }}
+            />
+          )}
+
+          {/* Local provider config */}
+          {provider === "local" && (
+            <div className="flex flex-col gap-3">
+              <div className="flex flex-col gap-1.5">
+                <SectionLabel>{t("localEndpoint")}</SectionLabel>
+                <input
+                  type="text"
+                  value={localEndpoint}
+                  onChange={(e) => {
+                    setLocalEndpoint(e.target.value)
+                    window.api.aiSetLocalEndpoint(e.target.value)
+                  }}
+                  placeholder="http://localhost:11434/v1"
+                  className="rounded-lg px-3 py-2 text-xs focus:outline-none transition-all duration-150"
+                  style={{
+                    background: "var(--bg-base)",
+                    border: "1px solid var(--border)",
+                    color: "var(--text-primary)",
+                    fontFamily: "monospace"
+                  }}
+                  onFocus={e => (e.currentTarget as HTMLElement).style.borderColor = "var(--accent)"}
+                  onBlur={e => (e.currentTarget as HTMLElement).style.borderColor = "var(--border)"}
+                />
+                <span style={{ fontSize: "10px", color: "var(--text-muted)" }}>
+                  Ollama, LM Studio, vLLM {t("localEndpointHint")}
+                </span>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <div className="flex items-center justify-between">
+                  <SectionLabel>{t("aiModel")}</SectionLabel>
+                  <button
+                    onClick={async () => {
+                      setLocalModelsLoading(true)
+                      const fetched = await window.api.aiFetchLocalModels()
+                      setModels(prev => ({ ...prev, local: fetched }))
+                      setLocalModelsLoading(false)
+                    }}
+                    disabled={localModelsLoading}
+                    className="px-2 py-0.5 rounded-md text-[10px] transition-all duration-100"
+                    style={{ color: "var(--accent)", border: "1px solid var(--border)" }}
+                  >
+                    {localModelsLoading ? "..." : t("localFetchModels")}
+                  </button>
+                </div>
+                {models.local.length > 0 ? (
+                  <select
+                    value={localModel}
+                    onChange={(e) => {
+                      setLocalModel(e.target.value)
+                      handleSetModel(e.target.value)
+                      window.api.aiSetLocalModel(e.target.value)
+                    }}
+                    className="rounded-lg px-3 py-2 focus:outline-none transition-all duration-150"
+                    style={{
+                      background: "var(--bg-base)",
+                      border: "1px solid var(--border)",
+                      color: "var(--text-primary)",
+                      fontSize: "12px"
+                    }}
+                    onFocus={e => (e.currentTarget as HTMLElement).style.borderColor = "var(--accent)"}
+                    onBlur={e => (e.currentTarget as HTMLElement).style.borderColor = "var(--border)"}
+                  >
+                    {!localModel && <option value="">Select a model...</option>}
+                    {models.local.map((m) => (
+                      <option key={m.id} value={m.id} style={{ background: "var(--bg-panel)" }}>
+                        {m.label}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    type="text"
+                    value={localModel}
+                    onChange={(e) => {
+                      setLocalModel(e.target.value)
+                      handleSetModel(e.target.value)
+                      window.api.aiSetLocalModel(e.target.value)
+                    }}
+                    placeholder="llama3, qwen2.5-coder, deepseek-r1..."
+                    className="rounded-lg px-3 py-2 text-xs focus:outline-none transition-all duration-150"
+                    style={{
+                      background: "var(--bg-base)",
+                      border: "1px solid var(--border)",
+                      color: "var(--text-primary)"
+                    }}
+                    onFocus={e => (e.currentTarget as HTMLElement).style.borderColor = "var(--accent)"}
+                    onBlur={e => (e.currentTarget as HTMLElement).style.borderColor = "var(--border)"}
+                  />
+                )}
+              </div>
+            </div>
           )}
 
           {/* Divider */}
