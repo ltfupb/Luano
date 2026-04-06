@@ -19,15 +19,15 @@ const statusDot: Record<string, string> = {
   error: "#e11d48"
 }
 
-const statusLabel: Record<string, string> = {
-  stopped: "Rojo stopped",
-  starting: "Rojo starting…",
-  running: "Rojo serving",
-  error: "Rojo error"
-}
-
 export function StatusBar(): JSX.Element {
-  const { status } = useRojoStore()
+  const { status, toolName } = useRojoStore()
+
+  const statusLabel: Record<string, string> = {
+    stopped: `${toolName} stopped`,
+    starting: `${toolName} starting…`,
+    running: `${toolName} serving`,
+    error: `${toolName} error`
+  }
   const { activeFile, lspPort } = useProjectStore()
   const [update, setUpdate] = useState<UpdateState>({ status: "idle" })
   const t = useT()

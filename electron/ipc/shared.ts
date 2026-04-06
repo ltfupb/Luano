@@ -24,6 +24,11 @@ export interface AIContext {
 /** Track AI-generated file contents for telemetry diff comparison */
 export const aiGeneratedFiles = new Map<string, string>()
 
+/** Current active project path — set on project:open, used for config lookups */
+let _currentProjectPath: string | null = null
+export function setCurrentProject(path: string | null): void { _currentProjectPath = path }
+export function getCurrentProject(): string | null { return _currentProjectPath }
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 export const PRO_REQUIRED = (feature: ProFeature) => ({

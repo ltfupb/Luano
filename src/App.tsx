@@ -6,6 +6,7 @@ import { useSettingsStore } from "./stores/settingsStore"
 import { useIpcEvent } from "./hooks/useIpc"
 import { Sidebar, SidePanel } from "./components/Sidebar"
 import { SettingsPanel } from "./components/SettingsPanel"
+import { ToolchainPanel } from "./toolchain/ToolchainPanel"
 import { SearchPanel } from "./components/SearchPanel"
 import { QuickOpen } from "./components/QuickOpen"
 import { FileExplorer } from "./explorer/FileExplorer"
@@ -145,7 +146,7 @@ function WelcomeScreen({
 
 export default function App(): JSX.Element {
   const { projectPath, dirtyFiles, setProject, closeProject, setFileTree, openFile } = useProjectStore()
-  const { setStatus, setPort } = useRojoStore()
+  const { setStatus, setPort, setToolName } = useRojoStore()
   const { setGlobalSummary, clearMessages, saveProjectChat, loadProjectChat } = useAIStore()
   const theme = useSettingsStore((s) => s.theme)
   const uiScale = useSettingsStore((s) => s.uiScale)
@@ -167,6 +168,7 @@ export default function App(): JSX.Element {
   const rightPanelOpen = useSettingsStore((s) => s.rightPanelOpen)
   const setRightPanelOpen = useSettingsStore((s) => s.setRightPanelOpen)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [toolchainOpen, setToolchainOpen] = useState(false)
   const terminalOpen = useSettingsStore((s) => s.terminalOpen)
   const setTerminalOpen = useSettingsStore((s) => s.setTerminalOpen)
   const [terminalHeight, _setTerminalHeight] = useState(() => useSettingsStore.getState().terminalHeight)
@@ -249,10 +251,13 @@ export default function App(): JSX.Element {
     try {
       const { success, lspPort } = await window.api.openProject(path)
       if (!success) return
-      const [tree, { globalSummary }] = await Promise.all([
+      const [tree, { globalSummary }, tcConfig] = await Promise.all([
         window.api.readDir(path),
-        window.api.buildContext(path)
+        window.api.buildContext(path),
+        window.api.toolchainGetConfig(path)
       ])
+      const syncTool = tcConfig.selections.sync ?? "rojo"
+      setToolName(syncTool === "argon" ? "Argon" : "Rojo")
       setProject(path, tree, lspPort)
       setGlobalSummary(globalSummary)
       addRecentProject(path)
@@ -261,7 +266,7 @@ export default function App(): JSX.Element {
       console.error("[App] openProject failed:", err)
       return false
     }
-  }, [setProject, setGlobalSummary, addRecentProject])
+  }, [setProject, setGlobalSummary, addRecentProject, setToolName])
 
   // ── Session Restore — reopen last project + files on restart ────────────
   useEffect(() => {
@@ -540,6 +545,15 @@ export default function App(): JSX.Element {
               Terminal
             </button>
           )}
+          <button
+            onClick={() => setToolchainOpen(true)}
+            className="px-2.5 h-7 flex items-center rounded-md text-xs transition-all duration-150"
+            style={{ color: "var(--text-secondary)" }}
+            onMouseEnter={e => { (e.currentTarget).style.background = "var(--bg-elevated)"; (e.currentTarget).style.color = "var(--text-primary)" }}
+            onMouseLeave={e => { (e.currentTarget).style.background = "transparent"; (e.currentTarget).style.color = "var(--text-secondary)" }}
+          >
+            Toolchain
+          </button>
         </div>
       </div>
 
@@ -669,6 +683,7 @@ export default function App(): JSX.Element {
 
       <StatusBar />
       {settingsOpen && <SettingsPanel onClose={() => setSettingsOpen(false)} />}
+      {toolchainOpen && <ToolchainPanel onClose={() => setToolchainOpen(false)} />}
       {quickOpenVisible && <QuickOpen onClose={() => setQuickOpenVisible(false)} />}
       <ToastContainer />
 

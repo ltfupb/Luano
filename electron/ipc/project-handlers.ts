@@ -16,10 +16,10 @@ import {
   telemetryEnabled, setTelemetry, telemetryStats,
   type DataStoreSchema
 } from "../pro/modules"
-import { aiGeneratedFiles, PRO_REQUIRED, collectLuauFiles } from "./shared"
+import { aiGeneratedFiles, PRO_REQUIRED, collectLuauFiles, setCurrentProject, getCurrentProject } from "./shared"
 import { isPro } from "../pro"
 import { activateLicense, deactivateLicense, getLicenseInfo, validateLicense as revalidateLicense } from "../pro/license"
-import { getToolchainConfig, setProjectTool, setGlobalDefault } from "../toolchain/config"
+import { getToolchainConfig, getActiveTool, setProjectTool, setGlobalDefault } from "../toolchain/config"
 import { downloadTool, getDownloadStatus, removeTool } from "../toolchain/downloader"
 import { TOOL_REGISTRY, CATEGORIES, type ToolCategory } from "../toolchain/registry"
 import { packageInstall, packageInit } from "../toolchain/package-runner"
@@ -54,6 +54,7 @@ export function registerProjectHandlers(): void {
   })
 
   ipcMain.handle("project:open", async (_, projectPath: string) => {
+    setCurrentProject(projectPath)
     watchProject(projectPath)
     await lspManager.start(projectPath)
     syncManager.serve(projectPath)
@@ -133,10 +134,14 @@ export function registerProjectHandlers(): void {
 
   // ── Lint/Format ─────────────────────────────────────────────────────────────
   ipcMain.handle("lint:format", async (_, filePath: string) => {
+    const activeFmt = getActiveTool("formatter", getCurrentProject() ?? undefined)
+    if (activeFmt !== "stylua") return { success: false }
     const success = await formatFile(filePath)
     return { success }
   })
   ipcMain.handle("lint:check", async (_, filePath: string) => {
+    const activeLint = getActiveTool("linter", getCurrentProject() ?? undefined)
+    if (activeLint !== "selene") return []
     return lintFile(filePath)
   })
 
@@ -252,6 +257,8 @@ export function registerProjectHandlers(): void {
 
   // ── Batch Operations ─────────────────────────────────────────────────────
   ipcMain.handle("batch:format-all", async (_, projectPath: string) => {
+    const activeFmt = getActiveTool("formatter", projectPath)
+    if (activeFmt !== "stylua") return { formatted: 0, failed: 0, total: 0 }
     const files = collectLuauFiles(projectPath)
     let formatted = 0
     let failed = 0
@@ -265,6 +272,8 @@ export function registerProjectHandlers(): void {
   })
 
   ipcMain.handle("batch:lint-all", async (_, projectPath: string) => {
+    const activeLint = getActiveTool("linter", projectPath)
+    if (activeLint !== "selene") return { results: [], total: 0 }
     const files = collectLuauFiles(projectPath)
     const results: Array<{ file: string; diagnostics: unknown }> = []
     for (const f of files) {
@@ -303,6 +312,16 @@ export function registerProjectHandlers(): void {
     } else {
       setGlobalDefault(category, toolId)
     }
+
+    // Restart sync if the sync tool was changed and a project is active
+    if (category === "sync" && projectPath && toolId) {
+      try {
+        syncManager.serve(projectPath)
+      } catch (err) {
+        console.warn("[Toolchain] Failed to restart sync after tool change:", err)
+      }
+    }
+
     return { success: true }
   })
 

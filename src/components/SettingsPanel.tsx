@@ -2,7 +2,6 @@ import { useState, useEffect } from "react"
 import { useSettingsStore } from "../stores/settingsStore"
 import { useProjectStore } from "../stores/projectStore"
 import { useT } from "../i18n/useT"
-import { ToolchainPanel } from "../toolchain/ToolchainPanel"
 
 interface SettingsPanelProps {
   onClose: () => void
@@ -267,11 +266,6 @@ export function SettingsPanel({ onClose }: SettingsPanelProps): JSX.Element {
   const [licenseKeyInput, setLicenseKeyInput] = useState("")
   const [licenseActivating, setLicenseActivating] = useState(false)
   const [licenseError, setLicenseError] = useState("")
-  const [showToolchain, setShowToolchain] = useState(false)
-  const [toolchainSelections, setToolchainSelections] = useState<Record<string, string | null>>({})
-  const [toolchainInstalled, setToolchainInstalled] = useState<Record<string, boolean>>({})
-  const [toolchainTools, setToolchainTools] = useState<Record<string, { id: string; name: string; category: string; version: string }>>({})
-  const [toolchainCategories, setToolchainCategories] = useState<Array<{ id: string; label: string; allowNone: boolean }>>([])
 
   useEffect(() => {
     requestAnimationFrame(() => setVisible(true))
@@ -293,17 +287,6 @@ export function SettingsPanel({ onClose }: SettingsPanelProps): JSX.Element {
     window.api.telemetryIsEnabled().then((v: boolean) => setTelemetryEnabled(v)).catch(() => {})
     window.api.getProStatus().then((s: { isPro: boolean }) => setProStatus(s)).catch(() => {})
     window.api.licenseInfo().then(setLicenseInfo).catch(() => {})
-
-    // Load toolchain
-    Promise.all([
-      window.api.toolchainRegistry(),
-      window.api.toolchainGetConfig(projectPath ?? undefined)
-    ]).then(([registry, config]) => {
-      setToolchainTools(registry.tools)
-      setToolchainCategories(registry.categories)
-      setToolchainSelections(config.selections)
-      setToolchainInstalled(config.installed)
-    }).catch(() => {})
     // eslint-disable-next-line react-hooks/exhaustive-deps -- init once on mount
   }, [])
 
@@ -354,7 +337,7 @@ export function SettingsPanel({ onClose }: SettingsPanelProps): JSX.Element {
     <div
       className="fixed inset-0 z-50 flex items-center justify-center"
       style={{
-        background: `rgba(5,8,15,${visible ? "0.75" : "0"})`,
+        background: `rgba(5,8,15,${visible ? "0.15" : "0"})`,
         backdropFilter: visible ? "blur(8px)" : "none",
         transition: "all 0.18s ease"
       }}
@@ -532,62 +515,6 @@ export function SettingsPanel({ onClose }: SettingsPanelProps): JSX.Element {
                 {uiScale}%
               </span>
             </div>
-          </div>
-
-          {/* Divider */}
-          <div style={{ height: "1px", background: "var(--border-subtle)" }} />
-
-          {/* Toolchain (Fabric-style dropdowns) */}
-          <div className="flex flex-col gap-2.5">
-            <div className="flex items-center justify-between">
-              <SectionLabel>{t("toolchainTitle")}</SectionLabel>
-              <button
-                onClick={() => setShowToolchain(true)}
-                className="px-2 py-0.5 rounded-md text-xs transition-all duration-100"
-                style={{ color: "var(--accent)", border: "1px solid var(--border)" }}
-                onMouseEnter={e => (e.currentTarget as HTMLElement).style.borderColor = "var(--accent)"}
-                onMouseLeave={e => (e.currentTarget as HTMLElement).style.borderColor = "var(--border)"}
-              >
-                {t("toolchainManage")}
-              </button>
-            </div>
-
-            {toolchainCategories.map(cat => {
-              const catTools = Object.values(toolchainTools).filter(
-                t => t.category === cat.id && toolchainInstalled[t.id]
-              )
-              const currentId = toolchainSelections[cat.id] ?? null
-
-              return (
-                <div key={cat.id} className="flex items-center gap-2.5">
-                  <span style={{ fontSize: "11px", color: "var(--text-secondary)", minWidth: 100 }}>
-                    {cat.label}
-                  </span>
-                  <select
-                    value={currentId ?? ""}
-                    onChange={async (e) => {
-                      const val = e.target.value || null
-                      await window.api.toolchainSetTool(cat.id, val, projectPath ?? undefined)
-                      setToolchainSelections(prev => ({ ...prev, [cat.id]: val }))
-                    }}
-                    className="flex-1 rounded-md px-2 py-1 focus:outline-none"
-                    style={{
-                      background: "var(--bg-base)",
-                      border: "1px solid var(--border)",
-                      color: "var(--text-primary)",
-                      fontSize: "11px"
-                    }}
-                  >
-                    {cat.allowNone && <option value="">None</option>}
-                    {catTools.map(tool => (
-                      <option key={tool.id} value={tool.id}>
-                        {tool.name} v{tool.version}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )
-            })}
           </div>
 
           {/* Divider */}
@@ -873,16 +800,6 @@ export function SettingsPanel({ onClose }: SettingsPanelProps): JSX.Element {
         </div>
       </div>
 
-      {showToolchain && (
-        <ToolchainPanel onClose={() => {
-          setShowToolchain(false)
-          // Reload toolchain config after closing
-          window.api.toolchainGetConfig(projectPath ?? undefined).then(config => {
-            setToolchainSelections(config.selections)
-            setToolchainInstalled(config.installed)
-          }).catch(() => {})
-        }} />
-      )}
     </div>
   )
 }

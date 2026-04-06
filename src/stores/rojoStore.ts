@@ -1,17 +1,21 @@
 import { create } from "zustand"
 
-type RojoStatus = "stopped" | "starting" | "running" | "error"
+type SyncStatus = "stopped" | "starting" | "running" | "error"
 
-interface RojoStore {
-  status: RojoStatus
+interface SyncStore {
+  status: SyncStatus
   port: number | null
-  setStatus: (s: RojoStatus) => void
+  toolName: string
+  setStatus: (s: SyncStatus) => void
   setPort: (p: number | null) => void
+  setToolName: (n: string) => void
 }
 
-export const useRojoStore = create<RojoStore>((set) => ({
+export const useRojoStore = create<SyncStore>((set) => ({
   status: "stopped",
   port: null,
+  toolName: "Rojo",
   setStatus: (s) => set({ status: s }),
-  setPort: (p) => set({ port: p })
+  setPort: (p) => set({ port: p }),
+  setToolName: (n) => set({ toolName: n })
 }))
