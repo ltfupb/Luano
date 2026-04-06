@@ -1,7 +1,10 @@
 import React from "react"
 import ReactDOM from "react-dom/client"
+import { initSentryRenderer } from "./sentry"
 import App from "./App"
 import "./styles/globals.css"
+
+initSentryRenderer()
 
 import { loader } from "@monaco-editor/react"
 import * as monaco from "monaco-editor"

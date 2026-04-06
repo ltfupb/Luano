@@ -1,5 +1,8 @@
 import { app, BrowserWindow, dialog, shell } from "electron"
+import { initSentry } from "./sentry"
 import { log } from "./logger"
+
+initSentry()
 import { join } from "path"
 import { electronApp, optimizer, is } from "@electron-toolkit/utils"
 import { registerIpcHandlers, cleanupPtys } from "./ipc/handlers"

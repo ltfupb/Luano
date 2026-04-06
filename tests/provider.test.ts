@@ -7,7 +7,7 @@ vi.mock("electron", () => ({
   BrowserWindow: { getAllWindows: () => [] }
 }))
 
-import { toCachedSystem, toCachedTools } from "../electron/ai/provider"
+import { toCachedSystem, toCachedTools, MODELS, type Provider } from "../electron/ai/provider"
 
 describe("toCachedSystem", () => {
   it("wraps entire prompt with cache_control when no PROJECT CONTEXT marker", () => {
@@ -50,5 +50,29 @@ describe("toCachedTools", () => {
     const result = toCachedTools(tools)
     expect(tools[0]).not.toHaveProperty("cache_control")
     expect(result[0].cache_control).toEqual({ type: "ephemeral" })
+  })
+})
+
+describe("MODELS", () => {
+  it("has all four providers", () => {
+    const providers: Provider[] = ["anthropic", "openai", "gemini", "local"]
+    for (const p of providers) {
+      expect(MODELS).toHaveProperty(p)
+    }
+  })
+
+  it("anthropic has at least one model", () => {
+    expect(MODELS.anthropic.length).toBeGreaterThanOrEqual(1)
+    expect(MODELS.anthropic[0]).toHaveProperty("id")
+    expect(MODELS.anthropic[0]).toHaveProperty("label")
+  })
+
+  it("gemini has at least one model", () => {
+    expect(MODELS.gemini.length).toBeGreaterThanOrEqual(1)
+    expect(MODELS.gemini[0].id).toMatch(/^gemini-/)
+  })
+
+  it("local has empty model list (dynamic)", () => {
+    expect(MODELS.local).toEqual([])
   })
 })
