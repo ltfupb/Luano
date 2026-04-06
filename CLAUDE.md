@@ -197,15 +197,23 @@ git add -A && git commit -m "sync: match public repo changes"
 git push origin main
 ```
 
-### 5. 릴리즈 빌드 (luano-build에서 태그)
+### 5. 릴리즈 빌드 (양쪽 repo에 태그)
+
+**public repo에도 태그 필요** — build workflow가 public repo를 태그 ref로 checkout하기 때문.
 
 ```bash
+# public repo 태그
+cd C:/Users/USER/desktop/luano
+git tag v0.X.0
+git push origin v0.X.0
+
+# luano-build 태그 (빌드 트리거)
 cd C:/Users/USER/desktop/luano-build
 git tag v0.X.0
 git push origin v0.X.0
 ```
 
-`luano-build`의 `build.yml`이 자동 트리거 → public repo checkout + Pro overlay → Win/Mac/Linux 빌드 → **public repo에 릴리즈 발행**.
+`luano-build`의 `build.yml`이 자동 트리거 → public repo를 `v0.X.0` 태그로 checkout + Pro overlay → Win/Mac/Linux 빌드 → **public repo에 릴리즈 발행**.
 
 ### 6. 빌드 확인
 
