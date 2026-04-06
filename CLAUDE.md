@@ -127,6 +127,7 @@ npm install --package-lock-only
 
 ## 릴리즈 히스토리
 
+- **v0.7.1** — Gemini + Local Model Support + Refactor
 - **v0.7.0** — Customizable Toolchain + Multi-Tool Support
 - **v0.6.4** — Security + Stability + Test Coverage
 - **v0.6.3** — English Comments + Bridge Fix
