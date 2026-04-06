@@ -29,11 +29,13 @@ Luano is a desktop editor built specifically for Roblox game development. It bun
 - 3 themes: Dark, Light, Tokyo Night
 
 **Integrated Toolchain**
-- **Rojo** — sync files to Roblox Studio with one click
-- **Selene** — Roblox-aware linting on save
-- **StyLua** — auto-formatting on save
+- Customizable toolchain with 8 supported tools: Rojo, Argon, Selene, StyLua, luau-lsp, Wally, Pesde, Darklua
+- On-demand binary download from GitHub Releases for non-bundled tools
+- Per-project tool configuration via `.luano/toolchain.json`
+- Argon support as alternative to Rojo for Studio sync
 - Format All / Lint All batch operations
-- All tools bundled. Zero configuration.
+- Toolchain auto-update check for installed tools
+- Core tools (Rojo, Selene, StyLua, luau-lsp) bundled out of the box. Zero configuration.
 
 **AI Assistant**
 - Chat with AI that understands Roblox architecture, Luau patterns, and your project context
@@ -45,7 +47,7 @@ Luano is a desktop editor built specifically for Roblox game development. It bun
 - Session history with per-project persistence and session handoff
 - Prompt caching for token efficiency
 - Roblox API documentation RAG for accurate answers
-- Works with both Claude and OpenAI (including Agent mode)
+- Works with Claude, OpenAI, Gemini, and local models (Ollama, LM Studio, vLLM)
 - Bring Your Own Key
 
 **Studio Integration**
@@ -68,6 +70,7 @@ Luano is a desktop editor built specifically for Roblox game development. It bun
 - Unsaved file confirmation on quit
 - Session restore — projects, open files, chat history, and layout persist across restarts
 - Auto-update via GitHub Releases
+- Sentry crash reporting (opt-in)
 - Multi-language UI: English, 한국어
 
 ---
@@ -106,11 +109,15 @@ npm run package:win   # or package:mac / package:linux
 
 Luano uses Bring Your Own Key (BYOK) for AI features:
 1. Open Settings (gear icon)
-2. Enter your Claude API key (`sk-ant-...`) or OpenAI API key (`sk-proj-...`)
+2. Enter your API key for any supported provider:
+   - **Anthropic** (Claude): `sk-ant-...`
+   - **OpenAI**: `sk-proj-...`
+   - **Google Gemini**: Gemini API key
+   - **Local Models**: Set your Ollama/LM Studio/vLLM endpoint URL
 3. Select your preferred provider and model
 4. Start chatting
 
-AI is optional — the editor, LSP, Rojo, Selene, and StyLua all work without an API key.
+AI is optional — the editor, LSP, toolchain, and Studio sync all work without an API key.
 
 ---
 
@@ -145,6 +152,10 @@ The free plan is free forever.
 
 **OpenAI** — GPT-4o, GPT-4o mini, GPT-4 Turbo, o1, o1 mini
 
+**Google Gemini** — Gemini 2.5 Pro, Gemini 2.5 Flash, Gemini 2.0 Flash
+
+**Local Models** — Any OpenAI-compatible endpoint (Ollama, LM Studio, vLLM)
+
 ---
 
 ## Tech Stack
@@ -156,10 +167,11 @@ The free plan is free forever.
 - **State:** Zustand (persisted)
 - **Styling:** Tailwind CSS
 - **Terminal:** xterm.js + node-pty
-- **AI:** Anthropic Claude SDK, OpenAI SDK
+- **AI:** Anthropic Claude SDK, OpenAI SDK, Google Gemini API
 - **RAG:** better-sqlite3 + FTS5
 - **Update:** electron-updater (GitHub Releases)
-- **Sidecar:** Rojo, Selene, StyLua, luau-lsp
+- **Crash Reporting:** Sentry (opt-in)
+- **Sidecar:** Rojo, Argon, Selene, StyLua, luau-lsp, Wally, Pesde, Darklua
 
 ---
 
