@@ -4,14 +4,14 @@ import { join } from "path"
 import { electronApp, optimizer, is } from "@electron-toolkit/utils"
 import { registerIpcHandlers, cleanupPtys } from "./ipc/handlers"
 import { stopWatcher } from "./file/watcher"
-import { RojoManager } from "./sidecar/rojo"
 import { LspManager } from "./lsp/manager"
+import { SyncManager } from "./toolchain/sync-manager"
 import { startBridgeServer, setBridgeWindow } from "./pro/modules"
 import { setupUpdater } from "./updater"
 
 let mainWindow: BrowserWindow | null = null
 
-export const rojoManager = new RojoManager()
+export const syncManager = new SyncManager()
 export const lspManager = new LspManager()
 
 function createWindow(): void {
@@ -114,7 +114,7 @@ app.on("window-all-closed", async () => {
   log.info("All windows closed, cleaning up")
   cleanupPtys()
   stopWatcher()
-  rojoManager.stop()
+  syncManager.stop()
   await lspManager.stop()
   if (process.platform !== "darwin") app.quit()
 })

@@ -21,7 +21,8 @@ const ALLOWED_CHANNELS = [
   "rojo:status",
   "updater:",
   "sidecar:",
-  "lint:"
+  "lint:",
+  "toolchain:"
 ]
 
 const api = {
@@ -258,6 +259,25 @@ const api = {
     ipcRenderer.invoke("ai:compress-messages", messages),
   aiEstimateTokens: (messages: Array<{ role: string; content: string }>): Promise<number> =>
     ipcRenderer.invoke("ai:estimate-tokens", messages),
+
+  // ── Toolchain ──────────────────────────────────────────────────────────────
+  toolchainRegistry: () => ipcRenderer.invoke("toolchain:registry"),
+  toolchainGetConfig: (projectPath?: string) =>
+    ipcRenderer.invoke("toolchain:get-config", projectPath),
+  toolchainSetTool: (category: string, toolId: string | null, projectPath?: string) =>
+    ipcRenderer.invoke("toolchain:set-tool", category, toolId, projectPath),
+  toolchainDownload: (toolId: string) =>
+    ipcRenderer.invoke("toolchain:download", toolId),
+  toolchainRemove: (toolId: string) =>
+    ipcRenderer.invoke("toolchain:remove", toolId),
+  toolchainDownloadStatus: (toolId: string) =>
+    ipcRenderer.invoke("toolchain:download-status", toolId),
+
+  // ── Package Manager ────────────────────────────────────────────────────────
+  packageInstall: (projectPath: string) =>
+    ipcRenderer.invoke("package:install", projectPath),
+  packageInit: (projectPath: string) =>
+    ipcRenderer.invoke("package:init", projectPath),
 
   // ── Event Listeners ─────────────────────────────────────────────────────────
   on: (channel: string, callback: (...args: unknown[]) => void): (() => void) => {

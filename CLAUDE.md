@@ -140,6 +140,22 @@ npm install --package-lock-only
 
 ---
 
+## 빌드 아키텍처 (Public + Private Repo)
+
+> Pro 소스코드 보호를 위해 빌드를 분리한 구조.
+
+| Repo | 공개 | 용도 |
+|---|---|---|
+| `ltfupb/Luano` | public | 소스 코드, 커뮤니티 기여, CI 체크 (타입체크/린트/테스트) |
+| `ltfupb/luano-build` | private | Pro 파일 overlay + 릴리즈 빌드 → public repo에 릴리즈 발행 |
+
+**빌드 흐름**: `luano-build` CI가 public repo checkout → `pro/` 폴더 overlay → 빌드 → public repo GitHub Releases에 발행.
+
+**Pro 파일 수정 시**: `luano-build` repo의 `pro/` 폴더에서 수정 후 커밋/푸시.
+public repo에서 인터페이스/타입을 변경하면 `luano-build`의 Pro 파일도 함께 업데이트할 것.
+
+---
+
 ## 릴리즈 절차 (정형화)
 
 > 매번 릴리즈할 때 실수 반복하지 않도록 정리한 표준 절차.
@@ -162,28 +178,42 @@ npx eslint "src/**/*.{ts,tsx}" "electron/**/*.ts" --max-warnings 20
 
 **세 개 다 통과해야 push 가능. 하나라도 실패하면 태그 걸지 말 것.**
 
-### 3. Push + 태그
+### 3. Public repo push
 
 ```bash
 git push origin main
+```
+
+CI 체크 (타입체크/린트/테스트) 통과 확인.
+
+### 4. Pro 파일 동기화 (필요시)
+
+public repo에서 Pro 파일이 참조하는 인터페이스/타입을 변경했다면:
+```bash
+cd C:/Users/USER/desktop/luano-build
+# pro/ 폴더의 해당 파일 수정
+git add -A && git commit -m "sync: match public repo changes"
+git push origin main
+```
+
+### 5. 릴리즈 빌드 (luano-build에서 태그)
+
+```bash
+cd C:/Users/USER/desktop/luano-build
 git tag v0.X.0
 git push origin v0.X.0
 ```
 
-**순서 중요**: main push → CI 통과 확인 → 태그 push. 태그를 먼저 걸면 빌드가 CI 실패한 코드로 돌아감.
+`luano-build`의 `build.yml`이 자동 트리거 → public repo checkout + Pro overlay → Win/Mac/Linux 빌드 → **public repo에 릴리즈 발행**.
 
-### 4. 빌드 확인
+### 6. 빌드 확인
 
 ```bash
-gh run list --workflow=build.yml --limit 1 --repo ltfupb/Luano
-gh run watch <RUN_ID> --repo ltfupb/Luano
+gh run list --workflow=build.yml --limit 1 --repo ltfupb/luano-build
+gh run watch <RUN_ID> --repo ltfupb/luano-build
 ```
 
-`build.yml`이 `v*` 태그 push에 자동 트리거. Win/Mac/Linux 3개 플랫폼 빌드 후 `softprops/action-gh-release`가 자동으로 GitHub Release 생성 + 바이너리 첨부.
-
-### 5. 릴리즈 설명 업데이트
-
-`build.yml`의 `generate_release_notes: true`는 커밋 로그 기반 자동 생성. 수동으로 아래 형식에 맞춰 보강:
+### 7. 릴리즈 설명 업데이트
 
 ```markdown
 ## v0.X.0 — 쉼표 없이 짧은 한줄 요약
@@ -203,12 +233,6 @@ gh run watch <RUN_ID> --repo ltfupb/Luano
 **Full Changelog**: https://github.com/ltfupb/Luano/compare/v0.이전...v0.X.0
 ```
 
-**규칙:**
-- **릴리즈 제목은 `vX.Y.Z` 형식만 사용** (예: `v0.6.3`). 부가 설명은 제목에 넣지 말고 본문에 작성. CI 자동 생성 시 v가 빠지므로 `gh release edit --title`로 수동 확인 필수.
-- 릴리즈 노트 본문은 영어로 작성
-- Binaries 테이블 항상 포함
-- .blockmap과 latest.yml은 auto-update용이므로 삭제 금지
-
 ```bash
 gh release edit v0.X.0 --repo ltfupb/Luano --notes "$(cat <<'EOF'
 여기에 위 형식대로 작성
@@ -216,12 +240,19 @@ EOF
 )"
 ```
 
+**규칙:**
+- **릴리즈 제목은 `vX.Y.Z` 형식만 사용** (예: `v0.6.3`). 부가 설명은 제목에 넣지 말고 본문에 작성.
+- 릴리즈 노트 본문은 영어로 작성
+- Binaries 테이블 항상 포함
+- .blockmap과 latest.yml은 auto-update용이므로 삭제 금지
+
 ### 태그 재설정이 필요한 경우 (빌드 실패 등)
 
 ```bash
 gh release delete v0.X.0 --repo ltfupb/Luano --yes  # 기존 릴리즈 삭제
-git tag -d v0.X.0                                     # 로컬 태그 삭제
-git push origin :refs/tags/v0.X.0                     # 원격 태그 삭제
+# luano-build에서:
+git tag -d v0.X.0
+git push origin :refs/tags/v0.X.0
 # 수정 후 다시 태그 + push
 git tag v0.X.0
 git push origin v0.X.0

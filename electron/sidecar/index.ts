@@ -2,6 +2,7 @@ import { spawn, ChildProcess } from "child_process"
 import { join, dirname } from "path"
 import { existsSync } from "fs"
 import { is } from "@electron-toolkit/utils"
+import { app } from "electron"
 
 /** Walk up from __dirname to find project root (where package.json lives).
  *  Works regardless of output structure (flat bundle or preserveModules). */
@@ -22,14 +23,28 @@ export function getResourcePath(...segments: string[]): string {
   return join(process.resourcesPath, ...segments)
 }
 
+/** Directory for on-demand downloaded binaries (always writable) */
+export function getUserBinDir(): string {
+  return join(app.getPath("userData"), "binaries")
+}
+
 export function getBinaryPath(name: string): string {
-  const platform = process.platform === "win32" ? "win" : process.platform === "darwin" ? "mac" : "linux"
   const ext = process.platform === "win32" ? ".exe" : ""
 
+  // 1. Check user-data directory (on-demand downloads)
+  const userBin = join(getUserBinDir(), `${name}${ext}`)
+  if (existsSync(userBin)) return userBin
+
+  // 2. Check bundled resources
+  const platform = process.platform === "win32" ? "win" : process.platform === "darwin" ? "mac" : "linux"
   if (is.dev) {
     return join(resolveProjectRoot(), "resources", "binaries", platform, `${name}${ext}`)
   }
   return join(process.resourcesPath, "binaries", `${name}${ext}`)
+}
+
+export function isBinaryAvailable(name: string): boolean {
+  return existsSync(getBinaryPath(name))
 }
 
 export function validateBinary(name: string): void {
@@ -38,7 +53,7 @@ export function validateBinary(name: string): void {
     throw new Error(
       `Binary not found: ${name}\n` +
       `Path: ${binPath}\n` +
-      `Ensure the binary for platform "${process.platform}" exists in resources/binaries/.`
+      `Ensure the binary is installed via Settings → Toolchain, or bundled in resources/binaries/.`
     )
   }
 }

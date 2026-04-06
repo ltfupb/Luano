@@ -2,7 +2,7 @@ import { ipcMain, dialog, app } from "electron"
 import { join } from "path"
 import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync } from "fs"
 import { is } from "@electron-toolkit/utils"
-import { rojoManager, lspManager } from "../main"
+import { syncManager, lspManager } from "../main"
 import { readDir, readFile, writeFile, createFile, createFolder, renameEntry, deleteEntry, moveEntry, initProject } from "../file/project"
 import { watchProject } from "../file/watcher"
 import { lintFile } from "../sidecar/selene"
@@ -19,6 +19,10 @@ import {
 import { aiGeneratedFiles, PRO_REQUIRED, collectLuauFiles } from "./shared"
 import { isPro } from "../pro"
 import { activateLicense, deactivateLicense, getLicenseInfo, validateLicense as revalidateLicense } from "../pro/license"
+import { getToolchainConfig, setProjectTool, setGlobalDefault } from "../toolchain/config"
+import { downloadTool, getDownloadStatus, removeTool } from "../toolchain/downloader"
+import { TOOL_REGISTRY, CATEGORIES, type ToolCategory } from "../toolchain/registry"
+import { packageInstall, packageInit } from "../toolchain/package-runner"
 
 export function registerProjectHandlers(): void {
   // ── Pro Status ──────────────────────────────────────────────────────────────
@@ -52,7 +56,7 @@ export function registerProjectHandlers(): void {
   ipcMain.handle("project:open", async (_, projectPath: string) => {
     watchProject(projectPath)
     await lspManager.start(projectPath)
-    rojoManager.serve(projectPath)
+    syncManager.serve(projectPath)
     return { success: true, lspPort: lspManager.getPort() }
   })
 
@@ -116,16 +120,16 @@ export function registerProjectHandlers(): void {
     return { success: true }
   })
 
-  // ── Rojo ──────────────────────────────────────────────────────────────────
+  // ── Sync (Rojo / Argon) ──────────────────────────────────────────────────
   ipcMain.handle("rojo:serve", (_, projectPath: string) => {
-    rojoManager.serve(projectPath)
+    syncManager.serve(projectPath)
     return { success: true }
   })
   ipcMain.handle("rojo:stop", () => {
-    rojoManager.stop()
+    syncManager.stop()
     return { success: true }
   })
-  ipcMain.handle("rojo:status", () => rojoManager.getStatus())
+  ipcMain.handle("rojo:status", () => syncManager.getStatus())
 
   // ── Lint/Format ─────────────────────────────────────────────────────────────
   ipcMain.handle("lint:format", async (_, filePath: string) => {
@@ -281,5 +285,45 @@ export function registerProjectHandlers(): void {
       rss: Math.round(mem.rss / 1024 / 1024),
       uptime: Math.round(process.uptime())
     }
+  })
+
+  // ── Toolchain ───────────────────────────────────────────────────────────
+  ipcMain.handle("toolchain:registry", () => ({
+    tools: TOOL_REGISTRY,
+    categories: CATEGORIES
+  }))
+
+  ipcMain.handle("toolchain:get-config", (_, projectPath?: string) =>
+    getToolchainConfig(projectPath)
+  )
+
+  ipcMain.handle("toolchain:set-tool", (_, category: ToolCategory, toolId: string | null, projectPath?: string) => {
+    if (projectPath) {
+      setProjectTool(projectPath, category, toolId)
+    } else {
+      setGlobalDefault(category, toolId)
+    }
+    return { success: true }
+  })
+
+  ipcMain.handle("toolchain:download", async (_, toolId: string) => {
+    return downloadTool(toolId)
+  })
+
+  ipcMain.handle("toolchain:remove", (_, toolId: string) => {
+    return removeTool(toolId)
+  })
+
+  ipcMain.handle("toolchain:download-status", (_, toolId: string) => {
+    return { status: getDownloadStatus(toolId) }
+  })
+
+  // ── Package Manager ────────────────────────────────────────────────────
+  ipcMain.handle("package:install", async (_, projectPath: string) => {
+    return packageInstall(projectPath)
+  })
+
+  ipcMain.handle("package:init", async (_, projectPath: string) => {
+    return packageInit(projectPath)
   })
 }

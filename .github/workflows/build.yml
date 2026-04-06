@@ -1,32 +1,15 @@
-name: Build & Release
+name: CI
 
 on:
   push:
-    tags:
-      - "v*"
-  workflow_dispatch:
-
-permissions:
-  contents: write
+    branches: [main]
+  pull_request:
+    branches: [main]
 
 jobs:
-  build:
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: windows-latest
-            platform: win
-            artifact: "release/*.exe"
-          - os: macos-latest
-            platform: mac
-            artifact: "release/*.dmg"
-          - os: ubuntu-latest
-            platform: linux
-            artifact: "release/*.AppImage"
-
-    runs-on: ${{ matrix.os }}
-    name: Build (${{ matrix.platform }})
+  check:
+    runs-on: ubuntu-latest
+    name: Typecheck & Lint
 
     steps:
       - uses: actions/checkout@v4
@@ -40,60 +23,14 @@ jobs:
       - name: Install dependencies
         run: npm ci --force
 
-      - name: Download sidecar binaries
-        run: npx ts-node scripts/download-binaries.ts ${{ matrix.platform }}
+      - name: Typecheck (renderer)
+        run: npx tsc -p tsconfig.web.json --noEmit
 
-      - name: Build & Package (Windows)
-        if: matrix.platform == 'win'
-        run: npm run package:win
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Typecheck (main process)
+        run: npx tsc -p tsconfig.node.json --noEmit
 
-      - name: Build & Package (Mac)
-        if: matrix.platform == 'mac'
-        run: npm run package:mac
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          CSC_IDENTITY_AUTO_DISCOVERY: false
+      - name: Lint
+        run: npx eslint "src/**/*.{ts,tsx}" "electron/**/*.ts" --max-warnings 20
 
-      - name: Build & Package (Linux)
-        if: matrix.platform == 'linux'
-        run: npm run package:linux
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: luano-${{ matrix.platform }}
-          path: ${{ matrix.artifact }}
-          retention-days: 7
-
-  release:
-    needs: build
-    if: startsWith(github.ref, 'refs/tags/v')
-    runs-on: ubuntu-latest
-    name: Create Release
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: artifacts
-
-      - name: List artifacts
-        run: find artifacts -type f | head -20
-
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@153bb8e04406b158c6c84fc1615b65b24149a1fe # v2
-        with:
-          draft: false
-          generate_release_notes: true
-          files: |
-            artifacts/luano-win/*.exe
-            artifacts/luano-mac/*.dmg
-            artifacts/luano-linux/*.AppImage
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Test
+        run: npx vitest run

@@ -293,6 +293,28 @@ interface Window {
     telemetrySetEnabled: (enabled: boolean) => Promise<{ success: boolean }>
     telemetryStats: () => Promise<{ diffs: number; queries: number; errorFixes: number } | null>
 
+    // Toolchain
+    toolchainRegistry: () => Promise<{
+      tools: Record<string, {
+        id: string; name: string; description: string
+        category: string; bundled: boolean; version: string
+        github: string; binaryName: string; configFiles?: string[]
+      }>
+      categories: Array<{ id: string; label: string; allowNone: boolean }>
+    }>
+    toolchainGetConfig: (projectPath?: string) => Promise<{
+      selections: Record<string, string | null>
+      installed: Record<string, boolean>
+    }>
+    toolchainSetTool: (category: string, toolId: string | null, projectPath?: string) => Promise<{ success: boolean }>
+    toolchainDownload: (toolId: string) => Promise<{ success: boolean; error?: string }>
+    toolchainRemove: (toolId: string) => Promise<{ success: boolean; error?: string }>
+    toolchainDownloadStatus: (toolId: string) => Promise<{ status: string }>
+
+    // Package Manager
+    packageInstall: (projectPath: string) => Promise<{ success: boolean; output: string }>
+    packageInit: (projectPath: string) => Promise<{ success: boolean; output: string }>
+
     // Events
     on: (channel: string, callback: (...args: unknown[]) => void) => () => void
     off: (channel: string) => void

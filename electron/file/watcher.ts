@@ -3,6 +3,7 @@ import { BrowserWindow } from "electron"
 import { lintFile } from "../sidecar/selene"
 import { formatFile } from "../sidecar/stylua"
 import { join } from "path"
+import { getActiveTool } from "../toolchain/config"
 
 let watcher: FSWatcher | null = null
 const debounceTimers: Map<string, NodeJS.Timeout> = new Map()
@@ -46,29 +47,31 @@ export function watchProject(projectPath: string): void {
 }
 
 async function handleFileChange(filePath: string, projectRoot: string): Promise<void> {
-  try {
-    // StyLua format
-    await formatFile(filePath)
-  } catch (err) {
-    console.warn("[Watcher] StyLua format failed:", err)
-    BrowserWindow.getAllWindows().forEach((win) =>
-      win.webContents.send("sidecar:error", { tool: "stylua", message: String(err) })
-    )
+  const formatter = getActiveTool("formatter", projectRoot)
+  if (formatter === "stylua") {
+    try {
+      await formatFile(filePath)
+    } catch (err) {
+      console.warn("[Watcher] StyLua format failed:", err)
+      BrowserWindow.getAllWindows().forEach((win) =>
+        win.webContents.send("sidecar:error", { tool: "stylua", message: String(err) })
+      )
+    }
   }
 
-  try {
-    // Selene lint
-    const diagnostics = await lintFile(filePath, projectRoot)
-
-    // Send results to renderer
-    BrowserWindow.getAllWindows().forEach((win) => {
-      win.webContents.send("lint:diagnostics", { file: filePath, diagnostics })
-    })
-  } catch (err) {
-    console.warn("[Watcher] Selene lint failed:", err)
-    BrowserWindow.getAllWindows().forEach((win) =>
-      win.webContents.send("sidecar:error", { tool: "selene", message: String(err) })
-    )
+  const linter = getActiveTool("linter", projectRoot)
+  if (linter === "selene") {
+    try {
+      const diagnostics = await lintFile(filePath, projectRoot)
+      BrowserWindow.getAllWindows().forEach((win) => {
+        win.webContents.send("lint:diagnostics", { file: filePath, diagnostics })
+      })
+    } catch (err) {
+      console.warn("[Watcher] Selene lint failed:", err)
+      BrowserWindow.getAllWindows().forEach((win) =>
+        win.webContents.send("sidecar:error", { tool: "selene", message: String(err) })
+      )
+    }
   }
 }
 

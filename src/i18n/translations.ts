@@ -117,6 +117,16 @@ export const translations = {
     getLicenseAt: "Get a license key at",
     version: "Luano v0.6.3",
 
+    // Toolchain
+    toolchainTitle: "Toolchain",
+    toolchainManage: "Manage Tools...",
+    toolchainSearch: "Search tools...",
+    toolchainInstall: "Install",
+    toolchainRemove: "Remove",
+    toolchainActivate: "Activate",
+    toolchainActive: "Active",
+    toolchainDownloading: "Installing...",
+
     // EditorPane
     openFile: "Open a file to edit",
 
@@ -287,6 +297,16 @@ export const translations = {
     activate: "활성화",
     getLicenseAt: "라이선스 키 구매:",
     version: "Luano v0.6.3",
+
+    // Toolchain
+    toolchainTitle: "툴체인",
+    toolchainManage: "도구 관리...",
+    toolchainSearch: "도구 검색...",
+    toolchainInstall: "설치",
+    toolchainRemove: "삭제",
+    toolchainActivate: "활성화",
+    toolchainActive: "활성",
+    toolchainDownloading: "설치 중...",
 
     openFile: "파일을 열어 편집하세요",
 
