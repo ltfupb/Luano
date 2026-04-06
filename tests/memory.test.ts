@@ -55,8 +55,9 @@ describe("Memory CRUD", () => {
     expect(getMemoriesByType(TEST_DIR, "feedback")).toHaveLength(0)
   })
 
-  it("updates a memory", () => {
+  it("updates a memory", async () => {
     const mem = addMemory(TEST_DIR, "user", "old content")
+    await new Promise((r) => setTimeout(r, 5))
     const updated = updateMemory(TEST_DIR, mem.id, "new content")
     expect(updated).not.toBeNull()
     expect(updated!.content).toBe("new content")
