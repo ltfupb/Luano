@@ -61,6 +61,8 @@ export function ToolchainPanel({ onClose }: ToolchainPanelProps): JSX.Element {
   const [downloading, setDownloading] = useState<Set<string>>(new Set())
   const [selectedTool, setSelectedTool] = useState<string | null>(null)
   const [visible, setVisible] = useState(false)
+  const [updates, setUpdates] = useState<Record<string, { latestVersion: string; downloadUrl: string }>>({})
+  const [updating, setUpdating] = useState<Set<string>>(new Set())
 
   useEffect(() => {
     requestAnimationFrame(() => setVisible(true))
@@ -77,6 +79,20 @@ export function ToolchainPanel({ onClose }: ToolchainPanelProps): JSX.Element {
     setCategories(registry.categories)
     setInstalled(config.installed)
     setSelections(config.selections)
+
+    // Check for updates on installed tools
+    const installedIds = Object.entries(config.installed)
+      .filter(([, v]) => v)
+      .map(([k]) => k)
+    if (installedIds.length > 0) {
+      window.api.toolchainCheckUpdates(installedIds).then(result => {
+        const map: Record<string, { latestVersion: string; downloadUrl: string }> = {}
+        for (const u of result) {
+          map[u.toolId] = { latestVersion: u.latestVersion, downloadUrl: u.downloadUrl }
+        }
+        setUpdates(map)
+      })
+    }
   }
 
   const handleClose = () => {
@@ -102,6 +118,19 @@ export function ToolchainPanel({ onClose }: ToolchainPanelProps): JSX.Element {
     const result = await window.api.toolchainRemove(toolId)
     if (result.success) {
       setInstalled(prev => ({ ...prev, [toolId]: false }))
+    }
+  }
+
+  const handleUpdate = async (toolId: string) => {
+    const info = updates[toolId]
+    if (!info) return
+    setUpdating(prev => new Set(prev).add(toolId))
+    const result = await window.api.toolchainUpdateTool(toolId, info.downloadUrl)
+    setUpdating(prev => { const n = new Set(prev); n.delete(toolId); return n })
+    if (result.success) {
+      setUpdates(prev => { const n = { ...prev }; delete n[toolId]; return n })
+    } else {
+      setInstallError(result.error ?? "Update failed")
     }
   }
 
@@ -214,6 +243,8 @@ export function ToolchainPanel({ onClose }: ToolchainPanelProps): JSX.Element {
                 const isInstalled = installed[tool.id]
                 const isActive = selections[tool.category] === tool.id
                 const isDownloading = downloading.has(tool.id)
+                const hasUpdate = !!updates[tool.id]
+                const isUpdating = updating.has(tool.id)
 
                 return (
                   <div
@@ -241,6 +272,14 @@ export function ToolchainPanel({ onClose }: ToolchainPanelProps): JSX.Element {
                           {tool.name}
                         </span>
                         <span style={{ fontSize: "10px", color: "var(--text-muted)" }}>v{tool.version}</span>
+                        {hasUpdate && (
+                          <span
+                            className="px-1.5 py-0.5 rounded text-[9px] font-medium"
+                            style={{ background: "rgba(59,130,246,0.15)", color: "#3b82f6" }}
+                          >
+                            {updates[tool.id].latestVersion}
+                          </span>
+                        )}
                         {tool.bundled && (
                           <span
                             className="px-1.5 py-0.5 rounded text-[9px] font-medium"
@@ -257,13 +296,21 @@ export function ToolchainPanel({ onClose }: ToolchainPanelProps): JSX.Element {
 
                     {/* Action Button */}
                     <div className="flex-shrink-0 self-center">
-                      {isDownloading ? (
+                      {isDownloading || isUpdating ? (
                         <span
                           className="px-2.5 py-1 rounded-md text-[10px]"
                           style={{ color: "var(--text-muted)" }}
                         >
                           {t("toolchainDownloading")}
                         </span>
+                      ) : hasUpdate && isInstalled ? (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleUpdate(tool.id) }}
+                          className="px-2.5 py-1 rounded-md text-[10px] font-medium transition-all duration-100"
+                          style={{ background: "#3b82f6", color: "white" }}
+                        >
+                          Update
+                        </button>
                       ) : !isInstalled ? (
                         <button
                           onClick={(e) => { e.stopPropagation(); handleInstall(tool.id) }}
@@ -356,6 +403,16 @@ export function ToolchainPanel({ onClose }: ToolchainPanelProps): JSX.Element {
                   </a>
 
                   <div className="flex flex-col gap-1.5 mt-1">
+                    {updates[detail.id] && installed[detail.id] && (
+                      <button
+                        onClick={() => handleUpdate(detail.id)}
+                        disabled={updating.has(detail.id)}
+                        className="w-full py-1.5 rounded-md text-xs font-medium transition-all duration-100 disabled:opacity-50"
+                        style={{ background: "#3b82f6", color: "white" }}
+                      >
+                        {updating.has(detail.id) ? t("toolchainDownloading") : `Update to ${updates[detail.id].latestVersion}`}
+                      </button>
+                    )}
                     {!installed[detail.id] && (
                       <button
                         onClick={() => handleInstall(detail.id)}

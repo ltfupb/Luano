@@ -281,6 +281,10 @@ const api = {
     ipcRenderer.invoke("toolchain:remove", toolId),
   toolchainDownloadStatus: (toolId: string) =>
     ipcRenderer.invoke("toolchain:download-status", toolId),
+  toolchainCheckUpdates: (installedIds: string[]) =>
+    ipcRenderer.invoke("toolchain:check-updates", installedIds),
+  toolchainUpdateTool: (toolId: string, downloadUrl: string) =>
+    ipcRenderer.invoke("toolchain:update-tool", toolId, downloadUrl),
 
   // ── Package Manager ────────────────────────────────────────────────────────
   packageInstall: (projectPath: string) =>

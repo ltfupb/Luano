@@ -20,7 +20,7 @@ import { aiGeneratedFiles, PRO_REQUIRED, collectLuauFiles, setCurrentProject, ge
 import { isPro } from "../pro"
 import { activateLicense, deactivateLicense, getLicenseInfo, validateLicense as revalidateLicense } from "../pro/license"
 import { getToolchainConfig, getActiveTool, setProjectTool, setGlobalDefault } from "../toolchain/config"
-import { downloadTool, getDownloadStatus, removeTool } from "../toolchain/downloader"
+import { downloadTool, getDownloadStatus, removeTool, checkToolUpdates, updateTool } from "../toolchain/downloader"
 import { TOOL_REGISTRY, CATEGORIES, type ToolCategory } from "../toolchain/registry"
 import { packageInstall, packageInit } from "../toolchain/package-runner"
 
@@ -336,6 +336,14 @@ export function registerProjectHandlers(): void {
   ipcMain.handle("toolchain:download-status", (_, toolId: string) => {
     return { status: getDownloadStatus(toolId) }
   })
+
+  ipcMain.handle("toolchain:check-updates", (_, installedIds: string[]) =>
+    checkToolUpdates(installedIds)
+  )
+
+  ipcMain.handle("toolchain:update-tool", (_, toolId: string, downloadUrl: string) =>
+    updateTool(toolId, downloadUrl)
+  )
 
   // ── Package Manager ────────────────────────────────────────────────────
   ipcMain.handle("package:install", async (_, projectPath: string) => {

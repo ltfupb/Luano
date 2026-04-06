@@ -17,6 +17,12 @@ export interface ToolDefinition {
   github: string
   binaryName: string
   configFiles?: string[]
+  /** Keywords to match GitHub release assets per platform */
+  assetKeywords: {
+    win: string[]
+    mac: string[]
+    linux: string[]
+  }
   releaseUrls: {
     win: string
     mac: string
@@ -39,6 +45,11 @@ export const TOOL_REGISTRY: Record<string, ToolDefinition> = {
     github: "rojo-rbx/rojo",
     binaryName: "rojo",
     configFiles: ["default.project.json"],
+    assetKeywords: {
+      win:   ["windows", "x86_64"],
+      mac:   ["macos"],
+      linux: ["linux", "x86_64"]
+    },
     releaseUrls: {
       win:   ghRelease("rojo-rbx/rojo", "v7.6.1", "rojo-7.6.1-windows-x86_64.zip"),
       mac:   ghRelease("rojo-rbx/rojo", "v7.6.1", "rojo-7.6.1-macos-aarch64.zip"),
@@ -55,6 +66,11 @@ export const TOOL_REGISTRY: Record<string, ToolDefinition> = {
     github: "argon-rbx/argon",
     binaryName: "argon",
     configFiles: ["default.project.json"],
+    assetKeywords: {
+      win:   ["windows", "x86_64"],
+      mac:   ["macos"],
+      linux: ["linux", "x86_64"]
+    },
     releaseUrls: {
       win:   ghRelease("argon-rbx/argon", "2.0.22", "argon-2.0.22-windows-x86_64.zip"),
       mac:   ghRelease("argon-rbx/argon", "2.0.22", "argon-2.0.22-macos-aarch64.zip"),
@@ -71,6 +87,11 @@ export const TOOL_REGISTRY: Record<string, ToolDefinition> = {
     github: "Kampfkarren/selene",
     binaryName: "selene",
     configFiles: ["selene.toml"],
+    assetKeywords: {
+      win:   ["windows"],
+      mac:   ["macos"],
+      linux: ["linux"]
+    },
     releaseUrls: {
       win:   ghRelease("Kampfkarren/selene", "0.30.1", "selene-0.30.1-windows.zip"),
       mac:   ghRelease("Kampfkarren/selene", "0.30.1", "selene-0.30.1-macos.zip"),
@@ -87,6 +108,11 @@ export const TOOL_REGISTRY: Record<string, ToolDefinition> = {
     github: "JohnnyMorganz/StyLua",
     binaryName: "stylua",
     configFiles: [".stylua.toml", "stylua.toml"],
+    assetKeywords: {
+      win:   ["windows", "x86_64"],
+      mac:   ["macos"],
+      linux: ["linux", "x86_64"]
+    },
     releaseUrls: {
       win:   ghRelease("JohnnyMorganz/StyLua", "v2.4.0", "stylua-windows-x86_64.zip"),
       mac:   ghRelease("JohnnyMorganz/StyLua", "v2.4.0", "stylua-macos-aarch64.zip"),
@@ -102,6 +128,11 @@ export const TOOL_REGISTRY: Record<string, ToolDefinition> = {
     version: "1.64.0",
     github: "JohnnyMorganz/luau-lsp",
     binaryName: "luau-lsp",
+    assetKeywords: {
+      win:   ["win64"],
+      mac:   ["macos"],
+      linux: ["linux", "x86_64"]
+    },
     releaseUrls: {
       win:   ghRelease("JohnnyMorganz/luau-lsp", "1.64.0", "luau-lsp-win64.zip"),
       mac:   ghRelease("JohnnyMorganz/luau-lsp", "1.64.0", "luau-lsp-macos.zip"),
@@ -118,6 +149,11 @@ export const TOOL_REGISTRY: Record<string, ToolDefinition> = {
     github: "UpliftGames/wally",
     binaryName: "wally",
     configFiles: ["wally.toml"],
+    assetKeywords: {
+      win:   ["windows", "x86_64"],
+      mac:   ["macos"],
+      linux: ["linux", "x86_64"]
+    },
     releaseUrls: {
       win:   ghRelease("UpliftGames/wally", "v0.3.2", "wally-v0.3.2-windows-x86_64.zip"),
       mac:   ghRelease("UpliftGames/wally", "v0.3.2", "wally-v0.3.2-macos-x86_64.zip"),
@@ -134,6 +170,11 @@ export const TOOL_REGISTRY: Record<string, ToolDefinition> = {
     github: "pesde-pkg/pesde",
     binaryName: "pesde",
     configFiles: ["pesde.toml"],
+    assetKeywords: {
+      win:   ["windows", "x86_64"],
+      mac:   ["macos"],
+      linux: ["linux", "x86_64"]
+    },
     releaseUrls: {
       win:   ghRelease("pesde-pkg/pesde", "v0.5.3", "pesde-0.5.3-windows-x86_64.zip"),
       mac:   ghRelease("pesde-pkg/pesde", "v0.5.3", "pesde-0.5.3-macos-aarch64.zip"),
@@ -150,6 +191,11 @@ export const TOOL_REGISTRY: Record<string, ToolDefinition> = {
     github: "seaofvoices/darklua",
     binaryName: "darklua",
     configFiles: [".darklua.json", ".darklua.json5"],
+    assetKeywords: {
+      win:   ["windows", "x86_64"],
+      mac:   ["macos"],
+      linux: ["linux", "x86_64"]
+    },
     releaseUrls: {
       win:   ghRelease("seaofvoices/darklua", "v0.15.1", "darklua-windows-x86_64.zip"),
       mac:   ghRelease("seaofvoices/darklua", "v0.15.1", "darklua-macos-aarch64.zip"),

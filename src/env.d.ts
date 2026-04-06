@@ -321,6 +321,13 @@ interface Window {
     toolchainDownload: (toolId: string) => Promise<{ success: boolean; error?: string }>
     toolchainRemove: (toolId: string) => Promise<{ success: boolean; error?: string }>
     toolchainDownloadStatus: (toolId: string) => Promise<{ status: string }>
+    toolchainCheckUpdates: (installedIds: string[]) => Promise<Array<{
+      toolId: string
+      currentVersion: string
+      latestVersion: string
+      downloadUrl: string
+    }>>
+    toolchainUpdateTool: (toolId: string, downloadUrl: string) => Promise<{ success: boolean; error?: string }>
 
     // Package Manager
     packageInstall: (projectPath: string) => Promise<{ success: boolean; output: string }>
