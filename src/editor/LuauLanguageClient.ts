@@ -83,16 +83,23 @@ class WsMessageWriter extends AbstractMessageWriter {
 
 let _client: MonacoLanguageClient | null = null
 let _ws: WebSocket | null = null
+let _startPromise: Promise<void> | null = null
 
 export async function startLuauLanguageClient(port: number): Promise<void> {
-  // Tear down existing client first
-  if (_client) {
-    try { if (_client.isRunning()) await _client.stop() } catch { /* ignore */ }
-    _client = null
+  // Await any in-progress start so we don't race teardown against init
+  if (_startPromise) {
+    try { await _startPromise } catch { /* ignore */ }
   }
+
+  // Close WebSocket *before* stopping client to avoid cascading "connection
+  // got disposed" rejections from pending JSON-RPC responses (ELECTRON-7)
   if (_ws) {
     _ws.close()
     _ws = null
+  }
+  if (_client) {
+    try { if (_client.isRunning()) await _client.stop() } catch { /* ignore */ }
+    _client = null
   }
 
   const ws = new WebSocket(`ws://localhost:${port}`)
@@ -128,23 +135,37 @@ export async function startLuauLanguageClient(port: number): Promise<void> {
     }
   })
 
+  // Prevent internal stop()/shutdown() from producing unhandled rejections when
+  // the library calls stop() during "starting" state (ELECTRON-8)
+  const origStop = client.stop.bind(client)
+  client.stop = async (timeout?: number) => {
+    try { return await origStop(timeout) } catch { /* suppress lifecycle error */ }
+  }
+
   _client = client
+  _startPromise = client.start()
   try {
-    await client.start()
+    await _startPromise
   } catch {
     // Client may fail to start (e.g. connection lost during init) — clean up silently
     if (_client === client) _client = null
+  } finally {
+    _startPromise = null
   }
 }
 
 export async function stopLuauLanguageClient(): Promise<void> {
-  if (_client) {
-    try { if (_client.isRunning()) await _client.stop() } catch { /* ignore */ }
-    _client = null
+  if (_startPromise) {
+    try { await _startPromise } catch { /* ignore */ }
   }
+  // Close WebSocket first to prevent cascading errors
   if (_ws) {
     _ws.close()
     _ws = null
+  }
+  if (_client) {
+    try { if (_client.isRunning()) await _client.stop() } catch { /* ignore */ }
+    _client = null
   }
 }
 
