@@ -88,7 +88,11 @@ import { startBridgeServer, getLastCheckpoint } from "./pro/modules"
 
 예: `RojoStatus` 타입에서 `"connected"`를 제거했으면, 코드 전체에서 `status === "connected"` 비교를 모두 제거해야 한다. TypeScript가 `This comparison appears to be unintentional` 에러를 낸다.
 
-### 4. require() 대신 ES import 사용
+### 4. version bump 시 translations.ts도 함께 업데이트
+
+`package.json`의 `version`을 올릴 때 `src/i18n/translations.ts`의 `version` 문자열(en, ko 둘 다)도 반드시 함께 수정해야 한다. 안 하면 Settings에 이전 버전이 표시됨. (참고: #5)
+
+### 5. require() 대신 ES import 사용
 
 ESLint `@typescript-eslint/no-require-imports` 규칙이 활성화되어 있다. 일반 코드에서 `require()` 사용 금지. 유일한 예외: `pro/modules.ts` (eslint-disable 주석으로 명시적 허용).
 
