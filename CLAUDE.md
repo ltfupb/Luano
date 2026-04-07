@@ -128,6 +128,7 @@ npm install --package-lock-only
 
 ## 릴리즈 히스토리
 
+- **v0.7.5** — LSP Fix, Toolchain Overhaul and UX Improvements
 - **v0.7.4** — Security and Onboarding Fixes
 - **v0.7.3** — Crash Reporting and Toolchain Auto-Update
 - **v0.7.1** — Gemini and Local Model Support
