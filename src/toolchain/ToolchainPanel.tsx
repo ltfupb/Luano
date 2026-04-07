@@ -149,10 +149,14 @@ export function ToolchainPanel({ onClose }: ToolchainPanelProps): JSX.Element {
   }
 
   const handleActivate = async (toolId: string, category: string) => {
-    await window.api.toolchainSetTool(category, toolId, projectPath ?? undefined)
-    setSelections(prev => ({ ...prev, [category]: toolId }))
-    if (category === "sync") {
-      useRojoStore.getState().setToolName(toolId === "argon" ? "Argon" : "Rojo")
+    try {
+      await window.api.toolchainSetTool(category, toolId, projectPath ?? undefined)
+      setSelections(prev => ({ ...prev, [category]: toolId }))
+      if (category === "sync") {
+        useRojoStore.getState().setToolName(toolId === "argon" ? "Argon" : "Rojo")
+      }
+    } catch (err) {
+      setInstallError(err instanceof Error ? err.message : "Failed to activate tool")
     }
   }
 

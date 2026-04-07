@@ -318,7 +318,7 @@ export function registerProjectHandlers(): void {
       try {
         syncManager.serve(projectPath)
       } catch (err) {
-        console.warn("[Toolchain] Failed to restart sync after tool change:", err)
+        return { success: false, error: (err as Error).message }
       }
     }
 

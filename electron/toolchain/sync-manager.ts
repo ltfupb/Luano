@@ -7,6 +7,7 @@
 import { RojoManager, type RojoStatus } from "../sidecar/rojo"
 import { ArgonManager, type SyncStatus } from "./argon-manager"
 import { getActiveTool } from "./config"
+import { isBinaryAvailable } from "../sidecar"
 
 export class SyncManager {
   private rojoManager = new RojoManager()
@@ -16,6 +17,12 @@ export class SyncManager {
   serve(projectPath: string): void {
     this.stopAll()
     const tool = getActiveTool("sync", projectPath) ?? "rojo"
+    const binaryName = tool === "argon" ? "argon" : "rojo"
+
+    if (!isBinaryAvailable(binaryName)) {
+      throw new Error(`${binaryName} binary not installed. Please install it from the Toolchain panel.`)
+    }
+
     this.activeManager = tool as "rojo" | "argon"
 
     if (tool === "argon") {

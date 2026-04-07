@@ -158,7 +158,7 @@ export default function App(): JSX.Element {
     document.documentElement.setAttribute("data-theme", theme)
   }, [theme])
   useEffect(() => {
-    document.documentElement.style.zoom = `${uiScale}%`
+    window.api.setZoomFactor(uiScale / 100)
   }, [uiScale])
   const [activePanel, _setActivePanel] = useState<SidePanel>("explorer")
   const setActivePanel = useCallback((panel: SidePanel) => {

@@ -326,7 +326,8 @@ export async function chat(messages: ChatMessage[], systemPrompt: string): Promi
   if (provider === "openai" || provider === "local") {
     const { client, timeout } = getOpenAICompat()
     const response = await withRetry(() => withTimeout(client.chat.completions.create({
-      model, max_tokens: 8192,
+      model,
+      ...(provider === "local" ? {} : { max_tokens: 8192 }),
       messages: [{ role: "system", content: systemPrompt }, ...messages]
     }), timeout))
     return response.choices[0]?.message?.content ?? ""
@@ -378,7 +379,9 @@ export async function chatStream(
     if (provider === "openai" || provider === "local") {
       const { client, timeout } = getOpenAICompat()
       const stream = await withTimeout(client.chat.completions.create({
-        model, max_tokens: 8192, stream: true,
+        model,
+        ...(provider === "local" ? {} : { max_tokens: 8192 }),
+        stream: true,
         messages: [{ role: "system", content: systemPrompt }, ...messages]
       }), timeout)
       for await (const chunk of stream) {

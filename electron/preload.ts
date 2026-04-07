@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from "electron"
+import { contextBridge, ipcRenderer, webFrame } from "electron"
 import { electronAPI } from "@electron-toolkit/preload"
 
 export interface ToolEvent {
@@ -305,7 +305,10 @@ const api = {
   off: (channel: string) => {
     if (!ALLOWED_CHANNELS.some((prefix) => channel.startsWith(prefix))) return
     ipcRenderer.removeAllListeners(channel)
-  }
+  },
+
+  // ── UI Scale ──────────────────────────────────────────────────────────────
+  setZoomFactor: (factor: number) => webFrame.setZoomFactor(factor)
 }
 
 if (process.contextIsolated) {

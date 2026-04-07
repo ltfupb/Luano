@@ -336,5 +336,8 @@ interface Window {
     // Events
     on: (channel: string, callback: (...args: unknown[]) => void) => () => void
     off: (channel: string) => void
+
+    // UI Scale
+    setZoomFactor: (factor: number) => void
   }
 }
