@@ -110,7 +110,7 @@ export async function startLuauLanguageClient(port: number): Promise<void> {
   const reader = new WsMessageReader(ws)
   const writer = new WsMessageWriter(ws)
 
-  _client = new MonacoLanguageClient({
+  const client = new MonacoLanguageClient({
     name: "Luau Language Client",
     clientOptions: {
       // Covers both "lua" (what @monaco-editor/react uses by default) and custom "luau"
@@ -128,7 +128,13 @@ export async function startLuauLanguageClient(port: number): Promise<void> {
     }
   })
 
-  await _client.start()
+  _client = client
+  try {
+    await client.start()
+  } catch {
+    // Client may fail to start (e.g. connection lost during init) — clean up silently
+    if (_client === client) _client = null
+  }
 }
 
 export async function stopLuauLanguageClient(): Promise<void> {
