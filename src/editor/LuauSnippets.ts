@@ -516,9 +516,70 @@ $0`
   },
 ]
 
+// ── Luau keywords & globals ───────────────────────────────────────────────────
+
+const KEYWORDS = [
+  "and", "break", "continue", "do", "else", "elseif", "end", "false", "for",
+  "function", "if", "in", "local", "nil", "not", "or", "repeat", "return",
+  "then", "true", "until", "while", "type", "export"
+]
+
+const GLOBALS = [
+  // Roblox top-level objects
+  "game", "workspace", "script", "Enum",
+  // Global functions (Lua 5.1 + Luau + Roblox extensions)
+  "assert", "collectgarbage", "error", "gcinfo", "getfenv", "getmetatable",
+  "ipairs", "loadstring", "newproxy", "next", "pairs", "pcall", "print",
+  "rawequal", "rawget", "rawlen", "rawset", "require", "select", "setfenv",
+  "setmetatable", "tonumber", "tostring", "type", "typeof", "unpack", "xpcall",
+  "warn", "delay", "elapsedTime", "spawn", "tick", "time", "version", "wait",
+  // Standard libraries
+  "bit32", "buffer", "coroutine", "debug", "math", "os", "string", "table",
+  "task", "utf8", "vector",
+  // Roblox data types
+  "Axes", "BrickColor", "CFrame", "Color3", "ColorSequence",
+  "ColorSequenceKeypoint", "DateTime", "Faces", "Font", "Instance",
+  "NumberRange", "NumberSequence", "NumberSequenceKeypoint", "OverlapParams",
+  "PathWaypoint", "PhysicalProperties", "Random", "Ray", "RaycastParams",
+  "Rect", "Region3", "SharedTable", "TweenInfo", "UDim", "UDim2", "Vector2",
+  "Vector2int16", "Vector3", "Vector3int16"
+]
+
 // ── Register with Monaco ──────────────────────────────────────────────────────
 
 export function registerLuauSnippets(monaco: typeof Monaco): void {
+  // Keyword & global completions
+  monaco.languages.registerCompletionItemProvider("lua", {
+    provideCompletionItems(model, position) {
+      const word = model.getWordUntilPosition(position)
+      const range: Monaco.IRange = {
+        startLineNumber: position.lineNumber,
+        endLineNumber: position.lineNumber,
+        startColumn: word.startColumn,
+        endColumn: word.endColumn
+      }
+
+      const keywords: Monaco.languages.CompletionItem[] = KEYWORDS.map((k) => ({
+        label: k,
+        kind: monaco.languages.CompletionItemKind.Keyword,
+        insertText: k,
+        range,
+        sortText: `1_${k}`
+      }))
+
+      const globals: Monaco.languages.CompletionItem[] = GLOBALS.map((g) => ({
+        label: g,
+        kind: monaco.languages.CompletionItemKind.Variable,
+        insertText: g,
+        range,
+        sortText: `2_${g}`
+      }))
+
+      return { suggestions: [...keywords, ...globals] }
+    }
+  })
+
+  // Snippet completions
   monaco.languages.registerCompletionItemProvider("lua", {
     triggerCharacters: [],
     provideCompletionItems(model, position) {
@@ -538,7 +599,7 @@ export function registerLuauSnippets(monaco: typeof Monaco): void {
         insertText: s.body,
         insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
         range,
-        sortText: `0_${s.prefix}`
+        sortText: `3_${s.prefix}`
       }))
 
       return { suggestions }

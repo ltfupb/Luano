@@ -67,6 +67,7 @@ class WsMessageWriter extends AbstractMessageWriter {
   }
 
   write(msg: Message): Promise<void> {
+    if (this.ws.readyState !== WebSocket.OPEN) return Promise.resolve()
     const body = JSON.stringify(msg)
     const len = new TextEncoder().encode(body).length
     const frame = `Content-Length: ${len}\r\n\r\n${body}`
