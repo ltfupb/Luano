@@ -53,7 +53,8 @@ export class ArgonManager {
         this.notifyStatus()
         if (code !== 0 && code !== null && this.projectPath && this.restartCount < 3) {
           this.restartCount++
-          setTimeout(() => this.serve(this.projectPath!), 2000)
+          const path = this.projectPath
+          setTimeout(() => { if (this.projectPath === path) this.serve(path) }, 2000)
         }
       })
 

@@ -87,7 +87,7 @@ let _ws: WebSocket | null = null
 export async function startLuauLanguageClient(port: number): Promise<void> {
   // Tear down existing client first
   if (_client) {
-    try { await _client.stop() } catch { /* ignore */ }
+    try { if (_client.isRunning()) await _client.stop() } catch { /* ignore */ }
     _client = null
   }
   if (_ws) {
@@ -133,7 +133,7 @@ export async function startLuauLanguageClient(port: number): Promise<void> {
 
 export async function stopLuauLanguageClient(): Promise<void> {
   if (_client) {
-    try { await _client.stop() } catch { /* ignore */ }
+    try { if (_client.isRunning()) await _client.stop() } catch { /* ignore */ }
     _client = null
   }
   if (_ws) {
