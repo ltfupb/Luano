@@ -38,13 +38,29 @@ export function StatusBar(): JSX.Element {
   })
 
   const [memMB, setMemMB] = useState(0)
-  const [tokens, setTokens] = useState({ input: 0, output: 0, cacheRead: 0 })
+  const [toolUpdates, setToolUpdates] = useState(0)
 
   // Fetch initial status
   useEffect(() => {
     if (typeof window.api.updaterStatus === "function") {
       window.api.updaterStatus().then(setUpdate).catch(() => {})
     }
+  }, [])
+
+  // Check toolchain updates after startup
+  useEffect(() => {
+    const timer = setTimeout(async () => {
+      try {
+        const config = await window.api.toolchainGetConfig()
+        const installedIds = Object.entries(config.installed)
+          .filter(([, v]) => v)
+          .map(([k]) => k)
+        if (installedIds.length === 0) return
+        const updates = await window.api.toolchainCheckUpdates(installedIds)
+        setToolUpdates(updates.length)
+      } catch { /* ignore */ }
+    }, 5000)
+    return () => clearTimeout(timer)
   }, [])
 
   // Poll memory usage every 10s
@@ -57,16 +73,6 @@ export function StatusBar(): JSX.Element {
     poll()
     const id = setInterval(poll, 10_000)
     return () => clearInterval(id)
-  }, [])
-
-  // Token usage tracking
-  useEffect(() => {
-    if (typeof window.api.aiGetTokenUsage === "function") {
-      window.api.aiGetTokenUsage().then(setTokens).catch(() => {})
-    }
-    if (typeof window.api.onTokenUsage === "function") {
-      return window.api.onTokenUsage(setTokens)
-    }
   }, [])
 
   const handleUpdateAction = async () => {
@@ -104,6 +110,24 @@ export function StatusBar(): JSX.Element {
       {/* LSP port */}
       {lspPort && (
         <span style={{ color: "var(--text-secondary)" }}>LSP :{lspPort}</span>
+      )}
+
+      {/* Toolchain updates */}
+      {toolUpdates > 0 && (
+        <>
+          <span style={{ color: "var(--border)", userSelect: "none" }}>·</span>
+          <button
+            onClick={() => window.dispatchEvent(new CustomEvent("open-toolchain"))}
+            className="flex items-center gap-1 transition-colors duration-100"
+            style={{ color: "#60a5fa", background: "none", border: "none", fontSize: "11px", cursor: "pointer" }}
+          >
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="3" />
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+            </svg>
+            {toolUpdates} update{toolUpdates > 1 ? "s" : ""}
+          </button>
+        </>
       )}
 
       {/* Update notification — right side */}
@@ -145,29 +169,6 @@ export function StatusBar(): JSX.Element {
               </>
             )}
           </button>
-        </>
-      )}
-
-      {/* Token usage + cache hit rate */}
-      {(tokens.input > 0 || tokens.output > 0) && (
-        <>
-          <span style={{ color: "var(--border)", userSelect: "none" }}>·</span>
-          <span
-            style={{ color: "var(--text-muted)", cursor: "pointer" }}
-            title={`Input: ${tokens.input.toLocaleString()} | Output: ${tokens.output.toLocaleString()}${tokens.cacheRead ? ` | Cache read: ${tokens.cacheRead.toLocaleString()}` : ""}\n${tokens.cacheRead && tokens.input ? `Cache hit: ${Math.round((tokens.cacheRead / (tokens.input + tokens.cacheRead)) * 100)}%` : "No cache data"}\nClick to reset`}
-            onClick={() => {
-              if (typeof window.api.aiResetTokenUsage === "function") {
-                window.api.aiResetTokenUsage().then(() => setTokens({ input: 0, output: 0, cacheRead: 0 }))
-              }
-            }}
-          >
-            {((tokens.input + tokens.output) / 1000).toFixed(1)}k tok
-            {tokens.cacheRead > 0 && tokens.input > 0 && (
-              <span style={{ color: "#10b981", marginLeft: 4 }}>
-                {Math.round((tokens.cacheRead / (tokens.input + tokens.cacheRead)) * 100)}%
-              </span>
-            )}
-          </span>
         </>
       )}
 

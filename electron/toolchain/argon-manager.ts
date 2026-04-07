@@ -3,6 +3,9 @@
  *
  * Same interface as RojoManager but drives the Argon CLI.
  * Argon serves on a configurable address and generates sourcemaps.
+ *
+ * NOTE: Argon uses Rust's log framework, so all output (including
+ * "Serving on: ..." messages) goes to stderr, not stdout.
  */
 
 import { ChildProcess } from "child_process"
@@ -19,6 +22,7 @@ export class ArgonManager {
   private projectPath: string | null = null
   private port: number | null = null
   private restartCount = 0
+  private lastError: string | null = null
 
   serve(projectPath: string): void {
     this.stop()
@@ -31,21 +35,14 @@ export class ArgonManager {
     }
 
     this.status = "starting"
+    this.lastError = null
     this.notifyStatus()
 
     try {
       const sidecar = spawnSidecar("argon", ["serve", "--host", "127.0.0.1"], {
         cwd: projectPath,
-        onData: (data) => {
-          this.restartCount = 0
-          const portMatch = data.match(/(?:port|localhost:|:)(\d{4,5})/i)
-          if (portMatch) this.port = parseInt(portMatch[1], 10)
-          if (this.status !== "running") {
-            this.status = "running"
-          }
-          this.notifyStatus()
-        },
-        onError: () => {}
+        onData: (data) => this.handleOutput(data),
+        onError: (data) => this.handleOutput(data)
       })
 
       this.proc = sidecar.process
@@ -60,14 +57,25 @@ export class ArgonManager {
         }
       })
 
-      this.proc.on("error", () => {
+      this.proc.on("error", (err) => {
         this.status = "error"
+        this.lastError = err.message
         this.notifyStatus()
       })
     } catch {
       this.status = "error"
       this.notifyStatus()
     }
+  }
+
+  private handleOutput(data: string): void {
+    this.restartCount = 0
+    const portMatch = data.match(/(?:port|localhost:|Serving on:\s*\S+:|:)(\d{4,5})/i)
+    if (portMatch) this.port = parseInt(portMatch[1], 10)
+    if (this.status !== "running") {
+      this.status = "running"
+    }
+    this.notifyStatus()
   }
 
   stop(): void {
@@ -87,6 +95,10 @@ export class ArgonManager {
 
   getPort(): number | null {
     return this.port
+  }
+
+  getLastError(): string | null {
+    return this.lastError
   }
 
   private notifyStatus(): void {

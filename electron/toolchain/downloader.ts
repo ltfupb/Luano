@@ -12,6 +12,7 @@ import { execSync } from "child_process"
 import { tmpdir } from "os"
 import { getUserBinDir, isBinaryAvailable } from "../sidecar"
 import { TOOL_REGISTRY } from "./registry"
+import { store } from "../store"
 import { log } from "../logger"
 
 export type DownloadStatus = "not-installed" | "downloading" | "installed" | "error"
@@ -107,6 +108,7 @@ export async function downloadTool(toolId: string): Promise<{ success: boolean; 
     }
 
     log.info(`Installed ${tool.name} to ${destPath}`)
+    setInstalledVersion(toolId, tool.version)
     return { success: true }
   } catch (err) {
     const msg = (err as Error).message
@@ -141,7 +143,18 @@ interface GitHubRelease {
 }
 
 function stripVersionPrefix(tag: string): string {
-  return tag.replace(/^v/, "")
+  return tag.replace(/^v/, "").replace(/\+.*$/, "")
+}
+
+function getInstalledVersion(toolId: string): string | null {
+  const versions = store.get<Record<string, string>>("toolchain.installedVersions") ?? {}
+  return versions[toolId] ?? null
+}
+
+function setInstalledVersion(toolId: string, version: string): void {
+  const versions = store.get<Record<string, string>>("toolchain.installedVersions") ?? {}
+  versions[toolId] = version
+  store.set("toolchain.installedVersions", versions)
 }
 
 async function fetchLatestRelease(repo: string): Promise<GitHubRelease | null> {
@@ -182,12 +195,13 @@ export async function checkToolUpdates(installedIds: string[]): Promise<ToolUpda
     if (!release) return
 
     const latestVersion = stripVersionPrefix(release.tag_name)
-    if (latestVersion === tool.version) return
+    const currentVersion = getInstalledVersion(toolId) ?? tool.version
+    if (latestVersion === currentVersion) return
 
     const url = findAsset(release.assets, tool.assetKeywords[platform])
     if (!url) return
 
-    updates.push({ toolId, currentVersion: tool.version, latestVersion, downloadUrl: url })
+    updates.push({ toolId, currentVersion, latestVersion, downloadUrl: url })
   })
 
   await Promise.all(checks)
@@ -197,7 +211,7 @@ export async function checkToolUpdates(installedIds: string[]): Promise<ToolUpda
 /**
  * Download and install a specific version of a tool from a direct URL.
  */
-export async function updateTool(toolId: string, downloadUrl: string): Promise<{ success: boolean; error?: string }> {
+export async function updateTool(toolId: string, downloadUrl: string, latestVersion?: string): Promise<{ success: boolean; error?: string }> {
   const tool = TOOL_REGISTRY[toolId]
   if (!tool) return { success: false, error: `Unknown tool: ${toolId}` }
   if (activeDownloads.has(toolId)) return { success: false, error: "Download already in progress" }
@@ -232,6 +246,7 @@ export async function updateTool(toolId: string, downloadUrl: string): Promise<{
     if (process.platform !== "win32") chmodSync(destPath, 0o755)
 
     log.info(`Updated ${tool.name} to latest`)
+    if (latestVersion) setInstalledVersion(toolId, latestVersion)
     return { success: true }
   } catch (err) {
     const msg = (err as Error).message

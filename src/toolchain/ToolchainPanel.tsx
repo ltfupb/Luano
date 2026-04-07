@@ -11,7 +11,6 @@ import { useT } from "../i18n/useT"
 
 import rojoLogo from "../assets/toolchain/rojo.png"
 import argonLogo from "../assets/toolchain/argon.png"
-import seleneLogo from "../assets/toolchain/selene.svg"
 import styluaLogo from "../assets/toolchain/stylua.png"
 import luauLspLogo from "../assets/toolchain/luau-lsp.png"
 import wallyLogo from "../assets/toolchain/wally.svg"
@@ -41,12 +40,27 @@ interface ToolchainPanelProps {
 const TOOL_LOGOS: Record<string, string> = {
   rojo: rojoLogo,
   argon: argonLogo,
-  selene: seleneLogo,
   stylua: styluaLogo,
   "luau-lsp": luauLspLogo,
   wally: wallyLogo,
   pesde: pesdeLogo,
   darklua: darkluaLogo
+}
+
+function ToolLogo({ id, name, className }: { id: string; name: string; className?: string }): JSX.Element {
+  const [failed, setFailed] = useState(false)
+  const src = TOOL_LOGOS[id]
+  if (!src || failed) {
+    return (
+      <div
+        className={`rounded-md flex items-center justify-center ${className ?? "w-8 h-8"}`}
+        style={{ background: "var(--bg-elevated)", color: "var(--text-muted)", fontSize: "14px", fontWeight: 600 }}
+      >
+        {name[0]}
+      </div>
+    )
+  }
+  return <img src={src} alt={name} className={`object-contain ${className ?? "w-8 h-8"}`} onError={() => setFailed(true)} />
 }
 
 export function ToolchainPanel({ onClose }: ToolchainPanelProps): JSX.Element {
@@ -125,7 +139,7 @@ export function ToolchainPanel({ onClose }: ToolchainPanelProps): JSX.Element {
     const info = updates[toolId]
     if (!info) return
     setUpdating(prev => new Set(prev).add(toolId))
-    const result = await window.api.toolchainUpdateTool(toolId, info.downloadUrl)
+    const result = await window.api.toolchainUpdateTool(toolId, info.downloadUrl, info.latestVersion)
     setUpdating(prev => { const n = new Set(prev); n.delete(toolId); return n })
     if (result.success) {
       setUpdates(prev => { const n = { ...prev }; delete n[toolId]; return n })
@@ -263,7 +277,7 @@ export function ToolchainPanel({ onClose }: ToolchainPanelProps): JSX.Element {
                     }}
                   >
                     {/* Logo */}
-                    <img src={TOOL_LOGOS[tool.id]} alt={tool.name} className="w-8 h-8 object-contain flex-shrink-0" />
+                    <ToolLogo id={tool.id} name={tool.name} className="w-8 h-8 flex-shrink-0" />
 
                     {/* Info */}
                     <div className="flex-1 min-w-0">
@@ -303,14 +317,6 @@ export function ToolchainPanel({ onClose }: ToolchainPanelProps): JSX.Element {
                         >
                           {t("toolchainDownloading")}
                         </span>
-                      ) : hasUpdate && isInstalled ? (
-                        <button
-                          onClick={(e) => { e.stopPropagation(); handleUpdate(tool.id) }}
-                          className="px-2.5 py-1 rounded-md text-[10px] font-medium transition-all duration-100"
-                          style={{ background: "#3b82f6", color: "white" }}
-                        >
-                          Update
-                        </button>
                       ) : !isInstalled ? (
                         <button
                           onClick={(e) => { e.stopPropagation(); handleInstall(tool.id) }}
@@ -330,7 +336,7 @@ export function ToolchainPanel({ onClose }: ToolchainPanelProps): JSX.Element {
                         <button
                           onClick={(e) => { e.stopPropagation(); handleActivate(tool.id, tool.category) }}
                           className="px-2.5 py-1 rounded-md text-[10px] transition-all duration-100"
-                          style={{ background: "var(--bg-elevated)", color: "var(--text-secondary)", border: "1px solid var(--border)" }}
+                          style={{ background: "var(--accent)", color: "white" }}
                         >
                           {t("toolchainActivate")}
                         </button>
@@ -355,7 +361,7 @@ export function ToolchainPanel({ onClose }: ToolchainPanelProps): JSX.Element {
               {detail ? (
                 <>
                   <div className="flex items-center gap-2">
-                    <img src={TOOL_LOGOS[detail.id]} alt={detail.name} className="w-8 h-8 object-contain" />
+                    <ToolLogo id={detail.id} name={detail.name} />
                     <span style={{ fontSize: "14px", fontWeight: 600, color: "var(--text-primary)" }}>
                       {detail.name}
                     </span>

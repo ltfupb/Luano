@@ -327,7 +327,7 @@ interface Window {
       latestVersion: string
       downloadUrl: string
     }>>
-    toolchainUpdateTool: (toolId: string, downloadUrl: string) => Promise<{ success: boolean; error?: string }>
+    toolchainUpdateTool: (toolId: string, downloadUrl: string, latestVersion?: string) => Promise<{ success: boolean; error?: string }>
 
     // Package Manager
     packageInstall: (projectPath: string) => Promise<{ success: boolean; output: string }>

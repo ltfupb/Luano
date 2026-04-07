@@ -341,8 +341,8 @@ export function registerProjectHandlers(): void {
     checkToolUpdates(installedIds)
   )
 
-  ipcMain.handle("toolchain:update-tool", (_, toolId: string, downloadUrl: string) =>
-    updateTool(toolId, downloadUrl)
+  ipcMain.handle("toolchain:update-tool", (_, toolId: string, downloadUrl: string, latestVersion?: string) =>
+    updateTool(toolId, downloadUrl, latestVersion)
   )
 
   // ── Package Manager ────────────────────────────────────────────────────

@@ -3,6 +3,7 @@
 // The bridge sends/receives Content-Length framed JSON-RPC over WebSocket
 
 import { MonacoLanguageClient } from "monaco-languageclient"
+import { initServices } from "monaco-languageclient/vscode/services"
 import { CloseAction, ErrorAction } from "vscode-languageclient"
 import {
   AbstractMessageReader,
@@ -102,6 +103,9 @@ export async function startLuauLanguageClient(port: number): Promise<void> {
     ws.addEventListener("open", () => resolve(), { once: true })
     ws.addEventListener("error", (e) => reject(new Error(`LSP WS error: ${String(e)}`)), { once: true })
   })
+
+  // VSCode services must be initialized before creating MonacoLanguageClient (v8+)
+  await initServices({ caller: "LuauLanguageClient" })
 
   const reader = new WsMessageReader(ws)
   const writer = new WsMessageWriter(ws)

@@ -62,7 +62,7 @@ export const TOOL_REGISTRY: Record<string, ToolDefinition> = {
     description: "Full-featured Roblox sync tool with two-way sync",
     category: "sync",
     bundled: false,
-    version: "2.0.22",
+    version: "2.0.28",
     github: "argon-rbx/argon",
     binaryName: "argon",
     configFiles: ["default.project.json"],
@@ -72,9 +72,9 @@ export const TOOL_REGISTRY: Record<string, ToolDefinition> = {
       linux: ["linux", "x86_64"]
     },
     releaseUrls: {
-      win:   ghRelease("argon-rbx/argon", "2.0.22", "argon-2.0.22-windows-x86_64.zip"),
-      mac:   ghRelease("argon-rbx/argon", "2.0.22", "argon-2.0.22-macos-aarch64.zip"),
-      linux: ghRelease("argon-rbx/argon", "2.0.22", "argon-2.0.22-linux-x86_64.zip")
+      win:   ghRelease("argon-rbx/argon", "2.0.28", "argon-2.0.28-windows-x86_64.zip"),
+      mac:   ghRelease("argon-rbx/argon", "2.0.28", "argon-2.0.28-macos-aarch64.zip"),
+      linux: ghRelease("argon-rbx/argon", "2.0.28", "argon-2.0.28-linux-x86_64.zip")
     }
   },
   selene: {
@@ -150,14 +150,14 @@ export const TOOL_REGISTRY: Record<string, ToolDefinition> = {
     binaryName: "wally",
     configFiles: ["wally.toml"],
     assetKeywords: {
-      win:   ["windows", "x86_64"],
+      win:   ["win64"],
       mac:   ["macos"],
-      linux: ["linux", "x86_64"]
+      linux: ["linux"]
     },
     releaseUrls: {
-      win:   ghRelease("UpliftGames/wally", "v0.3.2", "wally-v0.3.2-windows-x86_64.zip"),
-      mac:   ghRelease("UpliftGames/wally", "v0.3.2", "wally-v0.3.2-macos-x86_64.zip"),
-      linux: ghRelease("UpliftGames/wally", "v0.3.2", "wally-v0.3.2-linux-x86_64.zip")
+      win:   ghRelease("UpliftGames/wally", "v0.3.2", "wally-v0.3.2-win64.zip"),
+      mac:   ghRelease("UpliftGames/wally", "v0.3.2", "wally-v0.3.2-macos.zip"),
+      linux: ghRelease("UpliftGames/wally", "v0.3.2", "wally-v0.3.2-linux.zip")
     }
   },
   pesde: {
@@ -166,7 +166,7 @@ export const TOOL_REGISTRY: Record<string, ToolDefinition> = {
     description: "Modern package manager for Luau with workspaces",
     category: "package-manager",
     bundled: false,
-    version: "0.5.3",
+    version: "0.7.3",
     github: "pesde-pkg/pesde",
     binaryName: "pesde",
     configFiles: ["pesde.toml"],
@@ -176,9 +176,9 @@ export const TOOL_REGISTRY: Record<string, ToolDefinition> = {
       linux: ["linux", "x86_64"]
     },
     releaseUrls: {
-      win:   ghRelease("pesde-pkg/pesde", "v0.5.3", "pesde-0.5.3-windows-x86_64.zip"),
-      mac:   ghRelease("pesde-pkg/pesde", "v0.5.3", "pesde-0.5.3-macos-aarch64.zip"),
-      linux: ghRelease("pesde-pkg/pesde", "v0.5.3", "pesde-0.5.3-linux-x86_64.zip")
+      win:   ghRelease("pesde-pkg/pesde", "v0.7.3%2Bregistry.0.2.3", "pesde-0.7.3-windows-x86_64.zip"),
+      mac:   ghRelease("pesde-pkg/pesde", "v0.7.3%2Bregistry.0.2.3", "pesde-0.7.3-macos-aarch64.zip"),
+      linux: ghRelease("pesde-pkg/pesde", "v0.7.3%2Bregistry.0.2.3", "pesde-0.7.3-linux-x86_64.zip")
     }
   },
   darklua: {
@@ -187,7 +187,7 @@ export const TOOL_REGISTRY: Record<string, ToolDefinition> = {
     description: "Lua/Luau code transformer, minifier, and bundler",
     category: "processor",
     bundled: false,
-    version: "0.15.1",
+    version: "0.18.0",
     github: "seaofvoices/darklua",
     binaryName: "darklua",
     configFiles: [".darklua.json", ".darklua.json5"],
@@ -197,9 +197,9 @@ export const TOOL_REGISTRY: Record<string, ToolDefinition> = {
       linux: ["linux", "x86_64"]
     },
     releaseUrls: {
-      win:   ghRelease("seaofvoices/darklua", "v0.15.1", "darklua-windows-x86_64.zip"),
-      mac:   ghRelease("seaofvoices/darklua", "v0.15.1", "darklua-macos-aarch64.zip"),
-      linux: ghRelease("seaofvoices/darklua", "v0.15.1", "darklua-linux-x86_64.zip")
+      win:   ghRelease("seaofvoices/darklua", "v0.18.0", "darklua-windows-x86_64.zip"),
+      mac:   ghRelease("seaofvoices/darklua", "v0.18.0", "darklua-macos-aarch64.zip"),
+      linux: ghRelease("seaofvoices/darklua", "v0.18.0", "darklua-linux-x86_64.zip")
     }
   }
 }

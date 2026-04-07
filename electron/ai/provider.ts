@@ -49,9 +49,15 @@ export function trackUsage(input: number, output: number, cacheRead = 0): void {
   _tokenUsage.input += input
   _tokenUsage.output += output
   _tokenUsage.cacheRead += cacheRead
-  // Notify renderer
+  broadcastUsage()
+}
+
+/** Broadcast current totals with optional output estimate added on top */
+function broadcastUsage(outputEstimate = 0): void {
+  const payload = { ..._tokenUsage }
+  if (outputEstimate > 0) payload.output += outputEstimate
   BrowserWindow.getAllWindows().forEach((win) =>
-    win.webContents.send("ai:token-usage", { ..._tokenUsage })
+    win.webContents.send("ai:token-usage", payload)
   )
 }
 
@@ -402,17 +408,27 @@ export async function chatStream(
       system: toCachedSystem(systemPrompt),
       messages
     })
+    let streamedChars = 0
+    let inputTracked = false
     for await (const chunk of stream) {
-      if (chunk.type === "content_block_delta" && chunk.delta.type === "text_delta") {
-        send((chunk.delta as { type: "text_delta"; text: string }).text)
+      if (chunk.type === "message_start" && !inputTracked) {
+        const msg = (chunk as unknown as { message: { usage: { input_tokens: number; cache_read_input_tokens?: number } } }).message
+        trackUsage(msg.usage.input_tokens, 0, msg.usage.cache_read_input_tokens ?? 0)
+        inputTracked = true
+      } else if (chunk.type === "content_block_delta" && chunk.delta.type === "text_delta") {
+        const text = (chunk.delta as { type: "text_delta"; text: string }).text
+        send(text)
+        streamedChars += text.length
+        broadcastUsage(Math.ceil(streamedChars / 4))
       }
     }
     const finalMessage = await stream.finalMessage()
-    trackUsage(
-      finalMessage.usage.input_tokens,
-      finalMessage.usage.output_tokens,
-      "cache_read_input_tokens" in finalMessage.usage ? (finalMessage.usage as Record<string, number>).cache_read_input_tokens : 0
-    )
+    const cache = "cache_read_input_tokens" in finalMessage.usage ? (finalMessage.usage as Record<string, number>).cache_read_input_tokens : 0
+    if (!inputTracked) {
+      trackUsage(finalMessage.usage.input_tokens, finalMessage.usage.output_tokens, cache)
+    } else {
+      trackUsage(0, finalMessage.usage.output_tokens, 0)
+    }
     send(null)
   } catch (err) {
     const waitSec = is429(err)

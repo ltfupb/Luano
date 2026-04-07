@@ -169,6 +169,13 @@ export default function App(): JSX.Element {
   const setRightPanelOpen = useSettingsStore((s) => s.setRightPanelOpen)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [toolchainOpen, setToolchainOpen] = useState(false)
+
+  // Allow StatusBar to open toolchain panel via custom event
+  useEffect(() => {
+    const handler = () => setToolchainOpen(true)
+    window.addEventListener("open-toolchain", handler)
+    return () => window.removeEventListener("open-toolchain", handler)
+  }, [])
   const terminalOpen = useSettingsStore((s) => s.terminalOpen)
   const setTerminalOpen = useSettingsStore((s) => s.setTerminalOpen)
   const [terminalHeight, _setTerminalHeight] = useState(() => useSettingsStore.getState().terminalHeight)

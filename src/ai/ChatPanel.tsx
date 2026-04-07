@@ -149,6 +149,7 @@ export function ChatPanel({ onClose }: ChatPanelProps): JSX.Element {
   const [sessionsClosing, setSessionsClosing] = useState(false)
   const [showModeDropdown, setShowModeDropdown] = useState(false)
   const [showModelDropdown, setShowModelDropdown] = useState(false)
+  const [tokens, setTokens] = useState({ input: 0, output: 0, cacheRead: 0 })
   const { provider, model, setModel: setStoreModel } = useSettingsStore()
 
   const sessionsVisible = showSessions || sessionsClosing
@@ -195,6 +196,16 @@ export function ChatPanel({ onClose }: ChatPanelProps): JSX.Element {
     const d = data as { connected?: boolean }
     if (typeof d.connected === "boolean") setBridgeConnected(d.connected)
   })
+
+  // Real-time token usage tracking
+  useEffect(() => {
+    if (typeof window.api.aiGetTokenUsage === "function") {
+      window.api.aiGetTokenUsage().then(setTokens).catch(() => {})
+    }
+    if (typeof window.api.onTokenUsage === "function") {
+      return window.api.onTokenUsage(setTokens)
+    }
+  }, [])
 
   const handleAcceptChanges = useCallback(() => {
     setPendingReview(null)
@@ -720,6 +731,16 @@ export function ChatPanel({ onClose }: ChatPanelProps): JSX.Element {
             )
           )
         })()}
+
+        {/* Token usage — shown after messages */}
+        {(tokens.input + tokens.output > 0) && (
+          <div
+            className="flex items-center px-3 py-1"
+            style={{ fontSize: "10px", color: "var(--text-muted)", fontFamily: "monospace" }}
+          >
+            <span>{((tokens.input + tokens.output) / 1000).toFixed(1)}k tokens</span>
+          </div>
+        )}
 
         {/* Accept / Reject review bar */}
         {pendingReview && !isStreaming && (
