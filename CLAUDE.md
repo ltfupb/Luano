@@ -132,6 +132,7 @@ npm install --package-lock-only
 
 ## 릴리즈 히스토리
 
+- **v0.7.8** — AI Panel and Editor UX Improvements
 - **v0.7.7** — Sync Tool Switch Crash and LSP Stability
 - **v0.7.6** — UI Scale, Toolchain Switch and Local Model Fixes
 - **v0.7.5** — LSP Fix, Toolchain Overhaul and UX Improvements
