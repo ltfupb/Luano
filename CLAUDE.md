@@ -142,7 +142,7 @@ npm install --package-lock-only
 
 | Repo | 공개 | 용도 |
 |---|---|---|
-| `ltfupb/luano-dev` | private | **개발 repo**. Pro 포함 전체 소스. 빌드 + 릴리즈 |
+| `ltfupb/Luano-dev` | private | **개발 repo**. Pro 포함 전체 소스. 빌드 + 릴리즈 |
 | `ltfupb/Luano` | public | 자동 미러 (Pro 제외). 커뮤니티 기여, CI 체크 |
 
 **빌드 흐름**: `luano-dev`에서 태그 push → `build.yml`이 직접 빌드 → public repo GitHub Releases에 발행.
@@ -198,8 +198,8 @@ git push origin v0.X.0
 ### 5. 빌드 확인 + 에셋 검증
 
 ```bash
-gh run list --workflow=build.yml --limit 1 --repo ltfupb/luano-dev
-gh run watch <RUN_ID> --repo ltfupb/luano-dev
+gh run list --workflow=build.yml --limit 1 --repo ltfupb/Luano-dev
+gh run watch <RUN_ID> --repo ltfupb/Luano-dev
 
 # 에셋 검증 (10개여야 정상)
 gh release view v0.X.0 --repo ltfupb/Luano --json assets --jq '.assets | length'
