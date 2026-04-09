@@ -1,18 +1,39 @@
-name: CI
+name: Build & Release
 
 on:
   push:
-    branches: [main]
-  pull_request:
-    branches: [main]
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to build (e.g. v0.8.0)"
+        required: true
+
+permissions:
+  contents: write
 
 jobs:
-  check:
-    runs-on: ubuntu-latest
-    name: Typecheck & Lint
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            platform: win
+          - os: macos-latest
+            platform: mac
+          - os: ubuntu-latest
+            platform: linux
+
+    runs-on: ${{ matrix.os }}
+    name: Build (${{ matrix.platform }})
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref_name }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -23,14 +44,24 @@ jobs:
       - name: Install dependencies
         run: npm ci --force
 
-      - name: Typecheck (renderer)
-        run: npx tsc -p tsconfig.web.json --noEmit
+      - name: Download sidecar binaries
+        run: npx ts-node scripts/download-binaries.ts ${{ matrix.platform }}
 
-      - name: Typecheck (main process)
-        run: npx tsc -p tsconfig.node.json --noEmit
+      - name: Build & Package (Windows)
+        if: matrix.platform == 'win'
+        run: npx electron-vite build && npx electron-builder --win --x64 --publish always
+        env:
+          GH_TOKEN: ${{ secrets.PUBLIC_REPO_TOKEN }}
 
-      - name: Lint
-        run: npx eslint "src/**/*.{ts,tsx}" "electron/**/*.ts" --max-warnings 20
+      - name: Build & Package (Mac)
+        if: matrix.platform == 'mac'
+        run: npx electron-vite build && npx electron-builder --mac --publish always
+        env:
+          GH_TOKEN: ${{ secrets.PUBLIC_REPO_TOKEN }}
+          CSC_IDENTITY_AUTO_DISCOVERY: false
 
-      - name: Test
-        run: npx vitest run
+      - name: Build & Package (Linux)
+        if: matrix.platform == 'linux'
+        run: npx electron-vite build && npx electron-builder --linux --publish always
+        env:
+          GH_TOKEN: ${{ secrets.PUBLIC_REPO_TOKEN }}

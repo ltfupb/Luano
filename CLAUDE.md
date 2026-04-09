@@ -41,37 +41,18 @@ npm run package  # electron-builder로 배포용 인스톨러 생성
 
 > **과거 반복된 CI 실패 원인을 정리한 섹션. 코드 수정 후 push 전에 반드시 확인할 것.**
 
-### 1. .gitignore된 Pro 파일은 절대 직접 import 금지
+### 1. Pro 파일은 반드시 tryRequire() 패턴으로 import
 
-`.gitignore`에 등록된 파일은 CI에 존재하지 않는다. **반드시 `electron/pro/modules.ts`의 `tryRequire()` 패턴**을 통해 import하고 no-op 폴백을 제공해야 한다.
+Public mirror에는 Pro 파일이 없다. **반드시 `electron/pro/modules.ts`의 `tryRequire()` 패턴**을 통해 import하고 no-op 폴백을 제공해야 한다.
 
-**gitignore된 Pro 파일 목록:**
+**Pro 파일 목록 (.mirror-exclude 참조):**
 ```
-electron/pro/impl.ts
-electron/pro/internal-keys.ts
-electron/ai/agent.ts
-electron/ai/tools.ts
-electron/ai/context.ts
-electron/ai/rag.ts
-electron/bridge/server.ts
-electron/mcp/client.ts
-electron/analysis/
-electron/datastore/
-electron/topology/
-electron/telemetry/
-src/ai/InlineEditOverlay.tsx
-src/ai/DiffView.tsx
-src/studio/
-src/analysis/
-src/datastore/
-src/topology/
-```
-
-**잘못된 예 (CI 실패):**
-```typescript
-// ❌ 직접 import — CI에서 모듈 못 찾음
-import { startBridgeServer } from "./bridge/server"
-import { getLastCheckpoint } from "../ai/agent"
+electron/pro/impl.ts, electron/pro/internal-keys.ts
+electron/ai/agent.ts, tools.ts, context.ts, rag.ts
+electron/bridge/server.ts, electron/mcp/client.ts
+electron/analysis/, electron/datastore/, electron/topology/, electron/telemetry/
+src/ai/InlineEditOverlay.tsx, src/ai/DiffView.tsx
+src/studio/, src/analysis/, src/datastore/, src/topology/
 ```
 
 **올바른 예:**
@@ -155,31 +136,35 @@ npm install --package-lock-only
 
 ---
 
-## 빌드 아키텍처 (Public + Private Repo)
+## 빌드 아키텍처 (Private Monorepo + Public Mirror)
 
-> Pro 소스코드 보호를 위해 빌드를 분리한 구조.
+> Pro 소스코드 보호를 위한 구조. 하나의 private repo에서 개발하고, public repo는 자동 미러.
 
 | Repo | 공개 | 용도 |
 |---|---|---|
-| `ltfupb/Luano` | public | 소스 코드, 커뮤니티 기여, CI 체크 (타입체크/린트/테스트) |
-| `ltfupb/luano-build` | private | Pro 파일 overlay + 릴리즈 빌드 → public repo에 릴리즈 발행 |
+| `ltfupb/luano-dev` | private | **개발 repo**. Pro 포함 전체 소스. 빌드 + 릴리즈 |
+| `ltfupb/Luano` | public | 자동 미러 (Pro 제외). 커뮤니티 기여, CI 체크 |
 
-**빌드 흐름**: `luano-build` CI가 public repo checkout → `pro/` 폴더 overlay → 빌드 → public repo GitHub Releases에 발행.
+**빌드 흐름**: `luano-dev`에서 태그 push → `build.yml`이 직접 빌드 → public repo GitHub Releases에 발행.
 
-**Pro 파일 수정 시**: `luano-build` repo의 `pro/` 폴더에서 수정 후 커밋/푸시.
-public repo에서 인터페이스/타입을 변경하면 `luano-build`의 Pro 파일도 함께 업데이트할 것.
+**미러 흐름**: `luano-dev` main push → `mirror.yml`이 `.mirror-exclude`에 명시된 Pro 파일 제외하고 public repo에 자동 sync.
+
+**Pro 파일 번들링**: `electron.vite.config.ts`가 Pro 파일 존재 여부를 자동 감지 (`existsSync`). 환경변수 불필요. Private repo에서는 Pro가 항상 번들링되고, public mirror에서는 자동으로 제외됨.
 
 ---
 
 ## 릴리즈 절차 (정형화)
 
-> 매번 릴리즈할 때 실수 반복하지 않도록 정리한 표준 절차.
+> 하나의 repo에서 태그 하나로 릴리즈.
 
 ### 1. 코드 준비
 
 ```bash
 # 1) package.json version bump
-# 2) 변경사항 커밋
+# 2) translations.ts version 문자열 업데이트 (en, ko 둘 다)
+# 3) CLAUDE.md 릴리즈 히스토리 추가
+# 4) package-lock.json 재생성 (version 바뀌었으므로)
+rm -f package-lock.json && npm install
 git add -A && git commit -m "v0.X.0: 릴리즈 설명"
 ```
 
@@ -193,52 +178,28 @@ npx eslint "src/**/*.{ts,tsx}" "electron/**/*.ts" --max-warnings 20
 
 **세 개 다 통과해야 push 가능. 하나라도 실패하면 태그 걸지 말 것.**
 
-### 3. Public repo push + CI 확인
+### 3. Push + CI 확인
 
 ```bash
 git push origin main
 ```
 
-CI 체크 (타입체크/린트/테스트) 통과 확인 후 다음 단계로.
+CI 통과 확인. mirror.yml이 자동으로 public repo에 sync.
 
-### 4. Pro 파일 동기화 (필요시)
-
-public repo에서 Pro 파일이 참조하는 인터페이스/타입을 변경했다면:
-```bash
-cd C:/Users/USER/desktop/luano-build
-# pro/ 폴더의 해당 파일 수정
-git add -A && git commit -m "sync: match public repo changes"
-git push origin main
-```
-
-### 5. 양쪽 repo에 태그 → 빌드 트리거
-
-**public repo에도 태그 필요** — build workflow가 public repo를 태그 ref로 checkout하기 때문.
+### 4. 태그 → 빌드 트리거
 
 ```bash
-# public repo 태그
-cd C:/Users/USER/desktop/luano
-git tag v0.X.0
-git push origin v0.X.0
-
-# luano-build 태그 (빌드 트리거)
-cd C:/Users/USER/desktop/luano-build
 git tag v0.X.0
 git push origin v0.X.0
 ```
 
-`luano-build`의 `build.yml`이 자동 트리거:
-1. public repo를 `v0.X.0` 태그로 checkout
-2. `pro/` 폴더 overlay
-3. Win/Mac/Linux 3개 runner에서 병렬 빌드
-4. `electron-builder --publish always` → **public repo에 Draft 릴리즈 생성 + 에셋 업로드**
+`build.yml` 자동 트리거 → Win/Mac/Linux 병렬 빌드 → public repo에 Draft 릴리즈 생성.
 
-### 6. 빌드 확인 + 에셋 검증
+### 5. 빌드 확인 + 에셋 검증
 
 ```bash
-# 빌드 진행 확인
-gh run list --workflow=build.yml --limit 1 --repo ltfupb/luano-build
-gh run watch <RUN_ID> --repo ltfupb/luano-build
+gh run list --workflow=build.yml --limit 1 --repo ltfupb/luano-dev
+gh run watch <RUN_ID> --repo ltfupb/luano-dev
 
 # 에셋 검증 (10개여야 정상)
 gh release view v0.X.0 --repo ltfupb/Luano --json assets --jq '.assets | length'
@@ -261,15 +222,11 @@ gh release view v0.X.0 --repo ltfupb/Luano --json assets --jq '.assets[].name'
 
 **에셋이 10개 미만이면 빌드 일부가 실패한 것 — 태그 재설정 후 재빌드 필요.**
 
-### 7. 릴리즈 Publish + 노트 작성
-
-빌드가 Draft 상태로 생성되므로 수동으로 publish해야 함:
+### 6. 릴리즈 Publish + 노트 작성
 
 ```bash
-# Draft → Latest로 publish
 gh release edit v0.X.0 --repo ltfupb/Luano --draft=false --latest
 
-# 릴리즈 노트 + 제목 설정
 gh release edit v0.X.0 --repo ltfupb/Luano --title "v0.X.0" --notes "$(cat <<'EOF'
 ## v0.X.0 — Short Summary in English
 
@@ -304,16 +261,13 @@ EOF
 # public repo 릴리즈 삭제
 gh release delete v0.X.0 --repo ltfupb/Luano --yes
 
-# luano-build 태그 삭제 + 재생성
-cd C:/Users/USER/desktop/luano-build
+# private repo 태그 삭제 + 재생성
 git tag -d v0.X.0
 git push origin :refs/tags/v0.X.0
 # 수정 후 다시 태그 + push
 git tag v0.X.0
 git push origin v0.X.0
 ```
-
-**주의:** public repo의 태그는 삭제하지 않아도 됨 — build workflow가 참조만 하므로 그대로 둬도 무방.
 
 ---
 

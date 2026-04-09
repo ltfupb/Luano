@@ -3,30 +3,29 @@ import { existsSync } from "fs"
 import { defineConfig, externalizeDepsPlugin } from "electron-vite"
 import react from "@vitejs/plugin-react"
 
-// LUANO_PRO=1 → preserve module structure so dynamic require() finds Pro files
-const isPro = process.env.LUANO_PRO === "1"
+// Auto-detect Pro files by checking if they exist on disk.
+// Private repo has them, public mirror does not.
+const proFiles = [
+  "electron/ai/agent.ts",
+  "electron/ai/tools.ts",
+  "electron/ai/context.ts",
+  "electron/ai/rag.ts",
+  "electron/bridge/server.ts",
+  "electron/mcp/client.ts",
+  "electron/topology/analyzer.ts",
+  "electron/analysis/cross-script.ts",
+  "electron/analysis/performance-lint.ts",
+  "electron/datastore/schema.ts",
+  "electron/telemetry/collector.ts",
+]
 
 const proEntries: Record<string, string> = {}
-if (isPro) {
-  const proFiles = [
-    "electron/ai/agent.ts",
-    "electron/ai/tools.ts",
-    "electron/ai/context.ts",
-    "electron/ai/rag.ts",
-    "electron/bridge/server.ts",
-    "electron/mcp/client.ts",
-    "electron/topology/analyzer.ts",
-    "electron/analysis/cross-script.ts",
-    "electron/analysis/performance-lint.ts",
-    "electron/datastore/schema.ts",
-    "electron/telemetry/collector.ts",
-  ]
-  for (const f of proFiles) {
-    if (existsSync(resolve(__dirname, f))) {
-      proEntries[f.replace("electron/", "").replace(".ts", "")] = resolve(__dirname, f)
-    }
+for (const f of proFiles) {
+  if (existsSync(resolve(__dirname, f))) {
+    proEntries[f.replace("electron/", "").replace(".ts", "")] = resolve(__dirname, f)
   }
 }
+const isPro = Object.keys(proEntries).length > 0
 
 export default defineConfig({
   main: {

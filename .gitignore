@@ -49,27 +49,8 @@ coverage/
 # Claude Code local settings
 .claude/
 
-# === Pro (private) ===
-electron/pro/impl.ts
-electron/pro/internal-keys.ts
-electron/ai/agent.ts
-electron/ai/tools.ts
-electron/ai/context.ts
-electron/ai/rag.ts
-electron/bridge/server.ts
-electron/mcp/client.ts
-electron/analysis/
-electron/datastore/
-electron/topology/
-electron/telemetry/
-src/ai/InlineEditOverlay.tsx
-src/ai/DiffView.tsx
-src/studio/
-src/analysis/
-src/datastore/
-src/topology/
-resources/roblox-docs/roblox_docs.db
-resources/roblox-docs/api-dump.json
+# Pro files are tracked in the private repo.
+# Public mirror excludes them via .mirror-exclude.
 
 # Temp files
 tsc_*.txt
