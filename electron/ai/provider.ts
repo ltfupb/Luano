@@ -40,6 +40,7 @@ let openaiClient: OpenAI | null = null
 let geminiClient: GoogleGenerativeAI | null = null
 let localClient: OpenAI | null = null
 let localClientEndpoint: string | null = null
+let localClientKey: string | null = null
 let activeAbortController: AbortController | null = null
 
 // ── Token Usage Tracking ──────────────────────────────────────────────────────
@@ -117,10 +118,11 @@ function getGeminiModel(systemPrompt?: string): GenerativeModel {
 
 export function getLocalClient(): OpenAI {
   const endpoint = (store.get("localEndpoint") as string) || "http://localhost:11434/v1"
-  if (!localClient || localClientEndpoint !== endpoint) {
-    const apiKey = (store.get("localKey") as string) || "ollama"
+  const apiKey = (store.get("localKey") as string) || "ollama"
+  if (!localClient || localClientEndpoint !== endpoint || localClientKey !== apiKey) {
     localClient = new OpenAI({ baseURL: endpoint, apiKey, timeout: 120_000 })
     localClientEndpoint = endpoint
+    localClientKey = apiKey
   }
   return localClient
 }

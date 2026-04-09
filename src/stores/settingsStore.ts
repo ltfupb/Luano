@@ -57,7 +57,7 @@ export const useSettingsStore = create<SettingsStore>()(
   persist(
     (set, get) => ({
       language: "en",
-      theme: "tokyo-night" as AppTheme,
+      theme: "dark" as AppTheme,
       apiKey: "",
       openaiKey: "",
       geminiKey: "",

@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useSettingsStore } from "../stores/settingsStore"
 import { useT } from "../i18n/useT"
 
@@ -146,6 +146,17 @@ export function SettingsAI({ models, setModels }: {
   } = useSettingsStore()
   const t = useT()
   const [localModelsLoading, setLocalModelsLoading] = useState(false)
+  const [localKey, setLocalKeyState] = useState("")
+  const [localKeyLoaded, setLocalKeyLoaded] = useState(false)
+
+  useEffect(() => {
+    if (provider === "local" && !localKeyLoaded) {
+      window.api.aiGetLocalKey().then(k => {
+        setLocalKeyState(k ?? "")
+        setLocalKeyLoaded(true)
+      })
+    }
+  }, [provider, localKeyLoaded])
 
   const handleSetProvider = async (p: string) => {
     await window.api.aiSetProvider(p)
@@ -255,6 +266,30 @@ export function SettingsAI({ models, setModels }: {
             />
             <span style={{ fontSize: "10px", color: "var(--text-muted)" }}>
               Ollama, LM Studio, vLLM {t("localEndpointHint")}
+            </span>
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <SectionLabel>{t("localApiKey")}</SectionLabel>
+            <input
+              type="password"
+              value={localKey}
+              onChange={(e) => {
+                setLocalKeyState(e.target.value)
+                window.api.aiSetLocalKey(e.target.value)
+              }}
+              placeholder="Bearer token"
+              className="rounded-lg px-3 py-2 text-xs focus:outline-none transition-all duration-150"
+              style={{
+                background: "var(--bg-base)",
+                border: "1px solid var(--border)",
+                color: "var(--text-primary)",
+                fontFamily: "monospace"
+              }}
+              onFocus={e => (e.currentTarget as HTMLElement).style.borderColor = "var(--accent)"}
+              onBlur={e => (e.currentTarget as HTMLElement).style.borderColor = "var(--border)"}
+            />
+            <span style={{ fontSize: "10px", color: "var(--text-muted)" }}>
+              {t("localApiKeyHint")}
             </span>
           </div>
           <div className="flex flex-col gap-1.5">

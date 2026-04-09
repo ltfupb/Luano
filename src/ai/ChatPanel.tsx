@@ -732,75 +732,55 @@ export function ChatPanel({ onClose }: ChatPanelProps): JSX.Element {
           )
         })()}
 
-        {/* Token usage — shown after messages */}
-        {(tokens.input + tokens.output > 0) && (
-          <div
-            className="flex items-center px-3 py-1"
-            style={{ fontSize: "10px", color: "var(--text-muted)", fontFamily: "monospace" }}
-          >
-            <span>{((tokens.input + tokens.output) / 1000).toFixed(1)}k tokens</span>
-          </div>
-        )}
-
         {/* Accept / Reject review bar */}
         {pendingReview && !isStreaming && (
-          <div
-            className="mx-2 mb-2 rounded-lg p-2.5 animate-fade-in"
-            style={{
-              background: "var(--bg-elevated)",
-              border: "1px solid var(--border)"
-            }}
-          >
-            <div className="flex items-center gap-2 mb-2">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z" />
-                <polyline points="13 2 13 9 20 9" />
-              </svg>
-              <span style={{ fontSize: "11px", color: "var(--text-secondary)" }}>
-                {pendingReview.files.length} {t("reviewFileCount")}
-              </span>
-            </div>
-            <div className="flex flex-wrap gap-1 mb-2.5">
+          <div className="mx-2 mb-2 animate-fade-in">
+            {/* File list */}
+            <div className="flex flex-wrap gap-1 mb-2">
               {pendingReview.files.map((f) => (
                 <span
                   key={f}
-                  className="px-1.5 py-0.5 rounded font-mono"
+                  className="flex items-center gap-1 px-1.5 py-0.5 rounded font-mono"
                   style={{
-                    fontSize: "10px",
-                    background: "var(--bg-surface)",
-                    color: "var(--text-muted)",
-                    border: "1px solid var(--border-subtle)"
+                    fontSize: "11px",
+                    color: "var(--text-secondary)",
                   }}
                 >
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z" />
+                    <polyline points="13 2 13 9 20 9" />
+                  </svg>
                   {getFileName(f)}
                 </span>
               ))}
             </div>
-            <div className="flex items-center gap-2">
+            {/* Action buttons */}
+            <div className="flex items-center gap-1.5">
               <button
                 onClick={handleAcceptChanges}
-                className="px-3 py-1 rounded-md font-medium transition-all duration-150"
+                className="flex-1 py-1.5 rounded-md font-medium transition-colors duration-150"
                 style={{
-                  fontSize: "11px",
-                  background: "#10b981",
-                  color: "white"
+                  fontSize: "12px",
+                  background: "rgba(16,185,129,0.12)",
+                  color: "#10b981",
+                  border: "1px solid rgba(16,185,129,0.25)"
                 }}
-                onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "#059669"}
-                onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "#10b981"}
+                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = "rgba(16,185,129,0.2)" }}
+                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = "rgba(16,185,129,0.12)" }}
               >
                 {t("acceptChanges")}
               </button>
               <button
                 onClick={handleRejectChanges}
-                className="px-3 py-1 rounded-md transition-all duration-150"
+                className="flex-1 py-1.5 rounded-md transition-colors duration-150"
                 style={{
-                  fontSize: "11px",
-                  background: "var(--bg-surface)",
-                  color: "#f87171",
-                  border: "1px solid rgba(248,113,113,0.3)"
+                  fontSize: "12px",
+                  background: "rgba(239,68,68,0.08)",
+                  color: "#ef4444",
+                  border: "1px solid rgba(239,68,68,0.2)"
                 }}
-                onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "rgba(248,113,113,0.1)"}
-                onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "var(--bg-surface)"}
+                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = "rgba(239,68,68,0.15)" }}
+                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = "rgba(239,68,68,0.08)" }}
               >
                 {t("rejectChanges")}
               </button>
@@ -1017,6 +997,13 @@ export function ChatPanel({ onClose }: ChatPanelProps): JSX.Element {
                 )}
               </div>
 
+              {/* Token usage */}
+              {(tokens.input + tokens.output > 0) && (
+                <span style={{ fontSize: "10px", color: "var(--text-ghost)", fontFamily: "monospace" }}>
+                  {((tokens.input + tokens.output) / 1000).toFixed(1)}k
+                </span>
+              )}
+
               {/* Attach file */}
               <button
                 onClick={attachCurrentFile}
@@ -1198,10 +1185,8 @@ function ToolIcon({ type, size = 10 }: { type: string; size?: number }): JSX.Ele
 }
 
 function ToolCallGroup({ events }: { events: ChatMessage[] }): JSX.Element {
-  const [expanded, setExpanded] = useState(false)
+  const [groupOpen, setGroupOpen] = useState(false)
   const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set())
-  const allSuccess = events.every((e) => e.toolSuccess !== false)
-  const failCount = events.filter((e) => e.toolSuccess === false).length
 
   const toggleItem = (id: string) => {
     setExpandedItems((prev) => {
@@ -1212,154 +1197,113 @@ function ToolCallGroup({ events }: { events: ChatMessage[] }): JSX.Element {
     })
   }
 
-  // Summarize tool names for the collapsed view
-  const toolSummary = (() => {
-    const counts: Record<string, number> = {}
-    for (const e of events) {
-      const name = e.toolName ?? "unknown"
-      const label = TOOL_META[name]?.label ?? name
-      counts[label] = (counts[label] ?? 0) + 1
-    }
-    return Object.entries(counts).map(([label, n]) => n > 1 ? `${label} x${n}` : label).join(", ")
-  })()
+  // Extract filename from tool output — only for file-related tools
+  const FILE_TOOLS = new Set(["read_file", "edit_file", "create_file", "delete_file", "list_files", "grep_files"])
+  const getToolTarget = (event: ChatMessage): string => {
+    try {
+      if (!FILE_TOOLS.has(event.toolName ?? "")) return ""
+      const content = event.content
+      const pathMatch = content?.match(/(?:^|\s)([\w.\\/:-]+\.\w+)/)
+      return pathMatch ? getFileName(pathMatch[1]) : ""
+    } catch { return "" }
+  }
+
+  const failCount = events.filter(e => e.toolSuccess === false).length
+  const hasFails = failCount > 0
 
   return (
-    <div className="animate-fade-in" style={{ margin: "2px 0" }}>
-      <div
-        className="rounded-lg overflow-hidden transition-all duration-150"
-        style={{
-          border: "1px solid var(--border-subtle)",
-          background: "var(--bg-panel)"
-        }}
+    <div className="animate-fade-in" style={{ margin: "1px 0" }}>
+      {/* Group header */}
+      <button
+        onClick={() => setGroupOpen(prev => !prev)}
+        className="flex items-center gap-1.5 w-full py-1 px-1 rounded transition-colors duration-100"
+        style={{ textAlign: "left" }}
+        onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "var(--bg-elevated)"}
+        onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "transparent"}
       >
-        {/* Summary header */}
-        <button
-          onClick={() => setExpanded((v) => !v)}
-          className="flex items-center gap-2.5 w-full px-3 py-2 transition-all duration-100"
-          style={{ textAlign: "left" }}
-          onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "var(--bg-elevated)"}
-          onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "transparent"}
+        <svg
+          width="12" height="12" viewBox="0 0 24 24" fill="none"
+          stroke={hasFails ? "#ef4444" : "var(--text-muted)"}
+          strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+          className="flex-shrink-0"
+          style={{ opacity: 0.6, transform: groupOpen ? "rotate(90deg)" : "rotate(0deg)", transition: "transform 150ms" }}
         >
-          {/* Tool icon */}
-          <span
-            className="w-5 h-5 rounded-md flex items-center justify-center flex-shrink-0"
-            style={{
-              background: allSuccess ? "rgba(16,185,129,0.1)" : "rgba(239,68,68,0.1)",
-              color: allSuccess ? "#10b981" : "#ef4444"
-            }}
-          >
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
-            </svg>
-          </span>
-          <div className="flex-1 min-w-0">
-            <span style={{ fontSize: "11px", color: "var(--text-secondary)", fontWeight: 500 }}>
-              Used {events.length} tool{events.length > 1 ? "s" : ""}
-            </span>
-            {failCount > 0 && (
-              <span style={{ fontSize: "10px", color: "#ef4444", marginLeft: 6 }}>
-                {failCount} failed
-              </span>
-            )}
-            {!expanded && (
-              <div className="truncate" style={{ fontSize: "10px", color: "var(--text-muted)", marginTop: 1 }}>
-                {toolSummary}
-              </div>
-            )}
-          </div>
-          <svg
-            width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" strokeWidth="2.5"
-            strokeLinecap="round" strokeLinejoin="round"
-            className="flex-shrink-0 transition-transform duration-200"
-            style={{ transform: expanded ? "rotate(180deg)" : "none" }}
-          >
-            <polyline points="6 9 12 15 18 9" />
+          <polyline points="9 18 15 12 9 6" />
+        </svg>
+        {hasFails ? (
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0">
+            <circle cx="12" cy="12" r="10" /><line x1="15" y1="9" x2="9" y2="15" /><line x1="9" y1="9" x2="15" y2="15" />
           </svg>
-        </button>
-
-        {/* Expanded tool list */}
-        {expanded && (
-          <div style={{ borderTop: "1px solid var(--border-subtle)" }}>
-            {events.map((event, i) => {
-              const toolName = event.toolName ?? "unknown"
-              const meta = TOOL_META[toolName] ?? { label: toolName, icon: "default" }
-              const isBridge = meta.bridge === true
-              const isOpen = expandedItems.has(event.id)
-              const isLast = i === events.length - 1
-              return (
-                <div
-                  key={event.id}
-                  className="animate-fade-in"
-                  style={{
-                    borderBottom: isLast ? "none" : "1px solid var(--border-subtle)",
-                    animationDelay: `${i * 20}ms`
-                  }}
-                >
-                  <button
-                    onClick={() => toggleItem(event.id)}
-                    className="flex items-center gap-2 w-full px-3 py-1.5 transition-all duration-100"
-                    style={{ textAlign: "left" }}
-                    onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "var(--bg-surface)"}
-                    onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "transparent"}
-                  >
-                    {/* Per-tool icon */}
-                    <span
-                      className="w-4 h-4 rounded flex items-center justify-center flex-shrink-0"
-                      style={{
-                        color: isBridge ? "#818cf8" : event.toolSuccess !== false ? "var(--text-muted)" : "#ef4444",
-                        opacity: 0.7
-                      }}
-                    >
-                      <ToolIcon type={meta.icon} size={10} />
-                    </span>
-                    <span style={{
-                      fontSize: "11px",
-                      color: isBridge ? "#818cf8" : "var(--text-secondary)",
-                      fontWeight: 400
-                    }}>
-                      {meta.label}
-                    </span>
-                    {event.toolSuccess === false && (
-                      <span
-                        className="px-1 py-0.5 rounded text-center"
-                        style={{ fontSize: "8px", background: "rgba(239,68,68,0.1)", color: "#ef4444", lineHeight: 1 }}
-                      >
-                        failed
-                      </span>
-                    )}
-                    <svg
-                      width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="var(--text-ghost)" strokeWidth="2.5"
-                      strokeLinecap="round" strokeLinejoin="round"
-                      className="ml-auto flex-shrink-0 transition-transform duration-150"
-                      style={{ transform: isOpen ? "rotate(180deg)" : "none" }}
-                    >
-                      <polyline points="6 9 12 15 18 9" />
-                    </svg>
-                  </button>
-                  {isOpen && (
-                    <div
-                      className="px-3 py-2 selectable animate-fade-in"
-                      style={{
-                        fontSize: "10px",
-                        color: "var(--text-muted)",
-                        fontFamily: "'JetBrains Mono', monospace",
-                        lineHeight: "1.6",
-                        wordBreak: "break-all",
-                        borderTop: "1px solid var(--border-subtle)",
-                        background: "var(--bg-base)",
-                        maxHeight: "120px",
-                        overflowY: "auto"
-                      }}
-                    >
-                      {event.content || <span style={{ fontStyle: "italic", opacity: 0.5 }}>No output</span>}
-                    </div>
-                  )}
-                </div>
-              )
-            })}
-          </div>
+        ) : (
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0" style={{ opacity: 0.6 }}>
+            <polyline points="20 6 9 17 4 12" />
+          </svg>
         )}
-      </div>
+        <span style={{ fontSize: "12px", color: hasFails ? "#ef4444" : "var(--text-muted)" }}>
+          Used {events.length} tool{events.length > 1 ? "s" : ""}{hasFails ? ` (${failCount} failed)` : ""}
+        </span>
+      </button>
+
+      {/* Expanded tool list */}
+      {groupOpen && (
+        <div style={{ marginLeft: "8px", borderLeft: "1px solid var(--border-subtle)", paddingLeft: "8px" }}>
+          {events.map((event, i) => {
+            const toolName = event.toolName ?? "unknown"
+            const meta = TOOL_META[toolName] ?? { label: toolName, icon: "default" }
+            const isBridge = meta.bridge === true
+            const isOpen = expandedItems.has(event.id)
+            const failed = event.toolSuccess === false
+            const target = getToolTarget(event)
+
+            return (
+              <div key={event.id} className="animate-fade-in" style={{ animationDelay: `${i * 20}ms` }}>
+                <button
+                  onClick={() => toggleItem(event.id)}
+                  className="flex items-center gap-1.5 w-full py-0.5 px-1 rounded transition-colors duration-100"
+                  style={{ textAlign: "left" }}
+                  onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "var(--bg-elevated)"}
+                  onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "transparent"}
+                >
+                  {failed ? (
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0">
+                      <circle cx="12" cy="12" r="10" /><line x1="15" y1="9" x2="9" y2="15" /><line x1="9" y1="9" x2="15" y2="15" />
+                    </svg>
+                  ) : (
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={isBridge ? "#818cf8" : "var(--text-muted)"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0" style={{ opacity: 0.6 }}>
+                      <polyline points="20 6 9 17 4 12" />
+                    </svg>
+                  )}
+                  <span className="truncate" style={{
+                    fontSize: "12px",
+                    color: failed ? "#ef4444" : isBridge ? "#818cf8" : "var(--text-muted)",
+                  }}>
+                    {meta.label}{target ? ` ${target}` : ""}
+                  </span>
+                </button>
+                {isOpen && (
+                  <div
+                    className="ml-5 mb-1 rounded selectable animate-fade-in"
+                    style={{
+                      fontSize: "10px",
+                      color: "var(--text-muted)",
+                      fontFamily: "'JetBrains Mono', monospace",
+                      lineHeight: "1.6",
+                      wordBreak: "break-all",
+                      padding: "4px 8px",
+                      background: "var(--bg-base)",
+                      border: "1px solid var(--border-subtle)",
+                      maxHeight: "120px",
+                      overflowY: "auto"
+                    }}
+                  >
+                    {event.content || <span style={{ fontStyle: "italic", opacity: 0.5 }}>No output</span>}
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }

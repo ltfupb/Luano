@@ -311,9 +311,8 @@ export function SyncPanel(): JSX.Element {
             }}
           />
           <span style={{ fontSize: "11px", color: "var(--text-secondary)", flex: 1 }}>
-            Rojo
-            {rojoStatus === "running" && port && (
-              <span style={{ color: "var(--text-muted)", marginLeft: "4px" }}>:{port}</span>
+            Rojo{rojoStatus === "running" && port && (
+              <span style={{ color: "var(--text-muted)" }}>:{port}</span>
             )}
           </span>
           <button
