@@ -121,7 +121,7 @@ export const translations = {
     enterLicenseKey: "Enter license key",
     activate: "Activate",
     getLicenseAt: "Get a license key at",
-    version: "Luano v0.7.9",
+    version: "Luano v0.7.10",
 
     // Toolchain
     toolchainTitle: "Toolchain",
@@ -311,7 +311,7 @@ export const translations = {
     enterLicenseKey: "라이선스 키 입력",
     activate: "활성화",
     getLicenseAt: "라이선스 키 구매:",
-    version: "Luano v0.7.9",
+    version: "Luano v0.7.10",
 
     // Toolchain
     toolchainTitle: "툴체인",

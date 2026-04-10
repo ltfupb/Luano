@@ -1,9 +1,7 @@
 import { app, BrowserWindow, dialog, shell } from "electron"
-import { initSentry } from "./sentry"
 import { log } from "./logger"
 
 app.setName("Luano")
-initSentry()
 import { join } from "path"
 import { electronApp, optimizer, is } from "@electron-toolkit/utils"
 import { registerIpcHandlers, cleanupPtys } from "./ipc/handlers"
@@ -105,6 +103,12 @@ app.whenReady().then(() => {
   registerIpcHandlers()
   setupUpdater()
   createWindow()
+
+  // Defer Sentry init until after the window is shown — keeps crash reporting
+  // available but off the cold-start critical path.
+  setImmediate(() => {
+    import("./sentry").then(({ initSentry }) => initSentry()).catch((err) => log.error("Sentry init failed", err))
+  })
 
   // Validate license key on startup (non-blocking)
   import("./pro/license").then(({ validateLicense }) => validateLicense()).catch((err) => log.error("License validation failed", err))

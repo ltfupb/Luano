@@ -1,20 +1,26 @@
-import { useState, useEffect, useRef, useCallback } from "react"
+import { useState, useEffect, useRef, useCallback, lazy, Suspense } from "react"
 import { useProjectStore } from "./stores/projectStore"
 import { useRojoStore } from "./stores/rojoStore"
 import { useAIStore } from "./stores/aiStore"
 import { useSettingsStore } from "./stores/settingsStore"
 import { useIpcEvent } from "./hooks/useIpc"
 import { Sidebar, SidePanel } from "./components/Sidebar"
-import { SettingsPanel } from "./components/SettingsPanel"
-import { ToolchainPanel } from "./toolchain/ToolchainPanel"
-import { SearchPanel } from "./components/SearchPanel"
 import { QuickOpen } from "./components/QuickOpen"
 import { FileExplorer } from "./explorer/FileExplorer"
-import { EditorPane } from "./editor/EditorPane"
-import { ChatPanel } from "./ai/ChatPanel"
-import { SyncPanel } from "./sync/SyncPanel"
-import { TerminalPane } from "./terminal/TerminalPane"
 import { StatusBar } from "./components/StatusBar"
+import { WelcomeScreen } from "./components/WelcomeScreen"
+import { AppTitlebar } from "./components/AppTitlebar"
+import { ConfirmDialog } from "./components/ConfirmDialog"
+
+// Heavy panels — lazy-loaded to keep cold start fast. Each panel only mounts
+// once the user actually opens it.
+const EditorPane = lazy(() => import("./editor/EditorPane").then((m) => ({ default: m.EditorPane })))
+const SettingsPanel = lazy(() => import("./components/SettingsPanel").then((m) => ({ default: m.SettingsPanel })))
+const ToolchainPanel = lazy(() => import("./toolchain/ToolchainPanel").then((m) => ({ default: m.ToolchainPanel })))
+const SearchPanel = lazy(() => import("./components/SearchPanel").then((m) => ({ default: m.SearchPanel })))
+const ChatPanel = lazy(() => import("./ai/ChatPanel").then((m) => ({ default: m.ChatPanel })))
+const SyncPanel = lazy(() => import("./sync/SyncPanel").then((m) => ({ default: m.SyncPanel })))
+const TerminalPane = lazy(() => import("./terminal/TerminalPane").then((m) => ({ default: m.TerminalPane })))
 import { ErrorBoundary } from "./components/ErrorBoundary"
 import { ToastContainer, toast } from "./components/Toast"
 import { TutorialOverlay, shouldShowTutorial } from "./components/TutorialOverlay"
@@ -33,114 +39,6 @@ function IconChat(): JSX.Element {
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
       <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
     </svg>
-  )
-}
-
-function WelcomeScreen({
-  onOpenFolder,
-  onNewProject,
-  onOpenRecent
-}: {
-  onOpenFolder: () => void
-  onNewProject: () => void
-  onOpenRecent: (path: string) => void
-}): JSX.Element {
-  const t = useT()
-  const recentProjects = useSettingsStore((s) => s.recentProjects)
-  const removeRecent = useSettingsStore((s) => s.removeRecentProject)
-
-  return (
-    <div className="flex-1 flex flex-col items-center justify-center animate-fade-in" style={{ gap: "32px" }}>
-      {/* Header */}
-      <div className="text-center" style={{ marginBottom: "8px" }}>
-        <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>{t("welcome")}</h1>
-        <p className="text-xs mt-2" style={{ color: "var(--text-muted)" }}>{t("welcomeSub")}</p>
-      </div>
-
-      {/* Action cards */}
-      <div className="flex gap-3" style={{ maxWidth: "520px", width: "100%", padding: "0 24px" }}>
-        {/* New Game */}
-        <button
-          onClick={onNewProject}
-          className="flex-1 flex flex-col items-start gap-2 rounded-lg p-4 transition-all duration-150 text-left"
-          style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}
-          onMouseEnter={e => { e.currentTarget.style.borderColor = "var(--accent)"; e.currentTarget.style.background = "var(--bg-surface)" }}
-          onMouseLeave={e => { e.currentTarget.style.borderColor = "var(--border)"; e.currentTarget.style.background = "var(--bg-elevated)" }}
-        >
-          <div className="flex items-center gap-2">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
-            </svg>
-            <span className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>{t("welcomeNewGame")}</span>
-          </div>
-          <span className="text-xs" style={{ color: "var(--text-muted)", lineHeight: "1.4" }}>{t("welcomeNewGameDesc")}</span>
-        </button>
-
-        {/* Open Existing */}
-        <button
-          onClick={onOpenFolder}
-          className="flex-1 flex flex-col items-start gap-2 rounded-lg p-4 transition-all duration-150 text-left"
-          style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}
-          onMouseEnter={e => { e.currentTarget.style.borderColor = "var(--accent)"; e.currentTarget.style.background = "var(--bg-surface)" }}
-          onMouseLeave={e => { e.currentTarget.style.borderColor = "var(--border)"; e.currentTarget.style.background = "var(--bg-elevated)" }}
-        >
-          <div className="flex items-center gap-2">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
-            </svg>
-            <span className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>{t("welcomeOpenProject")}</span>
-          </div>
-          <span className="text-xs" style={{ color: "var(--text-muted)", lineHeight: "1.4" }}>{t("welcomeOpenProjectDesc")}</span>
-        </button>
-      </div>
-
-      {/* Recent projects */}
-      <div style={{ maxWidth: "520px", width: "100%", padding: "0 24px" }}>
-        <p className="text-xs font-medium mb-2" style={{ color: "var(--text-muted)" }}>{t("welcomeRecentProjects")}</p>
-        {recentProjects.length === 0 ? (
-          <p className="text-xs" style={{ color: "var(--text-muted)", opacity: 0.5 }}>{t("welcomeNoRecent")}</p>
-        ) : (
-          <div className="flex flex-col rounded-lg overflow-hidden" style={{ border: "1px solid var(--border)" }}>
-            {recentProjects.map((proj, i) => (
-              <div
-                key={proj.path}
-                className="flex items-center justify-between px-3 py-2 transition-colors duration-100 cursor-pointer"
-                style={{
-                  background: "var(--bg-elevated)",
-                  borderTop: i > 0 ? "1px solid var(--border-subtle)" : undefined
-                }}
-                onClick={() => onOpenRecent(proj.path)}
-                onMouseEnter={e => (e.currentTarget.style.background = "var(--bg-surface)")}
-                onMouseLeave={e => (e.currentTarget.style.background = "var(--bg-elevated)")}
-              >
-                <div className="flex flex-col min-w-0">
-                  <span className="text-xs font-medium truncate" style={{ color: "var(--text-primary)" }}>{proj.name}</span>
-                  <span className="text-xs truncate" style={{ color: "var(--text-muted)", fontSize: "10px" }}>{proj.path}</span>
-                </div>
-                <button
-                  className="ml-2 flex-shrink-0 p-1 rounded transition-colors duration-100"
-                  style={{ color: "var(--text-muted)" }}
-                  onClick={(e) => { e.stopPropagation(); removeRecent(proj.path) }}
-                  onMouseEnter={e => (e.currentTarget.style.color = "var(--text-primary)")}
-                  onMouseLeave={e => (e.currentTarget.style.color = "var(--text-muted)")}
-                  title="Remove"
-                >
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-                  </svg>
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Tip */}
-      <div className="rounded-lg p-3" style={{ maxWidth: "520px", width: "100%", margin: "0 24px", background: "var(--bg-elevated)", border: "1px solid var(--border-subtle)" }}>
-        <p className="text-xs font-medium mb-1" style={{ color: "var(--accent)" }}>{t("welcomeTipTitle")}</p>
-        <p className="text-xs" style={{ color: "var(--text-muted)", lineHeight: "1.5" }}>{t("welcomeTipBody")}</p>
-      </div>
-    </div>
   )
 }
 
@@ -406,22 +304,8 @@ export default function App(): JSX.Element {
     return () => window.removeEventListener("keydown", handler)
   }, [projectPath, setActivePanel, setTerminalOpen])
 
-  const [fileMenuOpen, setFileMenuOpen] = useState(false)
-  const fileMenuRef = useRef<HTMLDivElement>(null)
   const [switchConfirm, setSwitchConfirm] = useState<{ action: "open" | "new" | "close"; path?: string } | null>(null)
   const [rojoSetup, setRojoSetup] = useState<string | null>(null)
-
-  // Close file menu on outside click
-  useEffect(() => {
-    if (!fileMenuOpen) return
-    const handler = (e: MouseEvent) => {
-      if (fileMenuRef.current && !fileMenuRef.current.contains(e.target as Node)) {
-        setFileMenuOpen(false)
-      }
-    }
-    window.addEventListener("mousedown", handler)
-    return () => window.removeEventListener("mousedown", handler)
-  }, [fileMenuOpen])
 
   const switchToProject = useCallback(async (path: string, isNew: boolean) => {
     // Gate: check if minimum toolchain (luau-lsp) is installed BEFORE closing current project
@@ -501,100 +385,16 @@ export default function App(): JSX.Element {
 
   return (
     <div className="flex flex-col h-screen overflow-hidden" style={{ background: "var(--bg-base)", color: "var(--text-primary)" }}>
-      {/* Titlebar */}
-      <div
-        className="h-9 flex items-center px-2 flex-shrink-0 drag-region"
-        style={{ background: "var(--bg-panel)", borderBottom: "1px solid var(--border-subtle)" }}
-      >
-        <div className="flex items-center gap-0.5">
-          <div ref={fileMenuRef} className="relative">
-            <button
-              data-tour="file-btn"
-              onClick={() => setFileMenuOpen((v) => !v)}
-              className="px-2.5 h-7 flex items-center rounded-md text-xs transition-all duration-150"
-              style={{ color: fileMenuOpen ? "var(--text-primary)" : "var(--text-secondary)", background: fileMenuOpen ? "var(--bg-elevated)" : "transparent" }}
-              onMouseEnter={e => { (e.currentTarget).style.background = "var(--bg-elevated)"; (e.currentTarget).style.color = "var(--text-primary)" }}
-              onMouseLeave={e => { if (!fileMenuOpen) { (e.currentTarget).style.background = "transparent"; (e.currentTarget).style.color = "var(--text-secondary)" } }}
-            >
-              File
-            </button>
-            {fileMenuOpen && (
-              <div
-                className="absolute left-0 top-full mt-0.5 z-50 rounded-lg overflow-hidden animate-fade-in"
-                style={{
-                  background: "var(--bg-panel)",
-                  border: "1px solid var(--border)",
-                  boxShadow: "0 8px 24px rgba(0,0,0,0.5)",
-                  minWidth: "180px"
-                }}
-              >
-                <button
-                  onClick={() => { setFileMenuOpen(false); handleNewProject() }}
-                  className="w-full px-3 py-1.5 text-left text-xs flex items-center gap-2 transition-colors duration-100"
-                  style={{ color: "var(--text-secondary)" }}
-                  onMouseEnter={e => { (e.currentTarget).style.background = "var(--bg-elevated)"; (e.currentTarget).style.color = "var(--text-primary)" }}
-                  onMouseLeave={e => { (e.currentTarget).style.background = "transparent"; (e.currentTarget).style.color = "var(--text-secondary)" }}
-                >
-                  {t("newProject")}
-                </button>
-                <button
-                  onClick={() => { setFileMenuOpen(false); handleOpenFolder() }}
-                  className="w-full px-3 py-1.5 text-left text-xs flex items-center gap-2 transition-colors duration-100"
-                  style={{ color: "var(--text-secondary)" }}
-                  onMouseEnter={e => { (e.currentTarget).style.background = "var(--bg-elevated)"; (e.currentTarget).style.color = "var(--text-primary)" }}
-                  onMouseLeave={e => { (e.currentTarget).style.background = "transparent"; (e.currentTarget).style.color = "var(--text-secondary)" }}
-                >
-                  {t("openFolder")}
-                </button>
-                {projectPath && (
-                  <>
-                    <div style={{ height: "1px", background: "var(--border-subtle)", margin: "2px 8px" }} />
-                    <button
-                      onClick={() => { setFileMenuOpen(false); handleCloseProject() }}
-                      className="w-full px-3 py-1.5 text-left text-xs flex items-center gap-2 transition-colors duration-100"
-                      style={{ color: "var(--text-secondary)" }}
-                      onMouseEnter={e => { (e.currentTarget).style.background = "var(--bg-elevated)"; (e.currentTarget).style.color = "var(--text-primary)" }}
-                      onMouseLeave={e => { (e.currentTarget).style.background = "transparent"; (e.currentTarget).style.color = "var(--text-secondary)" }}
-                    >
-                      Close Project
-                    </button>
-                  </>
-                )}
-              </div>
-            )}
-          </div>
-          <button
-            data-tour="settings-btn"
-            onClick={() => setSettingsOpen(true)}
-            className="px-2.5 h-7 flex items-center rounded-md text-xs transition-all duration-150"
-            style={{ color: "var(--text-secondary)" }}
-            onMouseEnter={e => { (e.currentTarget).style.background = "var(--bg-elevated)"; (e.currentTarget).style.color = "var(--text-primary)" }}
-            onMouseLeave={e => { (e.currentTarget).style.background = "transparent"; (e.currentTarget).style.color = "var(--text-secondary)" }}
-          >
-            Settings
-          </button>
-          {projectPath && (
-            <button
-              onClick={() => setTerminalOpen(!terminalOpen)}
-              className="px-2.5 h-7 flex items-center rounded-md text-xs transition-all duration-150"
-              style={{ color: terminalOpen ? "var(--text-primary)" : "var(--text-secondary)" }}
-              onMouseEnter={e => { (e.currentTarget).style.background = "var(--bg-elevated)"; (e.currentTarget).style.color = "var(--text-primary)" }}
-              onMouseLeave={e => { if (!terminalOpen) { (e.currentTarget).style.background = "transparent"; (e.currentTarget).style.color = "var(--text-secondary)" } }}
-            >
-              Terminal
-            </button>
-          )}
-          <button
-            onClick={() => setToolchainOpen(true)}
-            className="px-2.5 h-7 flex items-center rounded-md text-xs transition-all duration-150"
-            style={{ color: "var(--text-secondary)" }}
-            onMouseEnter={e => { (e.currentTarget).style.background = "var(--bg-elevated)"; (e.currentTarget).style.color = "var(--text-primary)" }}
-            onMouseLeave={e => { (e.currentTarget).style.background = "transparent"; (e.currentTarget).style.color = "var(--text-secondary)" }}
-          >
-            Toolchain
-          </button>
-        </div>
-      </div>
+      <AppTitlebar
+        projectPath={projectPath}
+        terminalOpen={terminalOpen}
+        onNewProject={handleNewProject}
+        onOpenFolder={handleOpenFolder}
+        onCloseProject={handleCloseProject}
+        onOpenSettings={() => setSettingsOpen(true)}
+        onToggleTerminal={() => setTerminalOpen(!terminalOpen)}
+        onOpenToolchain={() => setToolchainOpen(true)}
+      />
 
       <div className="flex flex-1 overflow-hidden min-h-0 relative">
         {/* Sidebar */}
@@ -615,11 +415,13 @@ export default function App(): JSX.Element {
               style={{ width: `${sidePanelWidth}px`, background: "var(--bg-panel)" }}
             >
               <ErrorBoundary>
-                {activePanel === "explorer" && <FileExplorer />}
-                {activePanel === "search" && <SearchPanel />}
-                {activePanel === "sync" && <SyncPanel />}
-                {activePanel === "analysis" && <CrossScriptPanel onShowTopology={setShowTopology} />}
-                {activePanel === "datastore" && <DataStorePanel />}
+                <Suspense fallback={null}>
+                  {activePanel === "explorer" && <FileExplorer />}
+                  {activePanel === "search" && <SearchPanel />}
+                  {activePanel === "sync" && <SyncPanel />}
+                  {activePanel === "analysis" && <CrossScriptPanel onShowTopology={setShowTopology} />}
+                  {activePanel === "datastore" && <DataStorePanel />}
+                </Suspense>
               </ErrorBoundary>
             </div>
             <div
@@ -641,13 +443,15 @@ export default function App(): JSX.Element {
           {/* Main editor / topology */}
           <div className="flex-1 flex overflow-hidden min-h-0">
             <ErrorBoundary>
-              {projectPath && activePanel === "analysis" && showTopology ? (
-                <TopologyPanel />
-              ) : projectPath ? (
-                <EditorPane />
-              ) : (
-                <WelcomeScreen onOpenFolder={handleOpenFolder} onNewProject={handleNewProject} onOpenRecent={handleOpenRecent} />
-              )}
+              <Suspense fallback={null}>
+                {projectPath && activePanel === "analysis" && showTopology ? (
+                  <TopologyPanel />
+                ) : projectPath ? (
+                  <EditorPane />
+                ) : (
+                  <WelcomeScreen onOpenFolder={handleOpenFolder} onNewProject={handleNewProject} onOpenRecent={handleOpenRecent} />
+                )}
+              </Suspense>
             </ErrorBoundary>
           </div>
 
@@ -668,11 +472,15 @@ export default function App(): JSX.Element {
 
           {/* Terminal panel (bottom) */}
           {projectPath && terminalOpen && (
-            <TerminalPane
-              projectPath={projectPath}
-              height={terminalHeight}
-              onClose={() => setTerminalOpen(false)}
-            />
+            <ErrorBoundary>
+              <Suspense fallback={null}>
+                <TerminalPane
+                  projectPath={projectPath}
+                  height={terminalHeight}
+                  onClose={() => setTerminalOpen(false)}
+                />
+              </Suspense>
+            </ErrorBoundary>
           )}
         </div>
 
@@ -699,7 +507,9 @@ export default function App(): JSX.Element {
               style={{ background: "var(--bg-panel)" }}
             >
               <ErrorBoundary>
-                <ChatPanel onClose={() => setRightPanelOpen(false)} />
+                <Suspense fallback={null}>
+                  <ChatPanel onClose={() => setRightPanelOpen(false)} />
+                </Suspense>
               </ErrorBoundary>
             </div>
           </div>
@@ -721,126 +531,61 @@ export default function App(): JSX.Element {
       </div>
 
       <StatusBar />
-      {settingsOpen && <SettingsPanel onClose={() => setSettingsOpen(false)} />}
-      {toolchainOpen && <ToolchainPanel onClose={handleToolchainClose} mode={toolchainSetupMode ? "setup" : "normal"} />}
+      <ErrorBoundary>
+        <Suspense fallback={null}>
+          {settingsOpen && <SettingsPanel onClose={() => setSettingsOpen(false)} />}
+          {toolchainOpen && <ToolchainPanel onClose={handleToolchainClose} mode={toolchainSetupMode ? "setup" : "normal"} />}
+        </Suspense>
+      </ErrorBoundary>
       {quickOpenVisible && <QuickOpen onClose={() => setQuickOpenVisible(false)} />}
       <ToastContainer />
 
       {/* Tutorial overlay */}
       {showTutorial && <TutorialOverlay onDone={() => setShowTutorial(false)} />}
 
-      {/* Switch project confirmation (unsaved changes) */}
       {switchConfirm && (
-        <div
-          className="fixed inset-0 z-[100] flex items-center justify-center animate-fade-in"
-          style={{ background: "rgba(5,8,15,0.7)", backdropFilter: "blur(4px)" }}
-          onClick={(e) => { if (e.target === e.currentTarget) setSwitchConfirm(null) }}
-        >
-          <div
-            className="rounded-xl overflow-hidden animate-slide-up"
-            style={{
-              background: "var(--bg-panel)",
-              border: "1px solid var(--border)",
-              boxShadow: "0 16px 48px rgba(0,0,0,0.7)",
-              width: "380px"
-            }}
-          >
-            <div className="px-5 pt-5 pb-3">
-              <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
-                {switchConfirm.action === "close" ? "Close Project" : "Switch Project"}
-              </p>
-              <p className="text-xs mt-1.5" style={{ color: "var(--text-muted)", lineHeight: 1.6 }}>
-                You have <span style={{ color: "var(--accent)" }}>{dirtyFiles.length} unsaved file{dirtyFiles.length > 1 ? "s" : ""}</span> in the current project. Unsaved changes will be lost.
-              </p>
-            </div>
-            <div className="flex items-center gap-2 px-4 pb-4 pt-1">
-              <button
-                onClick={async () => {
-                  const { path, action } = switchConfirm
-                  setSwitchConfirm(null)
-                  if (action === "close") {
-                    closeProject()
-                    clearMessages()
-                    setGlobalSummary("")
-                  } else if (path) {
-                    await switchToProject(path, action === "new")
-                  }
-                }}
-                className="flex-1 py-1.5 rounded-lg text-xs font-medium transition-all duration-150"
-                style={{ background: "var(--accent)", color: "white" }}
-                onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "var(--accent-hover)"}
-                onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "var(--accent)"}
-              >
-                {switchConfirm.action === "close" ? "Close Anyway" : "Switch Anyway"}
-              </button>
-              <button
-                onClick={() => setSwitchConfirm(null)}
-                className="flex-1 py-1.5 rounded-lg text-xs transition-all duration-150"
-                style={{ background: "var(--bg-elevated)", color: "var(--text-secondary)", border: "1px solid var(--border)" }}
-                onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "var(--bg-surface)"}
-                onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "var(--bg-elevated)"}
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
+        <ConfirmDialog
+          title={switchConfirm.action === "close" ? "Close Project" : "Switch Project"}
+          body={
+            <>
+              You have <span style={{ color: "var(--accent)" }}>{dirtyFiles.length} unsaved file{dirtyFiles.length > 1 ? "s" : ""}</span> in the current project. Unsaved changes will be lost.
+            </>
+          }
+          confirmLabel={switchConfirm.action === "close" ? "Close Anyway" : "Switch Anyway"}
+          cancelLabel="Cancel"
+          onConfirm={async () => {
+            const { path, action } = switchConfirm
+            setSwitchConfirm(null)
+            if (action === "close") {
+              closeProject()
+              clearMessages()
+              setGlobalSummary("")
+            } else if (path) {
+              await switchToProject(path, action === "new")
+            }
+          }}
+          onCancel={() => setSwitchConfirm(null)}
+        />
       )}
 
-      {/* Rojo setup dialog */}
       {rojoSetup && (
-        <div
-          className="fixed inset-0 z-[100] flex items-center justify-center animate-fade-in"
-          style={{ background: "rgba(5,8,15,0.7)", backdropFilter: "blur(4px)" }}
-          onClick={(e) => { if (e.target === e.currentTarget) setRojoSetup(null) }}
-        >
-          <div
-            className="rounded-xl overflow-hidden animate-slide-up"
-            style={{
-              background: "var(--bg-panel)",
-              border: "1px solid var(--border)",
-              boxShadow: "0 16px 48px rgba(0,0,0,0.7)",
-              width: "400px"
-            }}
-          >
-            <div className="px-5 pt-5 pb-3">
-              <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
-                {t("rojoSetupTitle")}
-              </p>
-              <p className="text-xs mt-1.5" style={{ color: "var(--text-muted)", lineHeight: 1.6 }}>
-                {t("rojoSetupBody")}
-              </p>
-            </div>
-            <div className="flex items-center gap-2 px-4 pb-4 pt-1">
-              <button
-                onClick={async () => {
-                  const path = rojoSetup
-                  setRojoSetup(null)
-                  await switchToProject(path, true)
-                }}
-                className="flex-1 py-1.5 rounded-lg text-xs font-medium transition-all duration-150"
-                style={{ background: "var(--accent)", color: "white" }}
-                onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "var(--accent-hover)"}
-                onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "var(--accent)"}
-              >
-                {t("rojoSetupConfirm")}
-              </button>
-              <button
-                onClick={async () => {
-                  const path = rojoSetup
-                  setRojoSetup(null)
-                  await switchToProject(path, false)
-                }}
-                className="flex-1 py-1.5 rounded-lg text-xs transition-all duration-150"
-                style={{ background: "var(--bg-elevated)", color: "var(--text-secondary)", border: "1px solid var(--border)" }}
-                onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "var(--bg-surface)"}
-                onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "var(--bg-elevated)"}
-              >
-                {t("rojoSetupCancel")}
-              </button>
-            </div>
-          </div>
-        </div>
+        <ConfirmDialog
+          title={t("rojoSetupTitle")}
+          body={t("rojoSetupBody")}
+          confirmLabel={t("rojoSetupConfirm")}
+          cancelLabel={t("rojoSetupCancel")}
+          width={400}
+          onConfirm={async () => {
+            const path = rojoSetup
+            setRojoSetup(null)
+            await switchToProject(path, true)
+          }}
+          onCancel={async () => {
+            const path = rojoSetup
+            setRojoSetup(null)
+            await switchToProject(path, false)
+          }}
+        />
       )}
     </div>
   )

@@ -1,6 +1,6 @@
 {
   "name": "luano",
-  "version": "0.7.9",
+  "version": "0.7.10",
   "description": "The all-in-one AI-powered code editor for Roblox developers",
   "homepage": "https://github.com/ltfupb/luano",
   "repository": {
@@ -21,13 +21,11 @@
     "lint": "eslint \"src/**/*.{ts,tsx}\" \"electron/**/*.ts\"",
     "typecheck": "tsc -p tsconfig.web.json --noEmit && tsc -p tsconfig.node.json --noEmit",
     "test": "vitest run",
-    "test:e2e": "npx playwright test",
     "test:watch": "vitest"
   },
   "devDependencies": {
     "@electron-toolkit/preload": "^3.0.1",
     "@electron-toolkit/utils": "^3.0.0",
-    "@playwright/test": "^1.59.1",
     "@types/better-sqlite3": "^7.6.11",
     "@types/node": "^20.14.8",
     "@types/react": "^18.3.3",
@@ -43,7 +41,6 @@
     "eslint": "^8.57.1",
     "eslint-plugin-react": "^7.37.5",
     "eslint-plugin-react-hooks": "^7.0.1",
-    "playwright": "^1.59.1",
     "postcss": "^8.4.38",
     "tailwindcss": "^3.4.4",
     "typescript": "^5.5.2",

@@ -1,6 +1,7 @@
 // src/editor/EditorPane.tsx
 // Monaco editor with Luau LSP, Cmd+K inline edit, and tab bar
 
+import "./monacoInit"
 import { useEffect, useCallback, useState, useRef } from "react"
 import Editor from "@monaco-editor/react"
 import type * as Monaco from "monaco-editor"
@@ -9,6 +10,7 @@ import { useSettingsStore } from "../stores/settingsStore"
 import { useIpcEvent } from "../hooks/useIpc"
 import { startLuauLanguageClient, stopLuauLanguageClient } from "./LuauLanguageClient"
 import { registerLuauSnippets } from "./LuauSnippets"
+import { getLanguageFromPath, registerCustomLanguages } from "./languages"
 import { InlineEditOverlay } from "../lib/loadPro"
 import { getFileName } from "../lib/utils"
 
@@ -19,6 +21,7 @@ let _snippetsRegistered = false
 function defineEditorTheme(monaco: typeof Monaco): void {
   if (!_snippetsRegistered) {
     registerLuauSnippets(monaco)
+    registerCustomLanguages(monaco)
     _snippetsRegistered = true
   }
 
@@ -617,7 +620,7 @@ export function EditorPane(): JSX.Element {
             <Editor
               key={activeFile}
               height="100%"
-              language="lua"
+              language={getLanguageFromPath(activeFile)}
               theme={monacoTheme}
               value={fileContents[activeFile] ?? ""}
               onChange={handleEditorChange}
@@ -695,7 +698,7 @@ export function EditorPane(): JSX.Element {
                   <Editor
                     key={`split-${splitFile}`}
                     height="100%"
-                    language="lua"
+                    language={getLanguageFromPath(splitFile)}
                     theme={monacoTheme}
                     value={fileContents[splitFile] ?? ""}
                     onChange={handleSplitEditorChange}

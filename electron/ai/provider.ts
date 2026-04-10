@@ -1,8 +1,40 @@
-import Anthropic from "@anthropic-ai/sdk"
-import OpenAI from "openai"
-import { GoogleGenerativeAI, type GenerativeModel } from "@google/generative-ai"
+import type Anthropic from "@anthropic-ai/sdk"
+import type OpenAI from "openai"
+import type { GoogleGenerativeAI, GenerativeModel } from "@google/generative-ai"
 import { store } from "../store"
 import { BrowserWindow } from "electron"
+
+// ── Lazy SDK loaders ─────────────────────────────────────────────────────────
+// AI SDKs are large (~650KB total) and pulled in only when the user actually
+// triggers chat. Dynamic imports keep them out of the cold-start critical path.
+
+let _AnthropicCtor: typeof Anthropic | null = null
+let _OpenAICtor: typeof OpenAI | null = null
+let _GeminiCtor: typeof GoogleGenerativeAI | null = null
+
+async function loadAnthropic(): Promise<typeof Anthropic> {
+  if (!_AnthropicCtor) {
+    const mod = await import("@anthropic-ai/sdk")
+    _AnthropicCtor = mod.default
+  }
+  return _AnthropicCtor
+}
+
+async function loadOpenAI(): Promise<typeof OpenAI> {
+  if (!_OpenAICtor) {
+    const mod = await import("openai")
+    _OpenAICtor = mod.default
+  }
+  return _OpenAICtor
+}
+
+async function loadGemini(): Promise<typeof GoogleGenerativeAI> {
+  if (!_GeminiCtor) {
+    const mod = await import("@google/generative-ai")
+    _GeminiCtor = mod.GoogleGenerativeAI
+  }
+  return _GeminiCtor
+}
 
 // ── Agent types (used by pro/index.ts — implementation in pro/modules.ts) ──
 
@@ -82,45 +114,50 @@ export function getModel(): string {
   return MODELS[provider][0].id
 }
 
-export function getAnthropicClient(): Anthropic {
+export async function getAnthropicClient(): Promise<Anthropic> {
   if (!anthropicClient) {
     const apiKey = store.get("apiKey") as string | undefined
     if (!apiKey) throw new Error("Anthropic API key not set")
-    anthropicClient = new Anthropic({ apiKey, timeout: 60_000 })
+    const AnthropicCtor = await loadAnthropic()
+    anthropicClient = new AnthropicCtor({ apiKey, timeout: 60_000 })
   }
   return anthropicClient
 }
 
-export function getOpenAIClient(): OpenAI {
+export async function getOpenAIClient(): Promise<OpenAI> {
   if (!openaiClient) {
     const apiKey = store.get("openaiKey") as string | undefined
     if (!apiKey) throw new Error("OpenAI API key not set")
-    openaiClient = new OpenAI({ apiKey, timeout: 60_000 })
+    const OpenAICtor = await loadOpenAI()
+    openaiClient = new OpenAICtor({ apiKey, timeout: 60_000 })
   }
   return openaiClient
 }
 
-export function getGeminiClient(): GoogleGenerativeAI {
+export async function getGeminiClient(): Promise<GoogleGenerativeAI> {
   if (!geminiClient) {
     const apiKey = store.get("geminiKey") as string | undefined
     if (!apiKey) throw new Error("Gemini API key not set")
-    geminiClient = new GoogleGenerativeAI(apiKey)
+    const GeminiCtor = await loadGemini()
+    geminiClient = new GeminiCtor(apiKey)
   }
   return geminiClient
 }
 
-function getGeminiModel(systemPrompt?: string): GenerativeModel {
-  return getGeminiClient().getGenerativeModel({
+async function getGeminiModel(systemPrompt?: string): Promise<GenerativeModel> {
+  const client = await getGeminiClient()
+  return client.getGenerativeModel({
     model: getModel(),
     ...(systemPrompt ? { systemInstruction: systemPrompt } : {})
   })
 }
 
-export function getLocalClient(): OpenAI {
+export async function getLocalClient(): Promise<OpenAI> {
   const endpoint = (store.get("localEndpoint") as string) || "http://localhost:11434/v1"
   const apiKey = (store.get("localKey") as string) || "ollama"
   if (!localClient || localClientEndpoint !== endpoint || localClientKey !== apiKey) {
-    localClient = new OpenAI({ baseURL: endpoint, apiKey, timeout: 120_000 })
+    const OpenAICtor = await loadOpenAI()
+    localClient = new OpenAICtor({ baseURL: endpoint, apiKey, timeout: 120_000 })
     localClientEndpoint = endpoint
     localClientKey = apiKey
   }
@@ -189,7 +226,7 @@ export function getLocalModel(): string {
 
 export async function fetchLocalModels(): Promise<Array<{ id: string; label: string }>> {
   try {
-    const client = getLocalClient()
+    const client = await getLocalClient()
     const list = await withTimeout(client.models.list(), 10_000)
     const models: Array<{ id: string; label: string }> = []
     for await (const m of list) {
@@ -273,10 +310,10 @@ export interface ChatMessage {
 
 // ── Provider Helpers ─────────────────────────────────────────────────────────
 
-function getOpenAICompat(): { client: OpenAI; timeout: number } {
+async function getOpenAICompat(): Promise<{ client: OpenAI; timeout: number }> {
   return getProvider() === "local"
-    ? { client: getLocalClient(), timeout: 120_000 }
-    : { client: getOpenAIClient(), timeout: 60_000 }
+    ? { client: await getLocalClient(), timeout: 120_000 }
+    : { client: await getOpenAIClient(), timeout: 60_000 }
 }
 
 function toGeminiContents(messages: ChatMessage[]) {
@@ -326,7 +363,7 @@ export async function chat(messages: ChatMessage[], systemPrompt: string): Promi
   const model = getModel()
 
   if (provider === "openai" || provider === "local") {
-    const { client, timeout } = getOpenAICompat()
+    const { client, timeout } = await getOpenAICompat()
     const response = await withRetry(() => withTimeout(client.chat.completions.create({
       model,
       ...(provider === "local" ? {} : { max_tokens: 8192 }),
@@ -336,14 +373,16 @@ export async function chat(messages: ChatMessage[], systemPrompt: string): Promi
   }
 
   if (provider === "gemini") {
+    const geminiModel = await getGeminiModel(systemPrompt)
     const response = await withRetry(() => withTimeout(
-      getGeminiModel(systemPrompt).generateContent({ contents: toGeminiContents(messages) }),
+      geminiModel.generateContent({ contents: toGeminiContents(messages) }),
       60_000
     ))
     return response.response.text()
   }
 
-  const response = await withRetry(() => withTimeout(getAnthropicClient().messages.create({
+  const anthropic = await getAnthropicClient()
+  const response = await withRetry(() => withTimeout(anthropic.messages.create({
     model, max_tokens: 8192,
     system: toCachedSystem(systemPrompt),
     messages
@@ -379,7 +418,7 @@ export async function chatStream(
 
   try {
     if (provider === "openai" || provider === "local") {
-      const { client, timeout } = getOpenAICompat()
+      const { client, timeout } = await getOpenAICompat()
       const stream = await withTimeout(client.chat.completions.create({
         model,
         ...(provider === "local" ? {} : { max_tokens: 8192 }),
@@ -395,8 +434,9 @@ export async function chatStream(
     }
 
     if (provider === "gemini") {
+      const geminiModel = await getGeminiModel(systemPrompt)
       const result = await withTimeout(
-        getGeminiModel(systemPrompt).generateContentStream({ contents: toGeminiContents(messages) }),
+        geminiModel.generateContentStream({ contents: toGeminiContents(messages) }),
         60_000
       )
       for await (const chunk of result.stream) {
@@ -407,7 +447,8 @@ export async function chatStream(
       return
     }
 
-    const stream = getAnthropicClient().messages.stream({
+    const anthropic = await getAnthropicClient()
+    const stream = anthropic.messages.stream({
       model,
       max_tokens: 8192,
       system: toCachedSystem(systemPrompt),
