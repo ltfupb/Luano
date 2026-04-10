@@ -30,17 +30,7 @@ export function getUserBinDir(): string {
 
 export function getBinaryPath(name: string): string {
   const ext = process.platform === "win32" ? ".exe" : ""
-
-  // 1. Check user-data directory (on-demand downloads)
-  const userBin = join(getUserBinDir(), `${name}${ext}`)
-  if (existsSync(userBin)) return userBin
-
-  // 2. Check bundled resources
-  const platform = process.platform === "win32" ? "win" : process.platform === "darwin" ? "mac" : "linux"
-  if (is.dev) {
-    return join(resolveProjectRoot(), "resources", "binaries", platform, `${name}${ext}`)
-  }
-  return join(process.resourcesPath, "binaries", `${name}${ext}`)
+  return join(getUserBinDir(), `${name}${ext}`)
 }
 
 export function isBinaryAvailable(name: string): boolean {
@@ -53,7 +43,7 @@ export function validateBinary(name: string): void {
     throw new Error(
       `Binary not found: ${name}\n` +
       `Path: ${binPath}\n` +
-      `Ensure the binary is installed via Settings → Toolchain, or bundled in resources/binaries/.`
+      `Install it via Settings → Toolchain.`
     )
   }
 }

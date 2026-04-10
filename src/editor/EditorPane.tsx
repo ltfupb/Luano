@@ -471,16 +471,16 @@ export function EditorPane(): JSX.Element {
           const isDirty = dirtyFiles.includes(path)
 
           // File icon color based on Roblox script type
-          let dotColor = "#3a5272"
+          let dotColor = "var(--text-ghost)"
           if (name.endsWith(".lua") || name.endsWith(".luau")) {
             if (path.includes("/server/") || path.includes("\\server\\") ||
                 name.includes(".server")) {
-              dotColor = "#10b981" // server = green
+              dotColor = "var(--success)" // server = green
             } else if (path.includes("/client/") || path.includes("\\client\\") ||
                        name.includes(".client")) {
-              dotColor = "#3b82f6" // client = blue
+              dotColor = "var(--info)" // client = blue
             } else {
-              dotColor = "#8b5cf6" // shared = purple
+              dotColor = "var(--accent)" // shared = purple
             }
           }
 

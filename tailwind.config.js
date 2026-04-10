@@ -5,32 +5,33 @@ export default {
     extend: {
       colors: {
         surface: {
-          0: "#05080f",
-          1: "#080d18",
-          2: "#0c1423",
-          3: "#101d30",
-          4: "#152538"
+          base: "var(--bg-base)",
+          panel: "var(--bg-panel)",
+          elevated: "var(--bg-elevated)",
+          DEFAULT: "var(--bg-surface)",
+          hover: "var(--bg-hover)"
         },
         border: {
-          subtle: "#111d30",
-          DEFAULT: "#1a2d45",
-          strong: "#243f62"
+          subtle: "var(--border-subtle)",
+          DEFAULT: "var(--border)",
+          strong: "var(--border-strong)"
         },
         accent: {
-          DEFAULT: "#2563eb",
-          hover: "#1d4ed8",
-          muted: "rgba(37,99,235,0.12)",
-          glow: "rgba(37,99,235,0.35)"
+          DEFAULT: "var(--accent)",
+          hover: "var(--accent-hover)",
+          muted: "var(--accent-muted)",
+          glow: "var(--accent-glow)"
         },
         ink: {
-          primary: "#e2e8f4",
-          secondary: "#6b8fb5",
-          muted: "#3a5272",
-          ghost: "#1e3050"
+          primary: "var(--text-primary)",
+          secondary: "var(--text-secondary)",
+          muted: "var(--text-muted)",
+          ghost: "var(--text-ghost)"
         },
-        success: "#10b981",
-        warning: "#f59e0b",
-        danger: "#e11d48"
+        success: "var(--success)",
+        warning: "var(--warning)",
+        danger: "var(--danger)",
+        info: "var(--info)"
       },
       animation: {
         "fade-in": "fadeIn 0.18s ease-out",

@@ -43,7 +43,7 @@ export class ErrorBoundary extends Component<Props, State> {
           style={{ background: "var(--bg-base)", color: "var(--text-primary)" }}
         >
           <div className="w-12 h-12 rounded-xl bg-red-950 border border-red-800 flex items-center justify-center">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f87171" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--danger)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="12" cy="12" r="10" />
               <line x1="12" y1="8" x2="12" y2="12" />
               <line x1="12" y1="16" x2="12.01" y2="16" />
@@ -57,8 +57,8 @@ export class ErrorBoundary extends Component<Props, State> {
           </div>
           <button
             onClick={() => this.setState({ hasError: false, error: null })}
-            className="px-4 py-1.5 text-xs rounded-lg bg-[#1a2d45] hover:bg-[#1e3a5a] transition-colors"
-            style={{ color: "var(--text-secondary)", border: "1px solid var(--border)" }}
+            className="px-4 py-1.5 text-xs rounded-lg transition-colors"
+            style={{ background: "var(--bg-elevated)", color: "var(--text-secondary)", border: "1px solid var(--border)" }}
           >
             {getT("retry")}
           </button>

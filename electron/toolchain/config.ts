@@ -10,6 +10,11 @@ import { store } from "../store"
 import { type ToolCategory, getDefaultToolId, TOOL_REGISTRY } from "./registry"
 import { isBinaryAvailable } from "../sidecar"
 
+/** Check if the minimum toolchain (luau-lsp) is installed and ready */
+export function isMinimumToolchainReady(): boolean {
+  return isBinaryAvailable("luau-lsp")
+}
+
 interface ProjectToolchain {
   [category: string]: string
 }
@@ -90,7 +95,7 @@ export function getToolchainConfig(projectPath?: string): {
   }
 
   for (const tool of Object.values(TOOL_REGISTRY)) {
-    installed[tool.id] = tool.bundled || isBinaryAvailable(tool.binaryName)
+    installed[tool.id] = isBinaryAvailable(tool.binaryName)
   }
 
   return { selections, installed }

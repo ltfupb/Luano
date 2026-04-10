@@ -19,8 +19,8 @@ import {
 import { aiGeneratedFiles, PRO_REQUIRED, collectLuauFiles, setCurrentProject, getCurrentProject } from "./shared"
 import { isPro } from "../pro"
 import { activateLicense, deactivateLicense, getLicenseInfo, validateLicense as revalidateLicense } from "../pro/license"
-import { getToolchainConfig, getActiveTool, setProjectTool, setGlobalDefault } from "../toolchain/config"
-import { downloadTool, getDownloadStatus, removeTool, checkToolUpdates, updateTool } from "../toolchain/downloader"
+import { getToolchainConfig, getActiveTool, setProjectTool, setGlobalDefault, isMinimumToolchainReady } from "../toolchain/config"
+import { downloadTool, downloadMultiple, getDownloadStatus, removeTool, checkToolUpdates, updateTool } from "../toolchain/downloader"
 import { TOOL_REGISTRY, CATEGORIES, type ToolCategory } from "../toolchain/registry"
 import { packageInstall, packageInit } from "../toolchain/package-runner"
 
@@ -343,6 +343,14 @@ export function registerProjectHandlers(): void {
 
   ipcMain.handle("toolchain:update-tool", (_, toolId: string, downloadUrl: string, latestVersion?: string) =>
     updateTool(toolId, downloadUrl, latestVersion)
+  )
+
+  ipcMain.handle("toolchain:download-multiple", async (_, toolIds: string[]) =>
+    downloadMultiple(toolIds)
+  )
+
+  ipcMain.handle("toolchain:is-minimum-ready", () =>
+    isMinimumToolchainReady()
   )
 
   // ── Package Manager ────────────────────────────────────────────────────

@@ -13,10 +13,10 @@ interface UpdateState {
 }
 
 const statusDot: Record<string, string> = {
-  stopped: "#3a5272",
-  starting: "#f59e0b",
-  running: "#10b981",
-  error: "#e11d48"
+  stopped: "var(--text-ghost)",
+  starting: "var(--warning)",
+  running: "var(--success)",
+  error: "var(--danger)"
 }
 
 export function StatusBar(): JSX.Element {
@@ -98,7 +98,7 @@ export function StatusBar(): JSX.Element {
           className="w-1.5 h-1.5 rounded-full flex-shrink-0"
           style={{
             background: statusDot[status] ?? statusDot.stopped,
-            boxShadow: status === "running" ? "0 0 4px #10b981" : "none"
+            boxShadow: status === "running" ? "0 0 4px var(--success)" : "none"
           }}
         />
         <span style={{ color: "var(--text-secondary)" }}>{statusLabel[status] ?? status}</span>
@@ -119,7 +119,7 @@ export function StatusBar(): JSX.Element {
           <button
             onClick={() => window.dispatchEvent(new CustomEvent("open-toolchain"))}
             className="flex items-center gap-1 transition-colors duration-100"
-            style={{ color: "#60a5fa", background: "none", border: "none", fontSize: "11px", cursor: "pointer" }}
+            style={{ color: "var(--info)", background: "none", border: "none", fontSize: "11px", cursor: "pointer" }}
           >
             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="12" cy="12" r="3" />
@@ -138,7 +138,7 @@ export function StatusBar(): JSX.Element {
             onClick={handleUpdateAction}
             className="flex items-center gap-1 transition-colors duration-100"
             style={{
-              color: update.status === "downloaded" ? "#10b981" : "#60a5fa",
+              color: update.status === "downloaded" ? "var(--success)" : "var(--info)",
               cursor: update.status === "downloading" ? "default" : "pointer",
               background: "none",
               border: "none",
@@ -177,7 +177,7 @@ export function StatusBar(): JSX.Element {
         <>
           <span style={{ color: "var(--border)", userSelect: "none" }}>·</span>
           <span
-            style={{ color: memMB > 500 ? "#f59e0b" : "var(--text-muted)" }}
+            style={{ color: memMB > 500 ? "var(--warning)" : "var(--text-muted)" }}
             title={`Memory: ${memMB} MB RSS`}
           >
             {memMB} MB

@@ -5,10 +5,10 @@ import { useT } from "../i18n/useT"
 import { TranslationKey } from "../i18n/translations"
 
 const statusConfig: Record<string, { color: string; glow: boolean; labelKey: TranslationKey }> = {
-  stopped:    { color: "#3a5272", glow: false, labelKey: "rojoStopped" },
-  starting:   { color: "#f59e0b", glow: false, labelKey: "rojoStarting" },
-  running:    { color: "#10b981", glow: true,  labelKey: "rojoServing" },
-  error:      { color: "#e11d48", glow: false, labelKey: "rojoError" }
+  stopped:    { color: "var(--text-ghost)", glow: false, labelKey: "rojoStopped" },
+  starting:   { color: "var(--warning)", glow: false, labelKey: "rojoStarting" },
+  running:    { color: "var(--success)", glow: true,  labelKey: "rojoServing" },
+  error:      { color: "var(--danger)", glow: false, labelKey: "rojoError" }
 }
 
 export function RojoPanel(): JSX.Element {
@@ -103,9 +103,9 @@ export function RojoPanel(): JSX.Element {
           onClick={handleToggle}
           className="py-1.5 px-3 rounded-lg text-xs font-medium transition-all duration-150"
           style={{
-            background: isActive ? "rgba(225,29,72,0.12)" : "rgba(37,99,235,0.12)",
-            color: isActive ? "#fb7185" : "#60a5fa",
-            border: `1px solid ${isActive ? "rgba(225,29,72,0.3)" : "rgba(37,99,235,0.3)"}`
+            background: isActive ? "rgba(244,71,71,0.12)" : "var(--accent-muted)",
+            color: isActive ? "var(--danger)" : "var(--info)",
+            border: `1px solid ${isActive ? "rgba(244,71,71,0.3)" : "var(--accent-muted)"}`
           }}
           onMouseEnter={e => (e.currentTarget as HTMLElement).style.opacity = "0.8"}
           onMouseLeave={e => (e.currentTarget as HTMLElement).style.opacity = "1"}
@@ -127,9 +127,9 @@ export function RojoPanel(): JSX.Element {
               disabled={batchRunning || !projectPath}
               className="flex-1 py-1.5 px-2 rounded-lg text-xs font-medium transition-all duration-150 disabled:opacity-40"
               style={{
-                background: "rgba(16,185,129,0.1)",
-                color: "#10b981",
-                border: "1px solid rgba(16,185,129,0.25)"
+                background: "var(--accent-muted)",
+                color: "var(--success)",
+                border: "1px solid var(--border-subtle)"
               }}
             >
               {batchRunning ? t("running") : t("formatAll")}
@@ -139,9 +139,9 @@ export function RojoPanel(): JSX.Element {
               disabled={batchRunning || !projectPath}
               className="flex-1 py-1.5 px-2 rounded-lg text-xs font-medium transition-all duration-150 disabled:opacity-40"
               style={{
-                background: "rgba(96,165,250,0.1)",
-                color: "#60a5fa",
-                border: "1px solid rgba(96,165,250,0.25)"
+                background: "var(--accent-muted)",
+                color: "var(--info)",
+                border: "1px solid var(--border-subtle)"
               }}
             >
               {batchRunning ? t("running") : t("lintAll")}

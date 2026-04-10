@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest"
 
-import { TOOL_REGISTRY, CATEGORIES, getToolsForCategory, getDefaultToolId } from "../electron/toolchain/registry"
+import { TOOL_REGISTRY, CATEGORIES, getToolsForCategory, getDefaultToolId, getRecommendedToolIds } from "../electron/toolchain/registry"
 
 describe("TOOL_REGISTRY", () => {
   it("has all expected tools", () => {
@@ -31,10 +31,10 @@ describe("TOOL_REGISTRY", () => {
     }
   })
 
-  it("bundled tools have known binary names", () => {
-    const bundled = Object.values(TOOL_REGISTRY).filter(t => t.bundled)
-    expect(bundled.length).toBeGreaterThanOrEqual(4)
-    for (const tool of bundled) {
+  it("recommended tools have known binary names", () => {
+    const recommended = Object.values(TOOL_REGISTRY).filter(t => t.recommended)
+    expect(recommended.length).toBeGreaterThanOrEqual(4)
+    for (const tool of recommended) {
       expect(tool.binaryName).toBeTruthy()
     }
   })
@@ -66,11 +66,30 @@ describe("getToolsForCategory", () => {
 })
 
 describe("getDefaultToolId", () => {
-  it("returns bundled tool for sync", () => {
+  it("returns recommended tool for sync", () => {
     expect(getDefaultToolId("sync")).toBe("rojo")
   })
 
-  it("returns null for category with no bundled tool", () => {
+  it("returns null for category with no recommended tool", () => {
     expect(getDefaultToolId("package-manager")).toBeNull()
+  })
+})
+
+describe("getRecommendedToolIds", () => {
+  it("returns all recommended tool ids", () => {
+    const ids = getRecommendedToolIds()
+    expect(ids).toContain("rojo")
+    expect(ids).toContain("selene")
+    expect(ids).toContain("stylua")
+    expect(ids).toContain("luau-lsp")
+    expect(ids.length).toBeGreaterThanOrEqual(4)
+  })
+
+  it("does not include non-recommended tools", () => {
+    const ids = getRecommendedToolIds()
+    expect(ids).not.toContain("argon")
+    expect(ids).not.toContain("wally")
+    expect(ids).not.toContain("pesde")
+    expect(ids).not.toContain("darklua")
   })
 })

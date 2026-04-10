@@ -132,6 +132,9 @@ export const translations = {
     toolchainActivate: "Activate",
     toolchainActive: "Active",
     toolchainDownloading: "Installing...",
+    toolchainSetup: "Toolchain Setup",
+    toolchainSetupHint: "Install the tools you need to get started",
+    toolchainRecommended: "Install Recommended",
 
     // EditorPane
     openFile: "Open a file to edit",
@@ -319,6 +322,9 @@ export const translations = {
     toolchainActivate: "활성화",
     toolchainActive: "활성",
     toolchainDownloading: "설치 중...",
+    toolchainSetup: "툴체인 설정",
+    toolchainSetupHint: "시작하려면 필요한 도구를 설치하세요",
+    toolchainRecommended: "추천 도구 설치",
 
     openFile: "파일을 열어 편집하세요",
 

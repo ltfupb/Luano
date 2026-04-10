@@ -71,15 +71,8 @@ export function SearchPanel(): JSX.Element {
   return (
     <div className="flex flex-col h-full overflow-hidden">
       {/* Header */}
-      <div
-        className="px-3 py-2 flex-shrink-0"
-        style={{
-          fontSize: "10px", fontWeight: 600, letterSpacing: "0.08em",
-          textTransform: "uppercase", color: "var(--text-secondary)",
-          borderBottom: "1px solid var(--border-subtle)"
-        }}
-      >
-        Search
+      <div className="flex items-center gap-2 px-3 py-2 flex-shrink-0" style={{ borderBottom: "1px solid var(--border-subtle)" }}>
+        <span style={{ fontSize: "10px", fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--text-secondary)" }}>Search</span>
       </div>
 
       {/* Search input */}

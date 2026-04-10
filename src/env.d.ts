@@ -308,7 +308,7 @@ interface Window {
     toolchainRegistry: () => Promise<{
       tools: Record<string, {
         id: string; name: string; description: string
-        category: string; bundled: boolean; version: string
+        category: string; recommended: boolean; version: string
         github: string; binaryName: string; configFiles?: string[]
       }>
       categories: Array<{ id: string; label: string; allowNone: boolean }>
@@ -328,6 +328,8 @@ interface Window {
       downloadUrl: string
     }>>
     toolchainUpdateTool: (toolId: string, downloadUrl: string, latestVersion?: string) => Promise<{ success: boolean; error?: string }>
+    toolchainDownloadMultiple: (toolIds: string[]) => Promise<Record<string, { success: boolean; error?: string }>>
+    toolchainIsMinimumReady: () => Promise<boolean>
 
     // Package Manager
     packageInstall: (projectPath: string) => Promise<{ success: boolean; output: string }>

@@ -79,10 +79,10 @@ export function CodeBlock({ code, lang }: CodeBlockProps): JSX.Element {
               className="flex items-center gap-1 px-1.5 py-0.5 rounded transition-all duration-150"
               style={{
                 fontSize: "10px",
-                color: copied ? "#10b981" : "var(--text-muted)"
+                color: copied ? "var(--success)" : "var(--text-muted)"
               }}
               onMouseEnter={e => (e.currentTarget as HTMLElement).style.color = "var(--text-secondary)"}
-              onMouseLeave={e => (e.currentTarget as HTMLElement).style.color = copied ? "#10b981" : "var(--text-muted)"}
+              onMouseLeave={e => (e.currentTarget as HTMLElement).style.color = copied ? "var(--success)" : "var(--text-muted)"}
             >
               <IconCopy />
               {copied ? "Copied!" : t("copy")}
@@ -94,8 +94,8 @@ export function CodeBlock({ code, lang }: CodeBlockProps): JSX.Element {
                 className="px-2 py-0.5 rounded transition-all duration-150"
                 style={{
                   fontSize: "10px",
-                  color: applied ? "#10b981" : "#60a5fa",
-                  background: applied ? "rgba(16,185,129,0.1)" : "rgba(37,99,235,0.12)",
+                  color: applied ? "var(--success)" : "var(--info)",
+                  background: applied ? "rgba(16,185,129,0.1)" : "var(--accent-muted)",
                   border: `1px solid ${applied ? "rgba(16,185,129,0.25)" : "rgba(37,99,235,0.3)"}`,
                   cursor: applied ? "default" : "pointer"
                 }}
@@ -134,7 +134,7 @@ export function CodeBlock({ code, lang }: CodeBlockProps): JSX.Element {
           >
             <span
               className="font-semibold"
-              style={{ fontSize: "12px", color: "#60a5fa" }}
+              style={{ fontSize: "12px", color: "var(--info)" }}
             >
               {t("diffPreview")}
             </span>
@@ -165,12 +165,12 @@ export function CodeBlock({ code, lang }: CodeBlockProps): JSX.Element {
               onClick={handleAccept}
               className="px-4 py-1.5 rounded-lg font-medium transition-all duration-150"
               style={{
-                background: "#10b981",
+                background: "var(--success)",
                 color: "white",
                 fontSize: "12px"
               }}
-              onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "#059669"}
-              onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "#10b981"}
+              onMouseEnter={e => (e.currentTarget as HTMLElement).style.opacity = "0.85"}
+              onMouseLeave={e => (e.currentTarget as HTMLElement).style.opacity = "1"}
             >
               {t("accept")}
             </button>

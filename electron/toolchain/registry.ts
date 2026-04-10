@@ -12,7 +12,7 @@ export interface ToolDefinition {
   name: string
   description: string
   category: ToolCategory
-  bundled: boolean
+  recommended: boolean
   version: string
   github: string
   binaryName: string
@@ -40,7 +40,7 @@ export const TOOL_REGISTRY: Record<string, ToolDefinition> = {
     name: "Rojo",
     description: "File sync between filesystem and Roblox Studio",
     category: "sync",
-    bundled: true,
+    recommended: true,
     version: "7.6.1",
     github: "rojo-rbx/rojo",
     binaryName: "rojo",
@@ -61,7 +61,7 @@ export const TOOL_REGISTRY: Record<string, ToolDefinition> = {
     name: "Argon",
     description: "Full-featured Roblox sync tool with two-way sync",
     category: "sync",
-    bundled: false,
+    recommended: false,
     version: "2.0.28",
     github: "argon-rbx/argon",
     binaryName: "argon",
@@ -82,7 +82,7 @@ export const TOOL_REGISTRY: Record<string, ToolDefinition> = {
     name: "Selene",
     description: "A blazing-fast linter for Lua and Luau",
     category: "linter",
-    bundled: true,
+    recommended: true,
     version: "0.30.1",
     github: "Kampfkarren/selene",
     binaryName: "selene",
@@ -103,7 +103,7 @@ export const TOOL_REGISTRY: Record<string, ToolDefinition> = {
     name: "StyLua",
     description: "An opinionated Lua/Luau code formatter",
     category: "formatter",
-    bundled: true,
+    recommended: true,
     version: "2.4.0",
     github: "JohnnyMorganz/StyLua",
     binaryName: "stylua",
@@ -124,7 +124,7 @@ export const TOOL_REGISTRY: Record<string, ToolDefinition> = {
     name: "luau-lsp",
     description: "Language server for Luau with autocomplete, diagnostics, and hover",
     category: "lsp",
-    bundled: true,
+    recommended: true,
     version: "1.64.0",
     github: "JohnnyMorganz/luau-lsp",
     binaryName: "luau-lsp",
@@ -144,7 +144,7 @@ export const TOOL_REGISTRY: Record<string, ToolDefinition> = {
     name: "Wally",
     description: "Package manager for Roblox projects",
     category: "package-manager",
-    bundled: false,
+    recommended: false,
     version: "0.3.2",
     github: "UpliftGames/wally",
     binaryName: "wally",
@@ -165,7 +165,7 @@ export const TOOL_REGISTRY: Record<string, ToolDefinition> = {
     name: "Pesde",
     description: "Modern package manager for Luau with workspaces",
     category: "package-manager",
-    bundled: false,
+    recommended: false,
     version: "0.7.3",
     github: "pesde-pkg/pesde",
     binaryName: "pesde",
@@ -186,7 +186,7 @@ export const TOOL_REGISTRY: Record<string, ToolDefinition> = {
     name: "Darklua",
     description: "Lua/Luau code transformer, minifier, and bundler",
     category: "processor",
-    bundled: false,
+    recommended: false,
     version: "0.18.0",
     github: "seaofvoices/darklua",
     binaryName: "darklua",
@@ -217,7 +217,11 @@ export function getToolsForCategory(category: ToolCategory): ToolDefinition[] {
   return Object.values(TOOL_REGISTRY).filter(t => t.category === category)
 }
 
+export function getRecommendedToolIds(): string[] {
+  return Object.values(TOOL_REGISTRY).filter(t => t.recommended).map(t => t.id)
+}
+
 export function getDefaultToolId(category: ToolCategory): string | null {
-  const bundled = Object.values(TOOL_REGISTRY).find(t => t.category === category && t.bundled)
-  return bundled?.id ?? null
+  const recommended = Object.values(TOOL_REGISTRY).find(t => t.category === category && t.recommended)
+  return recommended?.id ?? null
 }

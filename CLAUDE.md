@@ -293,6 +293,14 @@ Key routing rules:
 
 ---
 
+## Design System
+Always read DESIGN.md before making any visual or UI decisions.
+Colors, spacing, and component patterns are defined there.
+Never hardcode hex values in components — always use CSS variables.
+In QA mode, flag any code that doesn't match DESIGN.md.
+
+---
+
 ## Health Stack
 
 - typecheck-web: npx tsc -p tsconfig.web.json --noEmit

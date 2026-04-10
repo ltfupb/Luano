@@ -169,6 +169,8 @@ export default function App(): JSX.Element {
   const setRightPanelOpen = useSettingsStore((s) => s.setRightPanelOpen)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [toolchainOpen, setToolchainOpen] = useState(false)
+  const [toolchainSetupMode, setToolchainSetupMode] = useState(false)
+  const pendingProjectRef = useRef<{ path: string; isNew: boolean } | null>(null)
 
   // Allow StatusBar to open toolchain panel via custom event
   useEffect(() => {
@@ -274,6 +276,23 @@ export default function App(): JSX.Element {
       return false
     }
   }, [setProject, setGlobalSummary, addRecentProject, setToolName])
+
+  const handleToolchainClose = useCallback(async () => {
+    setToolchainOpen(false)
+    setToolchainSetupMode(false)
+    const pending = pendingProjectRef.current
+    if (pending) {
+      pendingProjectRef.current = null
+      // Now safe to close old project and open the pending one
+      const currentPath = useProjectStore.getState().projectPath
+      if (currentPath) useAIStore.getState().saveProjectChat(currentPath)
+      closeProject()
+      clearMessages()
+      setGlobalSummary("")
+      await openPath(pending.path)
+      loadProjectChat(pending.path)
+    }
+  }, [openPath, loadProjectChat, closeProject, clearMessages, setGlobalSummary])
 
   // ── Session Restore — reopen last project + files on restart ────────────
   useEffect(() => {
@@ -405,6 +424,16 @@ export default function App(): JSX.Element {
   }, [fileMenuOpen])
 
   const switchToProject = useCallback(async (path: string, isNew: boolean) => {
+    // Gate: check if minimum toolchain (luau-lsp) is installed BEFORE closing current project
+    const ready = await window.api.toolchainIsMinimumReady()
+    if (!ready) {
+      if (isNew) await window.api.initProject(path)
+      pendingProjectRef.current = { path, isNew }
+      setToolchainSetupMode(true)
+      setToolchainOpen(true)
+      return
+    }
+
     // Save current project's chat before switching
     const currentPath = useProjectStore.getState().projectPath
     if (currentPath) saveProjectChat(currentPath)
@@ -693,7 +722,7 @@ export default function App(): JSX.Element {
 
       <StatusBar />
       {settingsOpen && <SettingsPanel onClose={() => setSettingsOpen(false)} />}
-      {toolchainOpen && <ToolchainPanel onClose={() => setToolchainOpen(false)} />}
+      {toolchainOpen && <ToolchainPanel onClose={handleToolchainClose} mode={toolchainSetupMode ? "setup" : "normal"} />}
       {quickOpenVisible && <QuickOpen onClose={() => setQuickOpenVisible(false)} />}
       <ToastContainer />
 

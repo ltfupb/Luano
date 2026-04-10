@@ -285,6 +285,10 @@ const api = {
     ipcRenderer.invoke("toolchain:check-updates", installedIds),
   toolchainUpdateTool: (toolId: string, downloadUrl: string, latestVersion?: string) =>
     ipcRenderer.invoke("toolchain:update-tool", toolId, downloadUrl, latestVersion),
+  toolchainDownloadMultiple: (toolIds: string[]) =>
+    ipcRenderer.invoke("toolchain:download-multiple", toolIds),
+  toolchainIsMinimumReady: () =>
+    ipcRenderer.invoke("toolchain:is-minimum-ready"),
 
   // ── Package Manager ────────────────────────────────────────────────────────
   packageInstall: (projectPath: string) =>

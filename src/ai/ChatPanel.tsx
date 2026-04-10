@@ -495,9 +495,9 @@ export function ChatPanel({ onClose }: ChatPanelProps): JSX.Element {
           <span
             className="flex items-center gap-1 px-1.5 py-0.5 rounded"
             title={t("studioConnected")}
-            style={{ background: "rgba(16,185,129,0.12)", border: "1px solid rgba(16,185,129,0.25)", fontSize: "10px", color: "#10b981" }}
+            style={{ background: "rgba(16,185,129,0.12)", border: "1px solid rgba(16,185,129,0.25)", fontSize: "10px", color: "var(--success)" }}
           >
-            <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#10b981", display: "inline-block" }} />
+            <span style={{ width: 5, height: 5, borderRadius: "50%", background: "var(--success)", display: "inline-block" }} />
             Studio
           </span>
         )}
@@ -746,7 +746,7 @@ export function ChatPanel({ onClose }: ChatPanelProps): JSX.Element {
                     color: "var(--text-secondary)",
                   }}
                 >
-                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="var(--success)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z" />
                     <polyline points="13 2 13 9 20 9" />
                   </svg>
@@ -762,7 +762,7 @@ export function ChatPanel({ onClose }: ChatPanelProps): JSX.Element {
                 style={{
                   fontSize: "12px",
                   background: "rgba(16,185,129,0.12)",
-                  color: "#10b981",
+                  color: "var(--success)",
                   border: "1px solid rgba(16,185,129,0.25)"
                 }}
                 onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = "rgba(16,185,129,0.2)" }}
@@ -776,7 +776,7 @@ export function ChatPanel({ onClose }: ChatPanelProps): JSX.Element {
                 style={{
                   fontSize: "12px",
                   background: "rgba(239,68,68,0.08)",
-                  color: "#ef4444",
+                  color: "var(--danger)",
                   border: "1px solid rgba(239,68,68,0.2)"
                 }}
                 onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = "rgba(239,68,68,0.15)" }}
@@ -799,7 +799,7 @@ export function ChatPanel({ onClose }: ChatPanelProps): JSX.Element {
         {!projectPath && (
           <div
             className="text-xs mb-2 px-2 py-1 rounded-md animate-fade-in"
-            style={{ color: "#f59e0b", background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.2)" }}
+            style={{ color: "var(--warning)", background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.2)" }}
           >
             {t("openProject")}
           </div>
@@ -914,7 +914,7 @@ export function ChatPanel({ onClose }: ChatPanelProps): JSX.Element {
                   className="flex items-center gap-1 px-1.5 py-0.5 rounded transition-all duration-100"
                   style={{
                     fontSize: "10px",
-                    color: planMode ? "#60a5fa" : autoAccept ? "#10b981" : "var(--text-secondary)",
+                    color: planMode ? "var(--info)" : autoAccept ? "var(--success)" : "var(--text-secondary)",
                     border: "1px solid var(--border-subtle)"
                   }}
                 >
@@ -1022,13 +1022,13 @@ export function ChatPanel({ onClose }: ChatPanelProps): JSX.Element {
                 onClick={handleAbort}
                 className="flex items-center gap-1.5 px-2.5 py-1 rounded-md transition-all duration-150"
                 style={{
-                  background: "#ef4444",
+                  background: "var(--danger)",
                   color: "white",
                   fontSize: "11px",
                   fontWeight: 500
                 }}
-                onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "#dc2626"}
-                onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "#ef4444"}
+                onMouseEnter={e => (e.currentTarget as HTMLElement).style.opacity = "0.85"}
+                onMouseLeave={e => (e.currentTarget as HTMLElement).style.opacity = "1"}
               >
                 <IconStop />
                 Stop
@@ -1212,41 +1212,35 @@ function ToolCallGroup({ events }: { events: ChatMessage[] }): JSX.Element {
   const hasFails = failCount > 0
 
   return (
-    <div className="animate-fade-in" style={{ margin: "1px 0" }}>
+    <div className="animate-fade-in" style={{ margin: "6px 0" }}>
       {/* Group header */}
       <button
         onClick={() => setGroupOpen(prev => !prev)}
-        className="flex items-center gap-1.5 w-full py-1 px-1 rounded transition-colors duration-100"
+        className="flex items-center gap-2 w-full py-1.5 px-2 rounded transition-colors duration-100"
         style={{ textAlign: "left" }}
         onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "var(--bg-elevated)"}
         onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "transparent"}
       >
         <svg
           width="12" height="12" viewBox="0 0 24 24" fill="none"
-          stroke={hasFails ? "#ef4444" : "var(--text-muted)"}
+          stroke={hasFails ? "var(--danger)" : "var(--text-muted)"}
           strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
           className="flex-shrink-0"
           style={{ opacity: 0.6, transform: groupOpen ? "rotate(90deg)" : "rotate(0deg)", transition: "transform 150ms" }}
         >
           <polyline points="9 18 15 12 9 6" />
         </svg>
-        {hasFails ? (
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0">
-            <circle cx="12" cy="12" r="10" /><line x1="15" y1="9" x2="9" y2="15" /><line x1="9" y1="9" x2="15" y2="15" />
-          </svg>
-        ) : (
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0" style={{ opacity: 0.6 }}>
-            <polyline points="20 6 9 17 4 12" />
-          </svg>
-        )}
-        <span style={{ fontSize: "12px", color: hasFails ? "#ef4444" : "var(--text-muted)" }}>
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={hasFails ? "var(--danger)" : "var(--text-muted)"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0" style={{ opacity: hasFails ? 1 : 0.6 }}>
+          <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
+        </svg>
+        <span style={{ fontSize: "12px", color: hasFails ? "var(--danger)" : "var(--text-muted)" }}>
           Used {events.length} tool{events.length > 1 ? "s" : ""}{hasFails ? ` (${failCount} failed)` : ""}
         </span>
       </button>
 
       {/* Expanded tool list */}
       {groupOpen && (
-        <div style={{ marginLeft: "8px", borderLeft: "1px solid var(--border-subtle)", paddingLeft: "8px" }}>
+        <div style={{ marginLeft: "12px", borderLeft: "1px solid var(--border-subtle)", paddingLeft: "10px", paddingTop: "4px", paddingBottom: "4px" }}>
           {events.map((event, i) => {
             const toolName = event.toolName ?? "unknown"
             const meta = TOOL_META[toolName] ?? { label: toolName, icon: "default" }
@@ -1259,30 +1253,30 @@ function ToolCallGroup({ events }: { events: ChatMessage[] }): JSX.Element {
               <div key={event.id} className="animate-fade-in" style={{ animationDelay: `${i * 20}ms` }}>
                 <button
                   onClick={() => toggleItem(event.id)}
-                  className="flex items-center gap-1.5 w-full py-0.5 px-1 rounded transition-colors duration-100"
+                  className="flex items-center gap-2 w-full py-1 px-1.5 rounded transition-colors duration-100"
                   style={{ textAlign: "left" }}
                   onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "var(--bg-elevated)"}
                   onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "transparent"}
                 >
-                  {failed ? (
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0">
-                      <circle cx="12" cy="12" r="10" /><line x1="15" y1="9" x2="9" y2="15" /><line x1="9" y1="9" x2="15" y2="15" />
-                    </svg>
-                  ) : (
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={isBridge ? "#818cf8" : "var(--text-muted)"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0" style={{ opacity: 0.6 }}>
-                      <polyline points="20 6 9 17 4 12" />
-                    </svg>
-                  )}
+                  <span className="flex-shrink-0" style={{ color: failed ? "var(--danger)" : isBridge ? "var(--accent)" : "var(--text-muted)", opacity: failed ? 1 : 0.7 }}>
+                    {failed ? (
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <circle cx="12" cy="12" r="10" /><line x1="15" y1="9" x2="9" y2="15" /><line x1="9" y1="9" x2="15" y2="15" />
+                      </svg>
+                    ) : (
+                      <ToolIcon type={meta.icon} size={12} />
+                    )}
+                  </span>
                   <span className="truncate" style={{
                     fontSize: "12px",
-                    color: failed ? "#ef4444" : isBridge ? "#818cf8" : "var(--text-muted)",
+                    color: failed ? "var(--danger)" : isBridge ? "var(--accent)" : "var(--text-muted)",
                   }}>
                     {meta.label}{target ? ` ${target}` : ""}
                   </span>
                 </button>
                 {isOpen && (
                   <div
-                    className="ml-5 mb-1 rounded selectable animate-fade-in"
+                    className="ml-6 mt-1 mb-2 rounded selectable animate-fade-in"
                     style={{
                       fontSize: "10px",
                       color: "var(--text-muted)",

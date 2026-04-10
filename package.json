@@ -88,13 +88,6 @@
     ],
     "extraResources": [
       {
-        "from": "resources/binaries/${os}",
-        "to": "binaries",
-        "filter": [
-          "**/*"
-        ]
-      },
-      {
         "from": "resources/roblox-docs",
         "to": "roblox-docs"
       },

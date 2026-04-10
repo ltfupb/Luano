@@ -19,19 +19,22 @@ export type DownloadStatus = "not-installed" | "downloading" | "installed" | "er
 
 const activeDownloads = new Set<string>()
 
+const DOWNLOAD_TIMEOUT_MS = 30_000
+const MAX_RETRIES = 1
+
 function getPlatformKey(): "win" | "mac" | "linux" {
   if (process.platform === "win32") return "win"
   if (process.platform === "darwin") return "mac"
   return "linux"
 }
 
-/** Follow redirects and download a file */
-function downloadFile(url: string, destPath: string): Promise<void> {
+/** Follow redirects and download a file with timeout and retry */
+function downloadFile(url: string, destPath: string, attempt = 0): Promise<void> {
   return new Promise((resolve, reject) => {
     const follow = (currentUrl: string, depth = 0): void => {
       if (depth > 5) { reject(new Error("Too many redirects")); return }
 
-      httpsGet(currentUrl, (res) => {
+      const req = httpsGet(currentUrl, (res) => {
         if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
           follow(res.headers.location, depth + 1)
           return
@@ -40,10 +43,31 @@ function downloadFile(url: string, destPath: string): Promise<void> {
           reject(new Error(`HTTP ${res.statusCode} downloading ${currentUrl}`))
           return
         }
+        clearTimeout(timer)
         const ws = createWriteStream(destPath)
         pipeline(res, ws).then(resolve).catch(reject)
-      }).on("error", reject)
+      })
+
+      req.on("error", (err) => {
+        clearTimeout(timer)
+        if (attempt < MAX_RETRIES) {
+          log.info(`Download failed (attempt ${attempt + 1}), retrying: ${err.message}`)
+          downloadFile(url, destPath, attempt + 1).then(resolve).catch(reject)
+        } else {
+          reject(err)
+        }
+      })
     }
+
+    const timer = setTimeout(() => {
+      if (attempt < MAX_RETRIES) {
+        log.info(`Download timed out (attempt ${attempt + 1}), retrying...`)
+        downloadFile(url, destPath, attempt + 1).then(resolve).catch(reject)
+      } else {
+        reject(new Error(`Download timed out after ${DOWNLOAD_TIMEOUT_MS}ms`))
+      }
+    }, DOWNLOAD_TIMEOUT_MS)
+
     follow(url)
   })
 }
@@ -58,15 +82,26 @@ function extractZip(zipPath: string, destDir: string): void {
   }
 }
 
-export async function downloadTool(toolId: string): Promise<{ success: boolean; error?: string }> {
-  const tool = TOOL_REGISTRY[toolId]
-  if (!tool) return { success: false, error: `Unknown tool: ${toolId}` }
-  if (tool.bundled && isBinaryAvailable(tool.binaryName)) return { success: true }
-  if (activeDownloads.has(toolId)) return { success: false, error: "Download already in progress" }
+/** Remove macOS Gatekeeper quarantine attribute from a downloaded binary */
+function clearQuarantine(binPath: string): void {
+  if (process.platform !== "darwin") return
+  try {
+    execSync(`xattr -d com.apple.quarantine "${binPath}"`, { stdio: "pipe" })
+  } catch {
+    // Attribute may not exist — not an error
+  }
+}
 
-  activeDownloads.add(toolId)
-  const platform = getPlatformKey()
-  const url = tool.releaseUrls[platform]
+/**
+ * Core download-and-install logic shared by downloadTool() and updateTool().
+ * Downloads a zip from the given URL, extracts it, and copies the binary to userData/binaries.
+ */
+async function downloadAndInstall(
+  toolId: string,
+  binaryName: string,
+  url: string,
+  version?: string
+): Promise<{ success: boolean; error?: string }> {
   const ext = process.platform === "win32" ? ".exe" : ""
   const binDir = getUserBinDir()
   mkdirSync(binDir, { recursive: true })
@@ -77,7 +112,7 @@ export async function downloadTool(toolId: string): Promise<{ success: boolean; 
   try {
     mkdirSync(tmpDir, { recursive: true })
 
-    log.info(`Downloading ${tool.name} from ${url}`)
+    log.info(`Downloading ${toolId} from ${url}`)
     await downloadFile(url, zipPath)
 
     // Verify download
@@ -93,38 +128,64 @@ export async function downloadTool(toolId: string): Promise<{ success: boolean; 
     // Find the binary in extracted files
     const files = readdirSync(extractDir).filter(f => !f.endsWith(".zip"))
     const binFile = files.find(f =>
-      f === `${tool.binaryName}${ext}` ||
-      f.startsWith(tool.binaryName)
+      f === `${binaryName}${ext}` ||
+      f.startsWith(binaryName)
     )
     if (!binFile) {
       throw new Error(`Binary not found in archive. Files: ${files.join(", ")}`)
     }
 
     // Copy to userData/binaries
-    const destPath = join(binDir, `${tool.binaryName}${ext}`)
+    const destPath = join(binDir, `${binaryName}${ext}`)
     copyFileSync(join(extractDir, binFile), destPath)
     if (process.platform !== "win32") {
       chmodSync(destPath, 0o755)
     }
+    clearQuarantine(destPath)
 
-    log.info(`Installed ${tool.name} to ${destPath}`)
-    setInstalledVersion(toolId, tool.version)
+    log.info(`Installed ${toolId} to ${destPath}`)
+    if (version) setInstalledVersion(toolId, version)
     return { success: true }
   } catch (err) {
     const msg = (err as Error).message
-    log.error(`Failed to download ${tool.name}: ${msg}`)
+    log.error(`Failed to download ${toolId}: ${msg}`)
     return { success: false, error: msg }
   } finally {
-    activeDownloads.delete(toolId)
     rmSync(tmpDir, { recursive: true, force: true })
   }
+}
+
+export async function downloadTool(toolId: string): Promise<{ success: boolean; error?: string }> {
+  const tool = TOOL_REGISTRY[toolId]
+  if (!tool) return { success: false, error: `Unknown tool: ${toolId}` }
+  if (isBinaryAvailable(tool.binaryName)) return { success: true }
+  if (activeDownloads.has(toolId)) return { success: false, error: "Download already in progress" }
+
+  activeDownloads.add(toolId)
+  try {
+    const platform = getPlatformKey()
+    const url = tool.releaseUrls[platform]
+    return await downloadAndInstall(toolId, tool.binaryName, url, tool.version)
+  } finally {
+    activeDownloads.delete(toolId)
+  }
+}
+
+/** Download multiple tools in parallel. Returns per-tool results. */
+export async function downloadMultiple(toolIds: string[]): Promise<Record<string, { success: boolean; error?: string }>> {
+  const results: Record<string, { success: boolean; error?: string }> = {}
+  const promises = toolIds.map(async (id) => {
+    results[id] = await downloadTool(id)
+  })
+  await Promise.all(promises)
+  return results
 }
 
 export function getDownloadStatus(toolId: string): DownloadStatus {
   if (activeDownloads.has(toolId)) return "downloading"
   const tool = TOOL_REGISTRY[toolId]
   if (!tool) return "not-installed"
-  if (tool.bundled || isBinaryAvailable(tool.binaryName)) return "installed"
+  if (isBinaryAvailable(tool.binaryName)) return "installed"
   return "not-installed"
 }
 
@@ -217,51 +278,16 @@ export async function updateTool(toolId: string, downloadUrl: string, latestVers
   if (activeDownloads.has(toolId)) return { success: false, error: "Download already in progress" }
 
   activeDownloads.add(toolId)
-  const ext = process.platform === "win32" ? ".exe" : ""
-  const binDir = getUserBinDir()
-  mkdirSync(binDir, { recursive: true })
-
-  const tmpDir = join(tmpdir(), `luano-upd-${toolId}-${Date.now()}`)
-  const zipPath = join(tmpDir, `${toolId}.zip`)
-
   try {
-    mkdirSync(tmpDir, { recursive: true })
-    log.info(`Updating ${tool.name} from ${downloadUrl}`)
-    await downloadFile(downloadUrl, zipPath)
-
-    const stat = statSync(zipPath)
-    if (stat.size < 1000) throw new Error(`Downloaded file too small (${stat.size} bytes)`)
-
-    const extractDir = join(tmpDir, "extracted")
-    extractZip(zipPath, extractDir)
-
-    const files = readdirSync(extractDir).filter(f => !f.endsWith(".zip"))
-    const binFile = files.find(f =>
-      f === `${tool.binaryName}${ext}` || f.startsWith(tool.binaryName)
-    )
-    if (!binFile) throw new Error(`Binary not found in archive. Files: ${files.join(", ")}`)
-
-    const destPath = join(binDir, `${tool.binaryName}${ext}`)
-    copyFileSync(join(extractDir, binFile), destPath)
-    if (process.platform !== "win32") chmodSync(destPath, 0o755)
-
-    log.info(`Updated ${tool.name} to latest`)
-    if (latestVersion) setInstalledVersion(toolId, latestVersion)
-    return { success: true }
-  } catch (err) {
-    const msg = (err as Error).message
-    log.error(`Failed to update ${tool.name}: ${msg}`)
-    return { success: false, error: msg }
+    return await downloadAndInstall(toolId, tool.binaryName, downloadUrl, latestVersion)
   } finally {
     activeDownloads.delete(toolId)
-    rmSync(tmpDir, { recursive: true, force: true })
   }
 }
 
 export function removeTool(toolId: string): { success: boolean; error?: string } {
   const tool = TOOL_REGISTRY[toolId]
   if (!tool) return { success: false, error: `Unknown tool: ${toolId}` }
-  if (tool.bundled) return { success: false, error: "Cannot remove bundled tools" }
 
   const ext = process.platform === "win32" ? ".exe" : ""
   const binPath = join(getUserBinDir(), `${tool.binaryName}${ext}`)

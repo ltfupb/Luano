@@ -22,7 +22,7 @@ interface ToolDef {
   name: string
   description: string
   category: string
-  bundled: boolean
+  recommended: boolean
   version: string
   github: string
 }
@@ -35,6 +35,7 @@ interface CategoryDef {
 
 interface ToolchainPanelProps {
   onClose: () => void
+  mode?: "normal" | "setup"
 }
 
 const TOOL_LOGOS: Record<string, string> = {
@@ -63,7 +64,8 @@ function ToolLogo({ id, name, className }: { id: string; name: string; className
   return <img src={src} alt={name} className={`object-contain ${className ?? "w-8 h-8"}`} onError={() => setFailed(true)} />
 }
 
-export function ToolchainPanel({ onClose }: ToolchainPanelProps): JSX.Element {
+export function ToolchainPanel({ onClose, mode = "normal" }: ToolchainPanelProps): JSX.Element {
+  const isSetup = mode === "setup"
   const { projectPath } = useProjectStore()
   const t = useT()
   const [tools, setTools] = useState<Record<string, ToolDef>>({})
@@ -110,11 +112,41 @@ export function ToolchainPanel({ onClose }: ToolchainPanelProps): JSX.Element {
   }
 
   const handleClose = () => {
+    if (isSetup && !installed["luau-lsp"]) return
     setVisible(false)
     setTimeout(onClose, 180)
   }
 
   const [installError, setInstallError] = useState<string | null>(null)
+  const [recommendedLoading, setRecommendedLoading] = useState(false)
+
+  const handleRecommendedInstall = async () => {
+    setInstallError(null)
+    setRecommendedLoading(true)
+    const recommendedIds = Object.values(tools).filter(t => t.recommended && !installed[t.id]).map(t => t.id)
+    if (recommendedIds.length === 0) {
+      setRecommendedLoading(false)
+      if (isSetup) handleClose()
+      return
+    }
+    for (const id of recommendedIds) {
+      setDownloading(prev => new Set(prev).add(id))
+    }
+    const results = await window.api.toolchainDownloadMultiple(recommendedIds)
+    const newInstalled = { ...installed }
+    for (const [id, result] of Object.entries(results)) {
+      setDownloading(prev => { const n = new Set(prev); n.delete(id); return n })
+      if (result.success) newInstalled[id] = true
+    }
+    setInstalled(newInstalled)
+    setRecommendedLoading(false)
+    const anyFailed = Object.values(results).some(r => !r.success)
+    if (anyFailed) {
+      const errors = Object.entries(results).filter(([, r]) => !r.success).map(([id, r]) => `${id}: ${r.error}`)
+      setInstallError(errors.join("\n"))
+    }
+    if (isSetup && newInstalled["luau-lsp"]) handleClose()
+  }
 
   const handleInstall = async (toolId: string) => {
     setInstallError(null)
@@ -122,7 +154,12 @@ export function ToolchainPanel({ onClose }: ToolchainPanelProps): JSX.Element {
     const result = await window.api.toolchainDownload(toolId)
     setDownloading(prev => { const n = new Set(prev); n.delete(toolId); return n })
     if (result.success) {
-      setInstalled(prev => ({ ...prev, [toolId]: true }))
+      const newInstalled = { ...installed, [toolId]: true }
+      setInstalled(newInstalled)
+      if (isSetup && toolId === "luau-lsp") {
+        setVisible(false)
+        setTimeout(onClose, 180)
+      }
     } else {
       setInstallError(result.error ?? "Install failed")
     }
@@ -176,7 +213,7 @@ export function ToolchainPanel({ onClose }: ToolchainPanelProps): JSX.Element {
         backdropFilter: visible ? "blur(12px)" : "none",
         transition: "all 0.18s ease"
       }}
-      onClick={(e) => e.target === e.currentTarget && handleClose()}
+      onClick={(e) => { if (!isSetup && e.target === e.currentTarget) handleClose() }}
     >
       <div
         className="w-[720px] h-[520px] rounded-2xl overflow-hidden flex flex-col"
@@ -194,21 +231,40 @@ export function ToolchainPanel({ onClose }: ToolchainPanelProps): JSX.Element {
           className="flex items-center justify-between px-5 py-4 flex-shrink-0"
           style={{ borderBottom: "1px solid var(--border-subtle)" }}
         >
-          <span style={{ fontSize: "14px", fontWeight: 600, color: "var(--text-primary)" }}>
-            {t("toolchainTitle")}
-          </span>
-          <button
-            onClick={handleClose}
-            className="w-7 h-7 flex items-center justify-center rounded-lg transition-all duration-100"
-            style={{ color: "var(--text-secondary)" }}
-            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = "var(--bg-elevated)"; (e.currentTarget as HTMLElement).style.color = "var(--text-primary)" }}
-            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = "transparent"; (e.currentTarget as HTMLElement).style.color = "var(--text-secondary)" }}
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <line x1="18" y1="6" x2="6" y2="18" />
-              <line x1="6" y1="6" x2="18" y2="18" />
-            </svg>
-          </button>
+          <div className="flex items-center gap-3">
+            <span style={{ fontSize: "14px", fontWeight: 600, color: "var(--text-primary)" }}>
+              {isSetup ? t("toolchainSetup") : t("toolchainTitle")}
+            </span>
+            {isSetup && (
+              <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>
+                {t("toolchainSetupHint")}
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleRecommendedInstall}
+              disabled={recommendedLoading || Object.values(tools).filter(t => t.recommended && !installed[t.id]).length === 0}
+              className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-100 disabled:opacity-50"
+              style={{ background: "var(--accent)", color: "white" }}
+            >
+              {recommendedLoading ? t("toolchainDownloading") : t("toolchainRecommended")}
+            </button>
+            {!isSetup && (
+              <button
+                onClick={handleClose}
+                className="w-7 h-7 flex items-center justify-center rounded-lg transition-all duration-100"
+                style={{ color: "var(--text-secondary)" }}
+                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = "var(--bg-elevated)"; (e.currentTarget as HTMLElement).style.color = "var(--text-primary)" }}
+                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = "transparent"; (e.currentTarget as HTMLElement).style.color = "var(--text-secondary)" }}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            )}
+          </div>
         </div>
 
         <div className="flex flex-1 min-h-0">
@@ -298,12 +354,12 @@ export function ToolchainPanel({ onClose }: ToolchainPanelProps): JSX.Element {
                             {updates[tool.id].latestVersion}
                           </span>
                         )}
-                        {tool.bundled && (
+                        {tool.recommended && (
                           <span
                             className="px-1.5 py-0.5 rounded text-[9px] font-medium"
-                            style={{ background: "rgba(16,185,129,0.15)", color: "#10b981" }}
+                            style={{ background: "rgba(59,130,246,0.15)", color: "#3b82f6" }}
                           >
-                            Bundled
+                            Recommended
                           </span>
                         )}
                       </div>
@@ -394,7 +450,7 @@ export function ToolchainPanel({ onClose }: ToolchainPanelProps): JSX.Element {
                         fontSize: "10px",
                         color: installed[detail.id] ? "#10b981" : "var(--text-muted)"
                       }}>
-                        {installed[detail.id] ? (detail.bundled ? "Bundled" : "Installed") : "Not installed"}
+                        {installed[detail.id] ? "Installed" : "Not installed"}
                       </span>
                     </div>
                   </div>
@@ -442,7 +498,7 @@ export function ToolchainPanel({ onClose }: ToolchainPanelProps): JSX.Element {
                         {t("toolchainActivate")}
                       </button>
                     )}
-                    {installed[detail.id] && !detail.bundled && (
+                    {installed[detail.id] && !(isSetup && detail.id === "luau-lsp") && (
                       <button
                         onClick={() => handleRemove(detail.id)}
                         className="w-full py-1.5 rounded-md text-xs transition-all duration-100"

@@ -15,17 +15,17 @@ type SyncTab = "console" | "tree"
 // ── Rojo status config ────────────────────────────────────────────────────────
 
 const rojoStatusCfg: Record<string, { color: string; glow: boolean }> = {
-  stopped:  { color: "#3a5272", glow: false },
-  starting: { color: "#f59e0b", glow: false },
-  running:  { color: "#10b981", glow: true },
-  error:    { color: "#e11d48", glow: false }
+  stopped:  { color: "var(--text-ghost)", glow: false },
+  starting: { color: "var(--warning)", glow: false },
+  running:  { color: "var(--success)", glow: true },
+  error:    { color: "var(--danger)", glow: false }
 }
 
 // ── Log color ─────────────────────────────────────────────────────────────────
 
 const logColor: Record<string, string> = {
-  error:  "#fb7185",
-  warn:   "#fbbf24",
+  error:  "var(--danger)",
+  warn:   "var(--warning)",
   output: "var(--text-secondary)"
 }
 
@@ -77,7 +77,7 @@ function ScriptRunner({ onClose, onRun }: {
       className="animate-fade-in"
       style={{
         position: "fixed", inset: 0, zIndex: 9000,
-        background: "rgba(0,0,0,0.55)",
+        background: "rgba(5,8,15,0.7)", backdropFilter: "blur(4px)",
         display: "flex", alignItems: "center", justifyContent: "center"
       }}
     >
@@ -120,7 +120,7 @@ function ScriptRunner({ onClose, onRun }: {
             className="mx-4 mb-3 px-3 py-2 rounded-md animate-fade-in selectable"
             style={{
               fontSize: "11px", fontFamily: "monospace", lineHeight: 1.5,
-              color: result.success ? "#4ade80" : "#fb7185",
+              color: result.success ? "var(--success)" : "var(--danger)",
               background: result.success ? "rgba(74,222,128,0.08)" : "rgba(251,113,133,0.08)",
               border: `1px solid ${result.success ? "rgba(74,222,128,0.2)" : "rgba(251,113,133,0.2)"}`,
               wordBreak: "break-all"
@@ -151,9 +151,9 @@ function ScriptRunner({ onClose, onRun }: {
 // ── Instance Tree (inline) ───────────────────────────────────────────────────
 
 function getClassColor(className: string): string {
-  if (className === "DataModel" || className === "game") return "#60a5fa"
-  if (className.endsWith("Service"))                    return "#818cf8"
-  if (className === "Script")                           return "#4ade80"
+  if (className === "DataModel" || className === "game") return "var(--info)"
+  if (className.endsWith("Service"))                    return "var(--accent)"
+  if (className === "Script")                           return "var(--success)"
   if (className === "LocalScript")                      return "#34d399"
   if (className === "ModuleScript")                     return "#6ee7b7"
   if (className === "Model" || className === "Folder")  return "var(--text-secondary)"
@@ -291,11 +291,8 @@ export function SyncPanel(): JSX.Element {
   return (
     <div className="flex flex-col h-full overflow-hidden">
       {/* Header */}
-      <div
-        className="px-3 py-2 flex-shrink-0"
-        style={{ fontSize: "10px", fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--text-secondary)", borderBottom: "1px solid var(--border-subtle)" }}
-      >
-        {t("sync")}
+      <div className="flex items-center gap-2 px-3 py-2 flex-shrink-0" style={{ borderBottom: "1px solid var(--border-subtle)" }}>
+        <span style={{ fontSize: "10px", fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--text-secondary)" }}>{t("sync")}</span>
       </div>
 
       {/* Status cards */}
@@ -320,7 +317,7 @@ export function SyncPanel(): JSX.Element {
             className="px-2 py-0.5 rounded text-[10px] font-medium transition-all duration-150"
             style={{
               background: isRojoActive ? "rgba(225,29,72,0.12)" : "rgba(37,99,235,0.12)",
-              color: isRojoActive ? "#fb7185" : "#60a5fa",
+              color: isRojoActive ? "var(--danger)" : "var(--info)",
               border: `1px solid ${isRojoActive ? "rgba(225,29,72,0.3)" : "rgba(37,99,235,0.3)"}`
             }}
           >
@@ -333,19 +330,19 @@ export function SyncPanel(): JSX.Element {
           <span
             className="w-2 h-2 rounded-full flex-shrink-0"
             style={{
-              background: connected ? "#10b981" : "var(--text-ghost)",
-              boxShadow: connected ? "0 0 6px #10b981" : "none",
+              background: connected ? "var(--success)" : "var(--text-ghost)",
+              boxShadow: connected ? "0 0 6px var(--success)" : "none",
               transition: "all 0.3s ease"
             }}
           />
-          <span style={{ fontSize: "11px", color: connected ? "#10b981" : "var(--text-muted)", flex: 1 }}>
+          <span style={{ fontSize: "11px", color: connected ? "var(--success)" : "var(--text-muted)", flex: 1 }}>
             Studio {connected ? "Live" : "Offline"}
           </span>
           {connected ? (
             <button
               onClick={() => setScriptRunnerOpen(true)}
               className="px-2 py-0.5 rounded text-[10px] font-medium transition-all duration-150"
-              style={{ background: "rgba(16,185,129,0.12)", color: "#10b981", border: "1px solid rgba(16,185,129,0.3)" }}
+              style={{ background: "var(--accent-muted)", color: "var(--success)", border: "1px solid var(--border-subtle)" }}
             >
               ▶ Run
             </button>
@@ -354,14 +351,14 @@ export function SyncPanel(): JSX.Element {
               onClick={handleInstall}
               disabled={installing}
               className="px-2 py-0.5 rounded text-[10px] font-medium transition-all duration-150 disabled:opacity-40"
-              style={{ background: "rgba(37,99,235,0.12)", color: "#60a5fa", border: "1px solid rgba(37,99,235,0.3)" }}
+              style={{ background: "var(--accent-muted)", color: "var(--info)", border: "1px solid var(--border-subtle)" }}
             >
               {installing ? "..." : "Install Plugin"}
             </button>
           )}
         </div>
         {installMsg && (
-          <p className="animate-fade-in" style={{ fontSize: "10px", color: installMsg.startsWith("Error") ? "#fb7185" : "#4ade80" }}>
+          <p className="animate-fade-in" style={{ fontSize: "10px", color: installMsg.startsWith("Error") ? "var(--danger)" : "var(--success)" }}>
             {installMsg}
           </p>
         )}
@@ -390,7 +387,7 @@ export function SyncPanel(): JSX.Element {
               onClick={handleAiExplain}
               disabled={aiLoading}
               className="px-1.5 py-1 rounded transition-all duration-100 disabled:opacity-40"
-              style={{ fontSize: "10px", color: "#60a5fa" }}
+              style={{ fontSize: "10px", color: "var(--info)" }}
               title="AI error analysis"
             >{aiLoading ? "…" : `AI (${errorCount})`}</button>
           )}
@@ -421,7 +418,7 @@ export function SyncPanel(): JSX.Element {
               style={{ borderTop: "1px solid var(--border)", background: "var(--bg-elevated)" }}
             >
               <div className="flex items-center justify-between px-3 py-1.5" style={{ borderBottom: "1px solid var(--border-subtle)" }}>
-                <span style={{ fontSize: "11px", fontWeight: 600, color: "#60a5fa" }}>AI Analysis</span>
+                <span style={{ fontSize: "11px", fontWeight: 600, color: "var(--info)" }}>AI Analysis</span>
                 <button onClick={() => setAiExplanation(null)} style={{ fontSize: "11px", color: "var(--text-muted)" }}>✕</button>
               </div>
               <div className="px-3 py-2 selectable whitespace-pre-wrap" style={{ fontSize: "11px", lineHeight: 1.6, color: "var(--text-primary)" }}>

@@ -39,9 +39,9 @@ export function ToastContainer(): JSX.Element {
           key={t.id}
           className="flex items-start gap-2 px-3 py-2.5 rounded-lg text-xs max-w-xs animate-fade-in pointer-events-auto"
           style={{
-            background: t.type === "error" ? "#2d1515" : t.type === "warn" ? "#2d2415" : "#112030",
-            border: `1px solid ${t.type === "error" ? "#7f1d1d" : t.type === "warn" ? "#78350f" : "#1e3a5a"}`,
-            color: t.type === "error" ? "#fca5a5" : t.type === "warn" ? "#fcd34d" : "#93c5fd",
+            background: "var(--bg-elevated)",
+            border: `1px solid ${t.type === "error" ? "var(--danger)" : t.type === "warn" ? "var(--warning)" : "var(--info)"}`,
+            color: t.type === "error" ? "var(--danger)" : t.type === "warn" ? "var(--warning)" : "var(--info)",
             boxShadow: "0 4px 12px rgba(0,0,0,0.4)"
           }}
         >

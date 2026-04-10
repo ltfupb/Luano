@@ -460,7 +460,7 @@ export function SettingsPanel({ onClose }: SettingsPanelProps): JSX.Element {
                   onClick={() => handleDeleteSkill(i)}
                   className="px-1.5 py-0.5 rounded text-xs transition-all duration-100"
                   style={{ color: "var(--text-muted)" }}
-                  onMouseEnter={e => (e.currentTarget as HTMLElement).style.color = "#ef4444"}
+                  onMouseEnter={e => (e.currentTarget as HTMLElement).style.color = "var(--danger)"}
                   onMouseLeave={e => (e.currentTarget as HTMLElement).style.color = "var(--text-muted)"}
                 >
                   {t("skillDelete")}
@@ -521,7 +521,7 @@ export function SettingsPanel({ onClose }: SettingsPanelProps): JSX.Element {
               className="flex items-center gap-2 rounded-lg px-3 py-2.5"
               style={{ background: "var(--bg-elevated)", border: "1px solid var(--border-subtle)" }}
             >
-              <span style={{ fontSize: "12px", fontWeight: 600, color: proStatus?.isPro ? "#10b981" : "var(--text-secondary)" }}>
+              <span style={{ fontSize: "12px", fontWeight: 600, color: proStatus?.isPro ? "var(--success)" : "var(--text-secondary)" }}>
                 {proStatus?.isPro ? t("pro") : t("communityFree")}
               </span>
               {licenseInfo?.isActive && licenseInfo.customerEmail && (
@@ -543,7 +543,7 @@ export function SettingsPanel({ onClose }: SettingsPanelProps): JSX.Element {
                 className="px-3 py-1.5 rounded-lg text-xs transition-all duration-150"
                 style={{
                   background: "var(--bg-elevated)",
-                  color: "#f87171",
+                  color: "var(--danger)",
                   border: "1px solid rgba(248,113,113,0.3)",
                   alignSelf: "flex-start"
                 }}
@@ -591,7 +591,7 @@ export function SettingsPanel({ onClose }: SettingsPanelProps): JSX.Element {
                   </button>
                 </div>
                 {licenseError && (
-                  <span style={{ fontSize: "10px", color: "#f87171" }}>{licenseError}</span>
+                  <span style={{ fontSize: "10px", color: "var(--danger)" }}>{licenseError}</span>
                 )}
                 <span style={{ fontSize: "10px", color: "var(--text-muted)", lineHeight: 1.4 }}>
                   {t("getLicenseAt")}{" "}

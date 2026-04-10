@@ -18,7 +18,12 @@ describe("getDownloadStatus", () => {
     expect(getDownloadStatus("nonexistent")).toBe("not-installed")
   })
 
-  it("returns not-installed for non-bundled tool that is not downloaded", () => {
+  it("returns not-installed for tool that is not downloaded", () => {
+    expect(getDownloadStatus("rojo")).toBe("not-installed")
+  })
+
+  it("returns not-installed for any known tool without binary", () => {
     expect(getDownloadStatus("argon")).toBe("not-installed")
+    expect(getDownloadStatus("selene")).toBe("not-installed")
   })
 })
