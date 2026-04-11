@@ -126,6 +126,39 @@ export async function startLuauLanguageClient(port: number): Promise<void> {
         { language: "lua" },
         { language: "luau" }
       ],
+      // Tell luau-lsp to load sourcemap.json from its cwd (the project root)
+      // and watch it for changes. The sync tool (Rojo/Argon) writes the file;
+      // luau-lsp picks up updates without us needing a separate watcher.
+      // The CLI flag --sourcemap doesn't exist on the lsp subcommand — this
+      // is the supported channel.
+      initializationOptions: {
+        sourcemap: {
+          enabled: true,
+          autogenerate: false,
+          sourcemapFile: "sourcemap.json"
+        }
+      },
+      // luau-lsp queries the client for the "luau-lsp.*" config sections via
+      // workspace/configuration. Without a handler the server gets undefined
+      // and falls back to defaults — including disabling sourcemap. Mirror
+      // the initializationOptions here so both code paths agree.
+      middleware: {
+        workspace: {
+          configuration: (params, _token, _next) => {
+            return params.items.map((item) => {
+              if (item.section === "luau-lsp.sourcemap") {
+                return { enabled: true, autogenerate: false, sourcemapFile: "sourcemap.json" }
+              }
+              if (item.section === "luau-lsp") {
+                return {
+                  sourcemap: { enabled: true, autogenerate: false, sourcemapFile: "sourcemap.json" }
+                }
+              }
+              return {}
+            })
+          }
+        }
+      },
       errorHandler: {
         error: () => ({ action: ErrorAction.Continue }),
         closed: () => ({ action: CloseAction.DoNotRestart })
