@@ -110,8 +110,6 @@ luano/
 │   │   └── FileExplorer.tsx     # 파일 트리
 │   ├── terminal/
 │   │   └── TerminalPane.tsx     # 내장 터미널 (xterm.js)
-│   ├── rojo/
-│   │   └── RojoPanel.tsx        # Rojo 패널 + 상태 표시
 │   ├── studio/
 │   │   ├── StudioPanel.tsx      # Pro: Studio 브릿지 패널
 │   │   └── InstanceTree.tsx     # Pro: 인스턴스 트리 뷰
@@ -134,7 +132,7 @@ luano/
 │   ├── stores/
 │   │   ├── projectStore.ts      # 파일 트리, 열린 파일, 내용
 │   │   ├── aiStore.ts           # 채팅 메시지, 스트리밍 상태, planMode, chatHistory persist
-│   │   ├── rojoStore.ts         # Rojo 상태 + 로그
+│   │   ├── syncStore.ts         # Sync(Rojo/Argon) 상태 + 포트 + 도구명
 │   │   └── settingsStore.ts     # 사용자 설정
 │   ├── sync/
 │   │   ├── SyncPanel.tsx        # Rojo/Argon + Studio Bridge 통합 Sync 패널

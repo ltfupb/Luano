@@ -17,16 +17,23 @@ export class LspBridge {
     return new Promise((resolve) => {
       this.wss = new WebSocketServer({ host: "127.0.0.1", port: this.port }, () => resolve())
 
+      // Swallow stdin errors (EPIPE when the LSP process has exited but a
+      // late client message still tries to write). Without this handler,
+      // Node throws synchronously from write().
+      this.lspProcess.stdin?.on("error", () => { /* ignore */ })
+
       this.wss.on("connection", (ws) => {
         this.clients.add(ws)
 
         ws.on("message", (data) => {
-          // Client → luau-lsp stdin
-          const msg = data.toString()
-          this.lspProcess.stdin?.write(msg)
+          // Client → luau-lsp stdin. Skip if the LSP process is gone.
+          const stdin = this.lspProcess.stdin
+          if (!stdin || !stdin.writable || this.lspProcess.exitCode !== null) return
+          try { stdin.write(data.toString()) } catch { /* EPIPE etc — process is gone */ }
         })
 
         ws.on("close", () => this.clients.delete(ws))
+        ws.on("error", () => { /* ignore — close will fire */ })
       })
 
       // luau-lsp stdout → Client
@@ -66,7 +73,9 @@ export class LspBridge {
   }
 
   stop(): void {
-    this.wss?.close()
+    this.clients.forEach((ws) => { try { ws.close() } catch { /* ignore */ } })
     this.clients.clear()
+    this.wss?.close()
+    this.wss = null
   }
 }
