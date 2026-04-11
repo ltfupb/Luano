@@ -15,6 +15,27 @@ export function isMinimumToolchainReady(): boolean {
   return isBinaryAvailable("luau-lsp")
 }
 
+/** Check if a project has a .luano/toolchain.json file */
+export function hasProjectConfig(projectPath: string): boolean {
+  return existsSync(join(projectPath, ".luano", "toolchain.json"))
+}
+
+/**
+ * Write a baseline .luano/toolchain.json for a project using current resolved defaults.
+ * No-op if the file already exists. Marks the project as "configured" so it won't
+ * prompt the setup panel again.
+ */
+export function initProjectConfig(projectPath: string): void {
+  if (hasProjectConfig(projectPath)) return
+  const config: ProjectToolchain = {}
+  const cats: ToolCategory[] = ["sync", "linter", "formatter", "lsp", "package-manager", "processor"]
+  for (const cat of cats) {
+    const tool = getActiveTool(cat, projectPath)
+    if (tool) config[cat] = tool
+  }
+  writeProjectConfig(projectPath, config)
+}
+
 interface ProjectToolchain {
   [category: string]: string
 }
@@ -81,8 +102,15 @@ export function setGlobalDefault(category: ToolCategory, toolId: string | null):
   store.set("toolchain", config)
 }
 
-/** Get full toolchain config for a project (used by renderer) */
-export function getToolchainConfig(projectPath?: string): {
+/**
+ * Get full toolchain config for a project (used by renderer).
+ *
+ * @param projectOnly - When true, selections reflect ONLY the project file's
+ *   explicit contents (no fallback to global/bundled defaults). Used by the
+ *   toolchain panel in normal mode so users see exactly what's persisted, not
+ *   phantom pre-checks from bundled defaults.
+ */
+export function getToolchainConfig(projectPath?: string, projectOnly = false): {
   selections: Partial<Record<ToolCategory, string | null>>
   installed: Record<string, boolean>
 } {
@@ -90,8 +118,14 @@ export function getToolchainConfig(projectPath?: string): {
   const selections: Partial<Record<ToolCategory, string | null>> = {}
   const installed: Record<string, boolean> = {}
 
+  const proj = projectOnly && projectPath ? readProjectConfig(projectPath) : null
+
   for (const cat of categories) {
-    selections[cat] = getActiveTool(cat, projectPath)
+    if (projectOnly) {
+      selections[cat] = proj?.[cat] ?? null
+    } else {
+      selections[cat] = getActiveTool(cat, projectPath)
+    }
   }
 
   for (const tool of Object.values(TOOL_REGISTRY)) {

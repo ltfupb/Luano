@@ -37,6 +37,13 @@ function write(level: string, ...args: unknown[]): void {
   const msg = args.map((a) => (typeof a === "string" ? a : JSON.stringify(a))).join(" ")
   const line = `[${ts}] [${level}] ${msg}\n`
 
+  // In dev, mirror to stdout/stderr so logs show up in the terminal running `npm run dev`.
+  // Packaged builds stay file-only to avoid polluting the user's shell.
+  if (!app.isPackaged) {
+    const out = level === "ERROR" || level === "WARN" ? process.stderr : process.stdout
+    out.write(line)
+  }
+
   try {
     // Skip if file too large
     if (existsSync(logFile) && statSync(logFile).size > MAX_LOG_SIZE) return

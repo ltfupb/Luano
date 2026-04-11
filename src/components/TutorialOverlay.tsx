@@ -15,54 +15,52 @@ interface TutorialStep {
 const STEPS: TutorialStep[] = [
   {
     title: "Welcome to Luano!",
-    description: "The all-in-one AI code editor for Roblox. Let's take a quick tour.",
+    description: "The all-in-one AI bibecoding editor for Roblox. Rojo, Selene, StyLua, luau-lsp — all bundled, zero setup. Let's take a quick tour.",
     position: "center"
   },
   {
-    target: "file-btn",
-    title: "Open a Project",
-    description: "Click File to open an existing Rojo project folder, or create a new one from a template.",
-    position: "bottom"
+    target: "welcome-new",
+    title: "Start a New Game",
+    description: "Pick a template and Luano scaffolds a Rojo project for you. Tools download on demand — the first run grabs Rojo, Selene, StyLua, and luau-lsp automatically.",
+    position: "top"
+  },
+  {
+    target: "welcome-open",
+    title: "Or Open an Existing Project",
+    description: "Point Luano at any Rojo project folder (`default.project.json` or `*.project.json`). Your last few projects show up below for quick access.",
+    position: "top"
   },
   {
     target: "settings-btn",
     title: "Settings & API Key",
-    description: "Set your Claude or OpenAI API key, choose a theme (Light, Dark, Tokyo Night), and configure editor preferences.",
+    description: "Bring your own key for Claude, OpenAI, Gemini, or a local model (Ollama, LM Studio, vLLM). Pick a theme (Dark, Light, Tokyo Night) and tune editor preferences.",
     position: "bottom"
   },
   {
-    target: "sidebar",
-    title: "Navigation",
-    description: "File Explorer, Search, Sync (Rojo + Studio Bridge), Analysis (Perf lint + Topology graph), and DataStore.",
-    position: "right"
+    target: "toolchain-btn",
+    title: "Toolchain Manager",
+    description: "Everything auto-installs on first use, but you can inspect versions or switch tool releases here. Binaries live in the app data folder — never touches your system PATH.",
+    position: "bottom"
   },
   {
-    target: "editor-area",
-    title: "Code Editor",
-    description: "Luau editor with autocomplete, type checking, diagnostics, and 30+ Roblox snippets. Split view available for side-by-side editing.",
+    target: "file-btn",
+    title: "File Menu",
+    description: `New Project, Open Folder, and Close Project also live under File. ${KB} is the universal inline-edit shortcut once you're in a file.`,
+    position: "bottom"
+  },
+  {
+    title: "After You Open a Project",
+    description: "You'll get a sidebar with Files, Search, Sync (Rojo + Studio Bridge), Analysis (perf lint + topology graph), and DataStore. The Luau editor has autocomplete, strict types, diagnostics, and 30+ Roblox snippets.",
     position: "center"
   },
   {
-    target: "inline-edit-btn",
-    title: "Inline AI Edit",
-    description: `Select code and press ${KB} to let AI edit inline. The button stays visible even with the chat panel open.`,
-    position: "bottom"
-  },
-  {
-    target: "chat-panel",
     title: "AI Assistant",
-    description: "Chat, Plan, or Agent mode. Type / for skills (/explain, /fix, /optimize). Attach files for context. Agent mode edits files directly.",
-    position: "left"
-  },
-  {
-    target: "rojo-icon",
-    title: "Sync with Studio",
-    description: "Start Rojo to sync code in real-time. Install the Studio plugin from the Sync panel to enable live console logs, instance tree, and script execution.",
-    position: "right"
+    description: `The chat panel opens on the right of any open project. Three modes: Agent edits files with per-change approval, Agent (Auto) runs hands-free, Plan is read-only for discussion. Type / for skills like /explain, /fix, /review, /security. Select code and press ${KB} for inline edits.`,
+    position: "center"
   },
   {
     title: "You're Ready!",
-    description: "Open a project and start building. Your layout, settings, and chat sessions persist across restarts.",
+    description: "Pick New Game or Open Project above to get started. Your layout, settings, and chat sessions persist across restarts.",
     position: "center"
   }
 ]

@@ -205,12 +205,14 @@ export const TOOL_REGISTRY: Record<string, ToolDefinition> = {
 }
 
 export const CATEGORIES: { id: ToolCategory; label: string; allowNone: boolean }[] = [
-  { id: "sync",            label: "Sync",            allowNone: false },
-  { id: "linter",          label: "Linter",          allowNone: false },
-  { id: "formatter",       label: "Formatter",       allowNone: false },
+  // Required — app needs these to function (editor + Studio sync)
   { id: "lsp",             label: "Language Server",  allowNone: false },
-  { id: "package-manager", label: "Package Manager",  allowNone: true },
-  { id: "processor",       label: "Code Processor",   allowNone: true }
+  { id: "sync",            label: "Sync",             allowNone: false },
+  // Optional — quality-of-life tools
+  { id: "linter",          label: "Linter",           allowNone: true  },
+  { id: "formatter",       label: "Formatter",        allowNone: true  },
+  { id: "package-manager", label: "Package Manager",  allowNone: true  },
+  { id: "processor",       label: "Code Processor",   allowNone: true  }
 ]
 
 export function getToolsForCategory(category: ToolCategory): ToolDefinition[] {

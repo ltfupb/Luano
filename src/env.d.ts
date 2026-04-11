@@ -70,6 +70,7 @@ interface Window {
     // Project
     openFolder: () => Promise<string | null>
     openProject: (path: string) => Promise<{ success: boolean; lspPort: number }>
+    closeProject: () => Promise<{ success: boolean }>
     initProject: (path: string) => Promise<{ success: boolean }>
 
     // File
@@ -313,7 +314,7 @@ interface Window {
       }>
       categories: Array<{ id: string; label: string; allowNone: boolean }>
     }>
-    toolchainGetConfig: (projectPath?: string) => Promise<{
+    toolchainGetConfig: (projectPath?: string, projectOnly?: boolean) => Promise<{
       selections: Record<string, string | null>
       installed: Record<string, boolean>
     }>
@@ -327,9 +328,12 @@ interface Window {
       latestVersion: string
       downloadUrl: string
     }>>
+    toolchainFetchMetadata: () => Promise<Record<string, { license: string | null; updatedAt: string | null }>>
     toolchainUpdateTool: (toolId: string, downloadUrl: string, latestVersion?: string) => Promise<{ success: boolean; error?: string }>
     toolchainDownloadMultiple: (toolIds: string[]) => Promise<Record<string, { success: boolean; error?: string }>>
     toolchainIsMinimumReady: () => Promise<boolean>
+    toolchainHasProjectConfig: (projectPath: string) => Promise<boolean>
+    toolchainInitProjectConfig: (projectPath: string) => Promise<{ success: boolean }>
 
     // Package Manager
     packageInstall: (projectPath: string) => Promise<{ success: boolean; output: string }>

@@ -18,7 +18,7 @@ const ALLOWED_CHANNELS = [
   "agent:checkpoint-available",
   "terminal:data:",
   "terminal:exit:",
-  "rojo:status",
+  "rojo:",
   "updater:",
   "sidecar:",
   "lint:",
@@ -38,6 +38,7 @@ const api = {
   // ── Project ──────────────────────────────────────────────────────────────
   openFolder: () => ipcRenderer.invoke("project:open-folder"),
   openProject: (path: string) => ipcRenderer.invoke("project:open", path),
+  closeProject: () => ipcRenderer.invoke("project:close"),
   initProject: (path: string) => ipcRenderer.invoke("project:init", path),
 
   // ── File ──────────────────────────────────────────────────────────────────
@@ -271,8 +272,8 @@ const api = {
 
   // ── Toolchain ──────────────────────────────────────────────────────────────
   toolchainRegistry: () => ipcRenderer.invoke("toolchain:registry"),
-  toolchainGetConfig: (projectPath?: string) =>
-    ipcRenderer.invoke("toolchain:get-config", projectPath),
+  toolchainGetConfig: (projectPath?: string, projectOnly?: boolean) =>
+    ipcRenderer.invoke("toolchain:get-config", projectPath, projectOnly),
   toolchainSetTool: (category: string, toolId: string | null, projectPath?: string) =>
     ipcRenderer.invoke("toolchain:set-tool", category, toolId, projectPath),
   toolchainDownload: (toolId: string) =>
@@ -283,12 +284,18 @@ const api = {
     ipcRenderer.invoke("toolchain:download-status", toolId),
   toolchainCheckUpdates: (installedIds: string[]) =>
     ipcRenderer.invoke("toolchain:check-updates", installedIds),
+  toolchainFetchMetadata: () =>
+    ipcRenderer.invoke("toolchain:fetch-metadata"),
   toolchainUpdateTool: (toolId: string, downloadUrl: string, latestVersion?: string) =>
     ipcRenderer.invoke("toolchain:update-tool", toolId, downloadUrl, latestVersion),
   toolchainDownloadMultiple: (toolIds: string[]) =>
     ipcRenderer.invoke("toolchain:download-multiple", toolIds),
   toolchainIsMinimumReady: () =>
     ipcRenderer.invoke("toolchain:is-minimum-ready"),
+  toolchainHasProjectConfig: (projectPath: string) =>
+    ipcRenderer.invoke("toolchain:has-project-config", projectPath),
+  toolchainInitProjectConfig: (projectPath: string) =>
+    ipcRenderer.invoke("toolchain:init-project-config", projectPath),
 
   // ── Package Manager ────────────────────────────────────────────────────────
   packageInstall: (projectPath: string) =>

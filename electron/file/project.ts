@@ -84,6 +84,65 @@ export function moveEntry(srcPath: string, destDir: string): string {
   return destPath
 }
 
+/**
+ * Strip `$className` from any node that also has `$path`. Argon rejects
+ * the combo ("$className and $path cannot be set at the same time") while
+ * standard Rojo supports both patterns, so removing `$className` is
+ * strictly an Argon-compat fix that keeps Rojo working unchanged.
+ *
+ * Returns true if the file was modified on disk.
+ */
+export function migrateProjectForArgon(projectPath: string): boolean {
+  const projectFile = join(projectPath, "default.project.json")
+  if (!existsSync(projectFile)) return false
+
+  let raw: string
+  try {
+    raw = readFileSync(projectFile, "utf-8")
+  } catch {
+    return false
+  }
+
+  let doc: unknown
+  try {
+    doc = JSON.parse(raw)
+  } catch {
+    // Malformed JSON — leave it alone. Argon will surface the parse error
+    // itself and the user can fix it by hand.
+    return false
+  }
+
+  const root = (doc as { tree?: unknown } | null)?.tree
+  if (!root || typeof root !== "object") return false
+
+  let changed = false
+  const walk = (node: Record<string, unknown>): void => {
+    if ("$className" in node && "$path" in node) {
+      delete node.$className
+      changed = true
+    }
+    for (const [key, value] of Object.entries(node)) {
+      if (key.startsWith("$")) continue
+      if (value && typeof value === "object" && !Array.isArray(value)) {
+        walk(value as Record<string, unknown>)
+      }
+    }
+  }
+  walk(root as Record<string, unknown>)
+
+  if (!changed) return false
+
+  try {
+    // Preserve 2-space indent convention used by every Rojo/Argon project
+    // file out there. JSON.stringify with 2 matches what Luano's own
+    // template emits.
+    writeFileSync(projectFile, JSON.stringify(doc, null, 2) + "\n", "utf-8")
+    return true
+  } catch {
+    return false
+  }
+}
+
 export function initProject(dirPath: string, resourcesDir: string): void {
   const projectFile = join(dirPath, "default.project.json")
   const seleneFile = join(dirPath, "selene.toml")

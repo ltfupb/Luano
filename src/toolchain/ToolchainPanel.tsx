@@ -35,7 +35,10 @@ interface CategoryDef {
 
 interface ToolchainPanelProps {
   onClose: () => void
+  onCancel?: () => void
   mode?: "normal" | "setup"
+  /** Override project path (used during setup mode when project isn't open yet) */
+  targetProjectPath?: string
 }
 
 const TOOL_LOGOS: Record<string, string> = {
@@ -64,14 +67,17 @@ function ToolLogo({ id, name, className }: { id: string; name: string; className
   return <img src={src} alt={name} className={`object-contain ${className ?? "w-8 h-8"}`} onError={() => setFailed(true)} />
 }
 
-export function ToolchainPanel({ onClose, mode = "normal" }: ToolchainPanelProps): JSX.Element {
+export function ToolchainPanel({ onClose, onCancel, mode = "normal", targetProjectPath }: ToolchainPanelProps): JSX.Element {
   const isSetup = mode === "setup"
-  const { projectPath } = useProjectStore()
+  const storeProjectPath = useProjectStore((s) => s.projectPath)
+  const projectPath = targetProjectPath ?? storeProjectPath
   const t = useT()
   const [tools, setTools] = useState<Record<string, ToolDef>>({})
   const [categories, setCategories] = useState<CategoryDef[]>([])
   const [installed, setInstalled] = useState<Record<string, boolean>>({})
   const [selections, setSelections] = useState<Record<string, string | null>>({})
+  const [pending, setPending] = useState<Record<string, string | null>>({})
+  const [applying, setApplying] = useState(false)
   const [filter, setFilter] = useState("sync")
   const [search, setSearch] = useState("")
   const [downloading, setDownloading] = useState<Set<string>>(new Set())
@@ -79,6 +85,18 @@ export function ToolchainPanel({ onClose, mode = "normal" }: ToolchainPanelProps
   const [visible, setVisible] = useState(false)
   const [updates, setUpdates] = useState<Record<string, { latestVersion: string; downloadUrl: string }>>({})
   const [updating, setUpdating] = useState<Set<string>>(new Set())
+  const [metadata, setMetadata] = useState<Record<string, { license: string | null; updatedAt: string | null }>>({})
+
+  const effectiveSelection = (category: string): string | null =>
+    category in pending ? pending[category] : (selections[category] ?? null)
+
+  /** A category is locked when it's required AND has exactly one tool available.
+   *  The user can't deselect it, and it gets pre-checked automatically. */
+  const isLocked = (tool: ToolDef): boolean => {
+    const cat = categories.find(c => c.id === tool.category)
+    if (!cat || cat.allowNone) return false
+    return Object.values(tools).filter(t => t.category === tool.category).length === 1
+  }
 
   useEffect(() => {
     requestAnimationFrame(() => setVisible(true))
@@ -89,12 +107,32 @@ export function ToolchainPanel({ onClose, mode = "normal" }: ToolchainPanelProps
   const loadData = async () => {
     const [registry, config] = await Promise.all([
       window.api.toolchainRegistry(),
-      window.api.toolchainGetConfig(projectPath ?? undefined)
+      // Normal mode: pass projectOnly=true so selections reflect the actual
+      // .luano/toolchain.json contents, not fallback defaults. Setup mode
+      // clears selections below anyway, so the flag doesn't matter there.
+      window.api.toolchainGetConfig(projectPath ?? undefined, !isSetup)
     ])
     setTools(registry.tools)
     setCategories(registry.categories)
     setInstalled(config.installed)
-    setSelections(config.selections)
+
+    if (isSetup) {
+      // Setup mode: clean slate. Don't seed from bundled defaults.
+      // Auto-check any required category that has exactly one tool (currently only lsp).
+      const cleared: Record<string, string | null> = {}
+      const autoPending: Record<string, string | null> = {}
+      for (const cat of registry.categories) {
+        cleared[cat.id] = null
+        const toolsInCat = Object.values(registry.tools).filter(t => t.category === cat.id)
+        if (!cat.allowNone && toolsInCat.length === 1) {
+          autoPending[cat.id] = toolsInCat[0].id
+        }
+      }
+      setSelections(cleared)
+      setPending(autoPending)
+    } else {
+      setSelections(config.selections)
+    }
 
     // Check for updates on installed tools
     const installedIds = Object.entries(config.installed)
@@ -109,66 +147,112 @@ export function ToolchainPanel({ onClose, mode = "normal" }: ToolchainPanelProps
         setUpdates(map)
       })
     }
+
+    // Fetch license + last updated from GitHub (cached 24h)
+    window.api.toolchainFetchMetadata().then(setMetadata).catch(() => {})
   }
 
   const handleClose = () => {
-    if (isSetup && !installed["luau-lsp"]) return
     setVisible(false)
     setTimeout(onClose, 180)
   }
 
-  const [installError, setInstallError] = useState<string | null>(null)
-  const [recommendedLoading, setRecommendedLoading] = useState(false)
-
-  const handleRecommendedInstall = async () => {
-    setInstallError(null)
-    setRecommendedLoading(true)
-    const recommendedIds = Object.values(tools).filter(t => t.recommended && !installed[t.id]).map(t => t.id)
-    if (recommendedIds.length === 0) {
-      setRecommendedLoading(false)
-      if (isSetup) handleClose()
-      return
-    }
-    for (const id of recommendedIds) {
-      setDownloading(prev => new Set(prev).add(id))
-    }
-    const results = await window.api.toolchainDownloadMultiple(recommendedIds)
-    const newInstalled = { ...installed }
-    for (const [id, result] of Object.entries(results)) {
-      setDownloading(prev => { const n = new Set(prev); n.delete(id); return n })
-      if (result.success) newInstalled[id] = true
-    }
-    setInstalled(newInstalled)
-    setRecommendedLoading(false)
-    const anyFailed = Object.values(results).some(r => !r.success)
-    if (anyFailed) {
-      const errors = Object.entries(results).filter(([, r]) => !r.success).map(([id, r]) => `${id}: ${r.error}`)
-      setInstallError(errors.join("\n"))
-    }
-    if (isSetup && newInstalled["luau-lsp"]) handleClose()
+  const handleCancel = () => {
+    setVisible(false)
+    setTimeout(() => (onCancel ?? onClose)(), 180)
   }
 
-  const handleInstall = async (toolId: string) => {
+  const [installError, setInstallError] = useState<string | null>(null)
+
+  const handleToggleSelect = (tool: ToolDef): void => {
+    if (isLocked(tool)) return
     setInstallError(null)
-    setDownloading(prev => new Set(prev).add(toolId))
-    const result = await window.api.toolchainDownload(toolId)
-    setDownloading(prev => { const n = new Set(prev); n.delete(toolId); return n })
-    if (result.success) {
-      const newInstalled = { ...installed, [toolId]: true }
-      setInstalled(newInstalled)
-      if (isSetup && toolId === "luau-lsp") {
-        setVisible(false)
-        setTimeout(onClose, 180)
+    const current = effectiveSelection(tool.category)
+    const category = categories.find(c => c.id === tool.category)
+
+    if (current === tool.id) {
+      // Uncheck if the category allows none
+      if (category?.allowNone) {
+        setPending(prev => ({ ...prev, [tool.category]: null }))
       }
-    } else {
-      setInstallError(result.error ?? "Install failed")
+      return
     }
+
+    setPending(prev => ({ ...prev, [tool.category]: tool.id }))
+  }
+
+  const handleContinue = async (): Promise<void> => {
+    if (applying) return
+    setInstallError(null)
+    setApplying(true)
+
+    // Tools that need to be on disk after apply: every effective selection across all categories
+    const effectiveMap: Record<string, string | null> = {}
+    for (const cat of categories) {
+      effectiveMap[cat.id] = effectiveSelection(cat.id)
+    }
+
+    // Missing binaries that must be downloaded
+    const toInstall = Object.values(effectiveMap)
+      .filter((id): id is string => !!id && !installed[id])
+
+    if (toInstall.length > 0) {
+      setDownloading(prev => { const n = new Set(prev); toInstall.forEach(i => n.add(i)); return n })
+      const results = await window.api.toolchainDownloadMultiple(toInstall)
+      setDownloading(prev => { const n = new Set(prev); toInstall.forEach(i => n.delete(i)); return n })
+
+      const nextInstalled = { ...installed }
+      const errors: string[] = []
+      for (const [id, result] of Object.entries(results)) {
+        if (result.success) nextInstalled[id] = true
+        else errors.push(`${id}: ${result.error}`)
+      }
+      setInstalled(nextInstalled)
+
+      if (errors.length > 0) {
+        setInstallError(errors.join("\n"))
+        setApplying(false)
+        return
+      }
+    }
+
+    // Persist per-project selection for every category where pending differs
+    for (const [cat, toolId] of Object.entries(pending)) {
+      if (toolId === (selections[cat] ?? null)) continue
+      try {
+        await window.api.toolchainSetTool(cat, toolId, projectPath ?? undefined)
+        if (cat === "sync") {
+          useRojoStore.getState().setToolName(toolId === "argon" ? "Argon" : "Rojo")
+        }
+      } catch (err) {
+        setInstallError(err instanceof Error ? err.message : "Failed to set tool")
+        setApplying(false)
+        return
+      }
+    }
+
+    setSelections(prev => ({ ...prev, ...pending }))
+    setPending({})
+    setApplying(false)
+    handleClose()
   }
 
   const handleRemove = async (toolId: string) => {
     const result = await window.api.toolchainRemove(toolId)
     if (result.success) {
       setInstalled(prev => ({ ...prev, [toolId]: false }))
+      // Clear selection (persisted + pending) if this tool was the project's choice
+      const tool = tools[toolId]
+      if (!tool) return
+      if (selections[tool.category] === toolId) {
+        try {
+          await window.api.toolchainSetTool(tool.category, null, projectPath ?? undefined)
+          setSelections(prev => ({ ...prev, [tool.category]: null }))
+        } catch { /* non-fatal */ }
+      }
+      if (pending[tool.category] === toolId) {
+        setPending(prev => ({ ...prev, [tool.category]: null }))
+      }
     }
   }
 
@@ -182,18 +266,6 @@ export function ToolchainPanel({ onClose, mode = "normal" }: ToolchainPanelProps
       setUpdates(prev => { const n = { ...prev }; delete n[toolId]; return n })
     } else {
       setInstallError(result.error ?? "Update failed")
-    }
-  }
-
-  const handleActivate = async (toolId: string, category: string) => {
-    try {
-      await window.api.toolchainSetTool(category, toolId, projectPath ?? undefined)
-      setSelections(prev => ({ ...prev, [category]: toolId }))
-      if (category === "sync") {
-        useRojoStore.getState().setToolName(toolId === "argon" ? "Argon" : "Rojo")
-      }
-    } catch (err) {
-      setInstallError(err instanceof Error ? err.message : "Failed to activate tool")
     }
   }
 
@@ -213,7 +285,7 @@ export function ToolchainPanel({ onClose, mode = "normal" }: ToolchainPanelProps
         backdropFilter: visible ? "blur(12px)" : "none",
         transition: "all 0.18s ease"
       }}
-      onClick={(e) => { if (!isSetup && e.target === e.currentTarget) handleClose() }}
+      onClick={(e) => { if (e.target === e.currentTarget) (isSetup ? handleCancel : handleClose)() }}
     >
       <div
         className="w-[720px] h-[520px] rounded-2xl overflow-hidden flex flex-col"
@@ -235,58 +307,75 @@ export function ToolchainPanel({ onClose, mode = "normal" }: ToolchainPanelProps
             <span style={{ fontSize: "14px", fontWeight: 600, color: "var(--text-primary)" }}>
               {isSetup ? t("toolchainSetup") : t("toolchainTitle")}
             </span>
-            {isSetup && (
-              <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>
-                {t("toolchainSetupHint")}
-              </span>
-            )}
           </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={handleRecommendedInstall}
-              disabled={recommendedLoading || Object.values(tools).filter(t => t.recommended && !installed[t.id]).length === 0}
-              className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-100 disabled:opacity-50"
-              style={{ background: "var(--accent)", color: "white" }}
-            >
-              {recommendedLoading ? t("toolchainDownloading") : t("toolchainRecommended")}
-            </button>
-            {!isSetup && (
-              <button
-                onClick={handleClose}
-                className="w-7 h-7 flex items-center justify-center rounded-lg transition-all duration-100"
-                style={{ color: "var(--text-secondary)" }}
-                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = "var(--bg-elevated)"; (e.currentTarget as HTMLElement).style.color = "var(--text-primary)" }}
-                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = "transparent"; (e.currentTarget as HTMLElement).style.color = "var(--text-secondary)" }}
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <line x1="18" y1="6" x2="6" y2="18" />
-                  <line x1="6" y1="6" x2="18" y2="18" />
-                </svg>
-              </button>
-            )}
-          </div>
+          <button
+            onClick={isSetup ? handleCancel : handleClose}
+            title={isSetup ? "Cancel" : "Close"}
+            className="w-7 h-7 flex items-center justify-center rounded-lg transition-all duration-100"
+            style={{ color: "var(--text-secondary)" }}
+            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = "var(--bg-elevated)"; (e.currentTarget as HTMLElement).style.color = "var(--text-primary)" }}
+            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = "transparent"; (e.currentTarget as HTMLElement).style.color = "var(--text-secondary)" }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
         </div>
 
         <div className="flex flex-1 min-h-0">
-        {/* Sidebar — Category Filter */}
+        {/* Sidebar — Required categories sit on top with a thin accent rail,
+            a breathing gap, then Optional categories */}
         <div
           className="w-[160px] flex-shrink-0 flex flex-col py-3"
           style={{ borderRight: "1px solid var(--border-subtle)", background: "var(--bg-base)" }}
         >
-          {categories.map(cat => (
-            <button
-              key={cat.id}
-              onClick={() => setFilter(cat.id)}
-              className="px-3 py-1.5 text-left text-xs transition-all duration-100"
-              style={{
-                background: filter === cat.id ? "var(--bg-elevated)" : "transparent",
-                color: filter === cat.id ? "var(--text-primary)" : "var(--text-secondary)",
-                fontWeight: filter === cat.id ? 500 : 400
-              }}
-            >
-              {cat.label}
-            </button>
-          ))}
+          {(["required", "optional"] as const).map((group, groupIdx) => {
+            const groupCats = categories.filter(c => (group === "required" ? !c.allowNone : c.allowNone))
+            if (groupCats.length === 0) return null
+            return (
+              <div key={group} className={`flex flex-col ${groupIdx > 0 ? "mt-3" : ""}`}>
+                {groupCats.map(cat => {
+                  const isRequired = !cat.allowNone
+                  const hasSelection = !!effectiveSelection(cat.id)
+                  const unmet = isRequired && !hasSelection
+                  const isActive = filter === cat.id
+                  return (
+                    <button
+                      key={cat.id}
+                      onClick={() => setFilter(cat.id)}
+                      className="relative py-1.5 pr-3 text-left text-xs transition-all duration-100"
+                      style={{
+                        paddingLeft: "14px",
+                        background: isActive ? "var(--bg-elevated)" : "transparent",
+                        color: isActive ? "var(--text-primary)" : "var(--text-secondary)",
+                        fontWeight: isActive ? 500 : isRequired ? 500 : 400
+                      }}
+                      title={isRequired ? t("toolchainRequired") : undefined}
+                    >
+                      {isRequired && (
+                        <span
+                          aria-hidden
+                          className="absolute rounded-full"
+                          style={{
+                            left: "6px",
+                            top: "50%",
+                            transform: "translateY(-50%)",
+                            width: "2px",
+                            height: "13px",
+                            background: unmet ? "#f87171" : "var(--accent)",
+                            opacity: unmet ? 1 : isActive ? 1 : 0.55,
+                            transition: "opacity 0.15s ease, background 0.15s ease"
+                          }}
+                        />
+                      )}
+                      {cat.label}
+                    </button>
+                  )
+                })}
+              </div>
+            )
+          })}
         </div>
 
         {/* Main Content */}
@@ -314,11 +403,11 @@ export function ToolchainPanel({ onClose, mode = "normal" }: ToolchainPanelProps
             {/* Tool List */}
             <div className="flex-1 overflow-y-auto p-3 flex flex-col gap-2">
               {filteredTools.map(tool => {
-                const isInstalled = installed[tool.id]
-                const isActive = selections[tool.category] === tool.id
+                const isSelected = effectiveSelection(tool.category) === tool.id
                 const isDownloading = downloading.has(tool.id)
-                const hasUpdate = !!updates[tool.id]
                 const isUpdating = updating.has(tool.id)
+                const isBusy = isDownloading || isUpdating
+                const locked = isLocked(tool)
 
                 return (
                   <div
@@ -345,15 +434,6 @@ export function ToolchainPanel({ onClose, mode = "normal" }: ToolchainPanelProps
                         <span style={{ fontSize: "12px", fontWeight: 500, color: "var(--text-primary)" }}>
                           {tool.name}
                         </span>
-                        <span style={{ fontSize: "10px", color: "var(--text-muted)" }}>v{tool.version}</span>
-                        {hasUpdate && (
-                          <span
-                            className="px-1.5 py-0.5 rounded text-[9px] font-medium"
-                            style={{ background: "rgba(59,130,246,0.15)", color: "#3b82f6" }}
-                          >
-                            {updates[tool.id].latestVersion}
-                          </span>
-                        )}
                         {tool.recommended && (
                           <span
                             className="px-1.5 py-0.5 rounded text-[9px] font-medium"
@@ -368,37 +448,40 @@ export function ToolchainPanel({ onClose, mode = "normal" }: ToolchainPanelProps
                       </div>
                     </div>
 
-                    {/* Action Button */}
-                    <div className="flex-shrink-0 self-center">
-                      {isDownloading || isUpdating ? (
+                    {/* Action — per-project select (auto-downloads on first use) */}
+                    <div className="flex-shrink-0 self-center flex items-center">
+                      {isBusy ? (
                         <span
                           className="px-2.5 py-1 rounded-md text-[10px]"
                           style={{ color: "var(--text-muted)" }}
                         >
                           {t("toolchainDownloading")}
                         </span>
-                      ) : !isInstalled ? (
-                        <button
-                          onClick={(e) => { e.stopPropagation(); handleInstall(tool.id) }}
-                          className="px-2.5 py-1 rounded-md text-[10px] font-medium transition-all duration-100"
-                          style={{ background: "var(--accent)", color: "white" }}
-                        >
-                          {t("toolchainInstall")}
-                        </button>
-                      ) : isActive ? (
-                        <span
-                          className="px-2.5 py-1 rounded-md text-[10px]"
-                          style={{ color: "#10b981" }}
-                        >
-                          {t("toolchainActive")}
-                        </span>
                       ) : (
                         <button
-                          onClick={(e) => { e.stopPropagation(); handleActivate(tool.id, tool.category) }}
-                          className="px-2.5 py-1 rounded-md text-[10px] transition-all duration-100"
-                          style={{ background: "var(--accent)", color: "white" }}
+                          onClick={(e) => { e.stopPropagation(); handleToggleSelect(tool) }}
+                          disabled={locked}
+                          aria-label={locked ? t("toolchainRequired") : (isSelected ? "Deselect" : "Select")}
+                          title={locked ? t("toolchainRequired") : undefined}
+                          className="w-[18px] h-[18px] rounded flex items-center justify-center transition-all duration-100"
+                          style={{
+                            background: isSelected ? "var(--accent)" : "transparent",
+                            border: `1.5px solid ${isSelected ? "var(--accent)" : "var(--border)"}`,
+                            cursor: locked ? "default" : "pointer"
+                          }}
                         >
-                          {t("toolchainActivate")}
+                          {isSelected && (
+                            locked ? (
+                              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                <rect x="5" y="11" width="14" height="10" rx="1.5" />
+                                <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+                              </svg>
+                            ) : (
+                              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                                <polyline points="20 6 9 17 4 12" />
+                              </svg>
+                            )
+                          )}
                         </button>
                       )}
                     </div>
@@ -439,20 +522,27 @@ export function ToolchainPanel({ onClose, mode = "normal" }: ToolchainPanelProps
                       </span>
                     </div>
                     <div className="flex items-center justify-between">
-                      <span style={{ fontSize: "10px", color: "var(--text-muted)" }}>Category</span>
+                      <span style={{ fontSize: "10px", color: "var(--text-muted)" }}>Author</span>
                       <span style={{ fontSize: "10px", color: "var(--text-secondary)" }}>
-                        {categories.find(c => c.id === detail.category)?.label ?? detail.category}
+                        {detail.github.split("/")[0]}
                       </span>
                     </div>
-                    <div className="flex items-center justify-between">
-                      <span style={{ fontSize: "10px", color: "var(--text-muted)" }}>Status</span>
-                      <span style={{
-                        fontSize: "10px",
-                        color: installed[detail.id] ? "#10b981" : "var(--text-muted)"
-                      }}>
-                        {installed[detail.id] ? "Installed" : "Not installed"}
-                      </span>
-                    </div>
+                    {metadata[detail.id]?.license && (
+                      <div className="flex items-center justify-between">
+                        <span style={{ fontSize: "10px", color: "var(--text-muted)" }}>License</span>
+                        <span style={{ fontSize: "10px", color: "var(--text-secondary)" }}>
+                          {metadata[detail.id].license}
+                        </span>
+                      </div>
+                    )}
+                    {metadata[detail.id]?.updatedAt && (
+                      <div className="flex items-center justify-between">
+                        <span style={{ fontSize: "10px", color: "var(--text-muted)" }}>Updated</span>
+                        <span style={{ fontSize: "10px", color: "var(--text-secondary)" }}>
+                          {new Date(metadata[detail.id].updatedAt as string).toLocaleDateString()}
+                        </span>
+                      </div>
+                    )}
                   </div>
 
                   <a
@@ -479,26 +569,7 @@ export function ToolchainPanel({ onClose, mode = "normal" }: ToolchainPanelProps
                         {updating.has(detail.id) ? t("toolchainDownloading") : `Update to ${updates[detail.id].latestVersion}`}
                       </button>
                     )}
-                    {!installed[detail.id] && (
-                      <button
-                        onClick={() => handleInstall(detail.id)}
-                        disabled={downloading.has(detail.id)}
-                        className="w-full py-1.5 rounded-md text-xs font-medium transition-all duration-100 disabled:opacity-50"
-                        style={{ background: "var(--accent)", color: "white" }}
-                      >
-                        {downloading.has(detail.id) ? t("toolchainDownloading") : t("toolchainInstall")}
-                      </button>
-                    )}
-                    {installed[detail.id] && selections[detail.category] !== detail.id && (
-                      <button
-                        onClick={() => handleActivate(detail.id, detail.category)}
-                        className="w-full py-1.5 rounded-md text-xs font-medium transition-all duration-100"
-                        style={{ background: "var(--accent)", color: "white" }}
-                      >
-                        {t("toolchainActivate")}
-                      </button>
-                    )}
-                    {installed[detail.id] && !(isSetup && detail.id === "luau-lsp") && (
+                    {installed[detail.id] && !isLocked(detail) && (
                       <button
                         onClick={() => handleRemove(detail.id)}
                         className="w-full py-1.5 rounded-md text-xs transition-all duration-100"
@@ -521,6 +592,24 @@ export function ToolchainPanel({ onClose, mode = "normal" }: ToolchainPanelProps
             </div>
           </div>
         </div>
+        </div>
+
+        {/* Bottom action bar — Continue applies pending selections (downloads missing tools) */}
+        <div
+          className="flex items-center justify-between px-5 py-3 flex-shrink-0"
+          style={{ borderTop: "1px solid var(--border-subtle)", background: "var(--bg-base)" }}
+        >
+          <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>
+            {t("toolchainSelectHint")}
+          </span>
+          <button
+            onClick={handleContinue}
+            disabled={applying || categories.some(c => !c.allowNone && !effectiveSelection(c.id))}
+            className="px-4 py-1.5 rounded-lg text-xs font-medium transition-all duration-100 disabled:opacity-40 disabled:cursor-not-allowed"
+            style={{ background: "var(--accent)", color: "white" }}
+          >
+            {applying ? t("toolchainDownloading") : t("toolchainContinue")}
+          </button>
         </div>
       </div>
     </div>

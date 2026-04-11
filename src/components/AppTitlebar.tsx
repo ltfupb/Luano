@@ -121,6 +121,7 @@ export function AppTitlebar({
           </button>
         )}
         <button
+          data-tour="toolchain-btn"
           onClick={onOpenToolchain}
           className="px-2.5 h-7 flex items-center rounded-md text-xs transition-all duration-150"
           style={{ color: "var(--text-secondary)" }}

@@ -7,6 +7,7 @@ interface Props {
   cancelLabel: string
   onConfirm: () => void
   onCancel: () => void
+  onDismiss?: () => void
   width?: number
 }
 
@@ -17,13 +18,14 @@ export function ConfirmDialog({
   cancelLabel,
   onConfirm,
   onCancel,
+  onDismiss,
   width = 380
 }: Props): JSX.Element {
   return (
     <div
       className="fixed inset-0 z-[100] flex items-center justify-center animate-fade-in"
       style={{ background: "rgba(5,8,15,0.7)", backdropFilter: "blur(4px)" }}
-      onClick={(e) => { if (e.target === e.currentTarget) onCancel() }}
+      onClick={(e) => { if (e.target === e.currentTarget) (onDismiss ?? onCancel)() }}
     >
       <div
         className="rounded-xl overflow-hidden animate-slide-up"

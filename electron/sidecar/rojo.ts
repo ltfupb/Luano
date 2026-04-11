@@ -13,10 +13,12 @@ export class RojoManager {
   private projectPath: string | null = null
   private port: number | null = null
   private restartCount = 0
+  private lastError: string | null = null
 
   serve(projectPath: string): void {
     this.stop()
     this.projectPath = projectPath
+    this.lastError = null
 
     // Skip if no default.project.json
     if (!existsSync(join(projectPath, "default.project.json"))) {
@@ -38,11 +40,17 @@ export class RojoManager {
           if (portMatch) this.port = parseInt(portMatch[1], 10)
           if (this.status !== "running") {
             this.status = "running"
+            this.lastError = null
           }
           this.notifyStatus()
           this.startSourcemapWatch(projectPath)
         },
-        onError: () => {}
+        onError: (data) => {
+          const trimmed = data.trim()
+          if (trimmed && /error|fail|panic/i.test(trimmed)) {
+            this.lastError = trimmed
+          }
+        }
       })
 
       this.proc = sidecar.process
@@ -99,9 +107,14 @@ export class RojoManager {
     return this.port
   }
 
+  getLastError(): string | null {
+    return this.lastError
+  }
+
   private notifyStatus(): void {
+    const err = this.status === "error" ? this.lastError : null
     BrowserWindow.getAllWindows().forEach((win) => {
-      win.webContents.send("rojo:status-changed", this.status, this.port)
+      win.webContents.send("rojo:status-changed", this.status, this.port, err)
     })
   }
 

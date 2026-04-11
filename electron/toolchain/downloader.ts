@@ -200,7 +200,12 @@ export interface ToolUpdate {
 
 interface GitHubRelease {
   tag_name: string
+  published_at: string | null
   assets: Array<{ name: string; browser_download_url: string }>
+}
+
+interface GitHubRepo {
+  license: { spdx_id: string | null; name: string | null } | null
 }
 
 function stripVersionPrefix(tag: string): string {
@@ -267,6 +272,58 @@ export async function checkToolUpdates(installedIds: string[]): Promise<ToolUpda
 
   await Promise.all(checks)
   return updates
+}
+
+// ── Metadata (license, pushed_at) with 24h cache ─────────────────────────────
+
+export interface ToolMetadata {
+  license: string | null
+  updatedAt: string | null
+}
+
+const METADATA_CACHE_KEY = "toolchain.metadataCache.v2"
+const METADATA_CACHE_TTL = 24 * 60 * 60 * 1000
+
+interface CachedMetadata {
+  fetchedAt: number
+  data: Record<string, ToolMetadata>
+}
+
+async function fetchRepo(repo: string): Promise<GitHubRepo | null> {
+  const url = `https://api.github.com/repos/${repo}`
+  return new Promise((resolve) => {
+    httpsGet(url, { headers: { "User-Agent": "Luano", Accept: "application/vnd.github+json" } }, (res) => {
+      if (res.statusCode !== 200) { resolve(null); res.resume(); return }
+      let data = ""
+      res.on("data", (chunk: Buffer) => { data += chunk.toString() })
+      res.on("end", () => {
+        try { resolve(JSON.parse(data)) } catch { resolve(null) }
+      })
+    }).on("error", () => resolve(null))
+  })
+}
+
+export async function fetchToolMetadata(): Promise<Record<string, ToolMetadata>> {
+  const cached = store.get<CachedMetadata>(METADATA_CACHE_KEY)
+  if (cached && Date.now() - cached.fetchedAt < METADATA_CACHE_TTL) {
+    return cached.data
+  }
+
+  const result: Record<string, ToolMetadata> = {}
+  const fetches = Object.values(TOOL_REGISTRY).map(async (tool) => {
+    const [repo, release] = await Promise.all([
+      fetchRepo(tool.github),
+      fetchLatestRelease(tool.github)
+    ])
+    result[tool.id] = {
+      license: repo?.license?.spdx_id ?? repo?.license?.name ?? null,
+      updatedAt: release?.published_at ?? null
+    }
+  })
+  await Promise.all(fetches)
+
+  store.set(METADATA_CACHE_KEY, { fetchedAt: Date.now(), data: result })
+  return result
 }
 
 /**

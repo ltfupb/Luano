@@ -300,6 +300,18 @@ export function EditorPane(): JSX.Element {
     }
   }, [lspPort])
 
+  // Reconnect when main restarts the luau-lsp process after a crash. The
+  // bridge port is stable, so we just re-run the same start routine — it
+  // tears down the dead WebSocket and brings up a fresh client.
+  useIpcEvent("sidecar:lsp-ready", useCallback((data: unknown) => {
+    const port = (data as { port?: number } | undefined)?.port
+      ?? useProjectStore.getState().lspPort
+    if (!port) return
+    startLuauLanguageClient(port).catch((err) =>
+      console.warn("[LSP] Reconnect failed:", err)
+    )
+  }, []))
+
   // ── Save helpers ────────────────────────────────────────────────────────────
   const saveFile = useCallback(async (path: string) => {
     const content = useProjectStore.getState().fileContents[path]

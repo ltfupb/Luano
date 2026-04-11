@@ -202,7 +202,7 @@ function TreeNode({ node, depth = 0 }: { node: BridgeInstanceNode; depth?: numbe
 // ── Main Component ───────────────────────────────────────────────────────────
 
 export function SyncPanel(): JSX.Element {
-  const { status: rojoStatus, port } = useRojoStore()
+  const { status: rojoStatus, port, toolName } = useRojoStore()
   const { projectPath } = useProjectStore()
   const { globalSummary } = useAIStore()
   const t = useT()
@@ -308,8 +308,8 @@ export function SyncPanel(): JSX.Element {
             }}
           />
           <span style={{ fontSize: "11px", color: "var(--text-secondary)", flex: 1 }}>
-            Rojo{rojoStatus === "running" && port && (
-              <span style={{ color: "var(--text-muted)" }}>:{port}</span>
+            {toolName}{rojoStatus === "running" && port && (
+              <span style={{ color: "var(--text-muted)" }}> :{port}</span>
             )}
           </span>
           <button

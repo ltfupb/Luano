@@ -21,6 +21,7 @@ export function WelcomeScreen({ onOpenFolder, onNewProject, onOpenRecent }: Prop
 
       <div className="flex gap-3" style={{ maxWidth: "520px", width: "100%", padding: "0 24px" }}>
         <button
+          data-tour="welcome-new"
           onClick={onNewProject}
           className="flex-1 flex flex-col items-start gap-2 rounded-lg p-4 transition-all duration-150 text-left"
           style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}
@@ -37,6 +38,7 @@ export function WelcomeScreen({ onOpenFolder, onNewProject, onOpenRecent }: Prop
         </button>
 
         <button
+          data-tour="welcome-open"
           onClick={onOpenFolder}
           className="flex-1 flex flex-col items-start gap-2 rounded-lg p-4 transition-all duration-150 text-left"
           style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}

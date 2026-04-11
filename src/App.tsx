@@ -44,7 +44,7 @@ function IconChat(): JSX.Element {
 
 export default function App(): JSX.Element {
   const { projectPath, dirtyFiles, setProject, closeProject, setFileTree, openFile } = useProjectStore()
-  const { setStatus, setPort, setToolName } = useRojoStore()
+  const { setStatus, setPort, setToolName, setError } = useRojoStore()
   const { setGlobalSummary, clearMessages, saveProjectChat, loadProjectChat } = useAIStore()
   const theme = useSettingsStore((s) => s.theme)
   const uiScale = useSettingsStore((s) => s.uiScale)
@@ -68,6 +68,7 @@ export default function App(): JSX.Element {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [toolchainOpen, setToolchainOpen] = useState(false)
   const [toolchainSetupMode, setToolchainSetupMode] = useState(false)
+  const [setupTargetPath, setSetupTargetPath] = useState<string | null>(null)
   const pendingProjectRef = useRef<{ path: string; isNew: boolean } | null>(null)
 
   // Allow StatusBar to open toolchain panel via custom event
@@ -137,7 +138,14 @@ export default function App(): JSX.Element {
   useIpcEvent("rojo:status-changed", useCallback((...args: unknown[]) => {
     setStatus(args[0] as "stopped" | "starting" | "running" | "error")
     if (typeof args[1] === "number") setPort(args[1])
-  }, [setStatus, setPort]))
+    setError(typeof args[2] === "string" ? args[2] : null)
+  }, [setStatus, setPort, setError]))
+  useIpcEvent("rojo:notice", useCallback((...args: unknown[]) => {
+    const message = args[0]
+    const type = args[1]
+    if (typeof message !== "string") return
+    toast(message, type === "error" || type === "warn" || type === "info" ? type : "info")
+  }, []))
   useIpcEvent("file:added", () => refreshFileTree())
   useIpcEvent("file:deleted", () => refreshFileTree())
 
@@ -178,9 +186,17 @@ export default function App(): JSX.Element {
   const handleToolchainClose = useCallback(async () => {
     setToolchainOpen(false)
     setToolchainSetupMode(false)
+    setSetupTargetPath(null)
     const pending = pendingProjectRef.current
     if (pending) {
       pendingProjectRef.current = null
+      // Scaffold the project now (not earlier) so cancelling the setup panel
+      // leaves the folder untouched — initProject creates default.project.json,
+      // selene.toml, and src/ subdirectories which the user didn't ask for if
+      // they backed out.
+      if (pending.isNew) await window.api.initProject(pending.path)
+      // Persist resolved toolchain to the project so it won't prompt again
+      await window.api.toolchainInitProjectConfig(pending.path)
       // Now safe to close old project and open the pending one
       const currentPath = useProjectStore.getState().projectPath
       if (currentPath) useAIStore.getState().saveProjectChat(currentPath)
@@ -191,6 +207,13 @@ export default function App(): JSX.Element {
       loadProjectChat(pending.path)
     }
   }, [openPath, loadProjectChat, closeProject, clearMessages, setGlobalSummary])
+
+  const handleToolchainCancel = useCallback(() => {
+    pendingProjectRef.current = null
+    setToolchainOpen(false)
+    setToolchainSetupMode(false)
+    setSetupTargetPath(null)
+  }, [])
 
   // ── Session Restore — reopen last project + files on restart ────────────
   useEffect(() => {
@@ -308,11 +331,17 @@ export default function App(): JSX.Element {
   const [rojoSetup, setRojoSetup] = useState<string | null>(null)
 
   const switchToProject = useCallback(async (path: string, isNew: boolean) => {
-    // Gate: check if minimum toolchain (luau-lsp) is installed BEFORE closing current project
-    const ready = await window.api.toolchainIsMinimumReady()
-    if (!ready) {
-      if (isNew) await window.api.initProject(path)
+    // Gate: both luau-lsp must be installed AND this project must have a .luano/toolchain.json.
+    // Missing either → show setup panel before closing the current project.
+    const [ready, configured] = await Promise.all([
+      window.api.toolchainIsMinimumReady(),
+      window.api.toolchainHasProjectConfig(path),
+    ])
+    if (!ready || !configured) {
+      // Defer initProject until the user confirms via the setup panel — see
+      // handleToolchainClose. Cancelling should leave the folder untouched.
       pendingProjectRef.current = { path, isNew }
+      setSetupTargetPath(path)
       setToolchainSetupMode(true)
       setToolchainOpen(true)
       return
@@ -363,12 +392,13 @@ export default function App(): JSX.Element {
     await switchToProject(path, true)
   }
 
-  const handleCloseProject = () => {
+  const handleCloseProject = async () => {
     if (!projectPath) return
     if (dirtyFiles.length > 0) {
       setSwitchConfirm({ action: "close" })
       return
     }
+    await window.api.closeProject()
     closeProject()
     clearMessages()
     setGlobalSummary("")
@@ -534,7 +564,7 @@ export default function App(): JSX.Element {
       <ErrorBoundary>
         <Suspense fallback={null}>
           {settingsOpen && <SettingsPanel onClose={() => setSettingsOpen(false)} />}
-          {toolchainOpen && <ToolchainPanel onClose={handleToolchainClose} mode={toolchainSetupMode ? "setup" : "normal"} />}
+          {toolchainOpen && <ToolchainPanel onClose={handleToolchainClose} onCancel={handleToolchainCancel} mode={toolchainSetupMode ? "setup" : "normal"} targetProjectPath={toolchainSetupMode ? (setupTargetPath ?? undefined) : undefined} />}
         </Suspense>
       </ErrorBoundary>
       {quickOpenVisible && <QuickOpen onClose={() => setQuickOpenVisible(false)} />}
@@ -557,6 +587,7 @@ export default function App(): JSX.Element {
             const { path, action } = switchConfirm
             setSwitchConfirm(null)
             if (action === "close") {
+              await window.api.closeProject()
               closeProject()
               clearMessages()
               setGlobalSummary("")
@@ -585,6 +616,7 @@ export default function App(): JSX.Element {
             setRojoSetup(null)
             await switchToProject(path, false)
           }}
+          onDismiss={() => setRojoSetup(null)}
         />
       )}
     </div>

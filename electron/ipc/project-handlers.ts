@@ -4,7 +4,8 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync } from 
 import { is } from "@electron-toolkit/utils"
 import { syncManager, lspManager } from "../main"
 import { readDir, readFile, writeFile, createFile, createFolder, renameEntry, deleteEntry, moveEntry, initProject } from "../file/project"
-import { watchProject } from "../file/watcher"
+import { watchProject, stopWatcher } from "../file/watcher"
+import { cleanupPtys } from "./terminal-handlers"
 import { lintFile } from "../sidecar/selene"
 import { formatFile } from "../sidecar/stylua"
 import { hasFeature } from "../pro"
@@ -19,8 +20,8 @@ import {
 import { aiGeneratedFiles, PRO_REQUIRED, collectLuauFiles, setCurrentProject, getCurrentProject } from "./shared"
 import { isPro } from "../pro"
 import { activateLicense, deactivateLicense, getLicenseInfo, validateLicense as revalidateLicense } from "../pro/license"
-import { getToolchainConfig, getActiveTool, setProjectTool, setGlobalDefault, isMinimumToolchainReady } from "../toolchain/config"
-import { downloadTool, downloadMultiple, getDownloadStatus, removeTool, checkToolUpdates, updateTool } from "../toolchain/downloader"
+import { getToolchainConfig, getActiveTool, setProjectTool, setGlobalDefault, isMinimumToolchainReady, hasProjectConfig, initProjectConfig } from "../toolchain/config"
+import { downloadTool, downloadMultiple, getDownloadStatus, removeTool, checkToolUpdates, updateTool, fetchToolMetadata } from "../toolchain/downloader"
 import { TOOL_REGISTRY, CATEGORIES, type ToolCategory } from "../toolchain/registry"
 import { packageInstall, packageInit } from "../toolchain/package-runner"
 
@@ -59,6 +60,17 @@ export function registerProjectHandlers(): void {
     await lspManager.start(projectPath)
     syncManager.serve(projectPath)
     return { success: true, lspPort: lspManager.getPort() }
+  })
+
+  // Release all main-process holds on the current project folder
+  // (watcher / LSP cwd / sync cwd) so the user can delete or move it.
+  ipcMain.handle("project:close", async () => {
+    stopWatcher()
+    syncManager.stop()
+    await lspManager.stop()
+    cleanupPtys()
+    setCurrentProject(null)
+    return { success: true }
   })
 
   // ── File ──────────────────────────────────────────────────────────────────
@@ -302,8 +314,8 @@ export function registerProjectHandlers(): void {
     categories: CATEGORIES
   }))
 
-  ipcMain.handle("toolchain:get-config", (_, projectPath?: string) =>
-    getToolchainConfig(projectPath)
+  ipcMain.handle("toolchain:get-config", (_, projectPath?: string, projectOnly?: boolean) =>
+    getToolchainConfig(projectPath, projectOnly)
   )
 
   ipcMain.handle("toolchain:set-tool", (_, category: ToolCategory, toolId: string | null, projectPath?: string) => {
@@ -341,6 +353,10 @@ export function registerProjectHandlers(): void {
     checkToolUpdates(installedIds)
   )
 
+  ipcMain.handle("toolchain:fetch-metadata", () =>
+    fetchToolMetadata()
+  )
+
   ipcMain.handle("toolchain:update-tool", (_, toolId: string, downloadUrl: string, latestVersion?: string) =>
     updateTool(toolId, downloadUrl, latestVersion)
   )
@@ -352,6 +368,15 @@ export function registerProjectHandlers(): void {
   ipcMain.handle("toolchain:is-minimum-ready", () =>
     isMinimumToolchainReady()
   )
+
+  ipcMain.handle("toolchain:has-project-config", (_, projectPath: string) =>
+    hasProjectConfig(projectPath)
+  )
+
+  ipcMain.handle("toolchain:init-project-config", (_, projectPath: string) => {
+    initProjectConfig(projectPath)
+    return { success: true }
+  })
 
   // ── Package Manager ────────────────────────────────────────────────────
   ipcMain.handle("package:install", async (_, projectPath: string) => {
