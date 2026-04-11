@@ -16,10 +16,39 @@ local LogService     = game:GetService("LogService")
 local RunService     = game:GetService("RunService")
 
 local BASE_URL       = "http://127.0.0.1:27780"
+local LUANO_TOKEN    = "__LUANO_TOKEN__"  -- replaced at install time by Luano
 local REPORT_SEC     = 2      -- report interval
 local MAX_LOGS       = 150    -- log buffer cap
 local MAX_DEPTH      = 4      -- tree depth limit
 local MAX_CHILDREN   = 50     -- children per node
+
+-- Top-level services we surface to the Luano UI. Everything else under
+-- `game` (CoreGui, NetworkClient, ScriptContext, RbxAnalyticsService, ...)
+-- is engine plumbing that just clutters the tree.
+local INCLUDE_SERVICES = {
+	Workspace          = true,
+	Players            = true,
+	Lighting           = true,
+	ReplicatedFirst    = true,
+	ReplicatedStorage  = true,
+	ServerScriptService = true,
+	ServerStorage      = true,
+	StarterGui         = true,
+	StarterPack        = true,
+	StarterPlayer      = true,
+	SoundService       = true,
+	Chat               = true,
+	TextChatService    = true,
+	Teams              = true,
+	TestService        = true,
+}
+
+local function authHeaders()
+	return {
+		["Content-Type"] = "application/json",
+		["x-luano-token"] = LUANO_TOKEN,
+	}
+end
 
 -- ── Log buffer ────────────────────────────────────────────────────────────────
 local logBuffer = {}
@@ -45,6 +74,12 @@ end)
 local function serializeTree(inst, depth)
 	depth = depth or 0
 	if depth > MAX_DEPTH then return nil end
+
+	-- At depth 1 (direct children of `game`), filter to the allowlist of
+	-- user-facing services. Everything else is engine plumbing.
+	if depth == 1 and not INCLUDE_SERVICES[inst.Name] then
+		return nil
+	end
 
 	local children = {}
 	if depth < MAX_DEPTH then
@@ -75,7 +110,7 @@ local function execCommand(cmd)
 		pcall(HttpService.RequestAsync, HttpService, {
 			Url    = BASE_URL .. "/api/result",
 			Method = "POST",
-			Headers = { ["Content-Type"] = "application/json" },
+			Headers = authHeaders(),
 			Body   = HttpService:JSONEncode({
 				id      = cmd.id,
 				success = false,
@@ -89,7 +124,7 @@ local function execCommand(cmd)
 	pcall(HttpService.RequestAsync, HttpService, {
 		Url    = BASE_URL .. "/api/result",
 		Method = "POST",
-		Headers = { ["Content-Type"] = "application/json" },
+		Headers = authHeaders(),
 		Body   = HttpService:JSONEncode({
 			id      = cmd.id,
 			success = ok,
@@ -123,17 +158,22 @@ RunService.Heartbeat:Connect(function()
 	end)
 	if not encodeOk then return end
 
-	-- POST to Luano bridge
+	-- POST to Luano bridge. Surface non-success responses (e.g. 403 token
+	-- mismatch) so misconfigurations don't fail silently.
 	local httpOk, response = pcall(function()
 		return HttpService:RequestAsync({
 			Url    = BASE_URL .. "/api/report",
 			Method = "POST",
-			Headers = { ["Content-Type"] = "application/json" },
+			Headers = authHeaders(),
 			Body   = payload,
 		})
 	end)
 
-	if not httpOk or not response.Success then return end
+	if not httpOk then return end
+	if not response.Success then
+		warn("[Luano] bridge POST failed:", response.StatusCode, response.StatusMessage)
+		return
+	end
 
 	-- Process commands from Luano
 	local decodeOk, data = pcall(HttpService.JSONDecode, HttpService, response.Body)

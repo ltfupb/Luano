@@ -22,8 +22,6 @@ export function initSentry(): void {
     release: `luano@${app.getVersion()}`,
     environment: app.isPackaged ? "production" : "development",
     sampleRate: 1.0,
-    // electron-store path uses app.getPath("userData") which contains the user's
-    // OS username. Strip it before sending so we don't leak PII.
     beforeSend(event) {
       if (store.get("telemetryEnabled") === false) return null
       return event
@@ -31,10 +29,7 @@ export function initSentry(): void {
     beforeBreadcrumb(breadcrumb) {
       if (store.get("telemetryEnabled") === false) return null
       return breadcrumb
-    },
-    // Surface Sentry's own internal warnings so we can diagnose init failures
-    // (Sentry swallows errors silently by default and just disables itself).
-    debug: !app.isPackaged
+    }
   })
   log.info("[sentry] init complete")
 }

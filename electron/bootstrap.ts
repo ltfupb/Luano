@@ -15,10 +15,18 @@
  */
 
 import { app } from "electron"
+import { spawnSync } from "child_process"
 import { existsSync, readdirSync, renameSync } from "fs"
 import { dirname, join } from "path"
 
 app.setName("Luano")
+
+// Force the attached console to UTF-8 codepage in dev so Korean/Japanese
+// paths logged via process.stdout aren't mangled by cp949/cp932 rendering.
+// Packaged builds don't write to a console at all, so skip there.
+if (process.platform === "win32" && !app.isPackaged) {
+  try { spawnSync("chcp", ["65001"], { stdio: "ignore", shell: true }) } catch { /* ignore */ }
+}
 
 // Fixed temp name lets us recover from a crash between the two rename steps
 // on case-insensitive filesystems. A timestamped name would leave orphaned

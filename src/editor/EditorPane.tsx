@@ -286,12 +286,19 @@ export function EditorPane(): JSX.Element {
   }, [reorderFiles])
 
   // ── LSP client lifecycle ───────────────────────────────────────────────────
+  // Defer the connection by one microtask so React StrictMode's synchronous
+  // dev cleanup wins the race. Otherwise WS A opens and gets closed mid-
+  // handshake by the cleanup, producing a Chromium "WebSocket is closed
+  // before the connection is established" warning on every dev mount.
   useEffect(() => {
     if (!lspPort) return
 
     let alive = true
-    startLuauLanguageClient(lspPort).catch((err) => {
-      if (alive) console.warn("[LSP] Failed to start language client:", err)
+    queueMicrotask(() => {
+      if (!alive) return
+      startLuauLanguageClient(lspPort).catch((err) => {
+        if (alive) console.warn("[LSP] Failed to start language client:", err)
+      })
     })
 
     return () => {

@@ -1,6 +1,6 @@
 import { ipcMain, app } from "electron"
 import { join } from "path"
-import { existsSync, copyFileSync, mkdirSync } from "fs"
+import { existsSync, readFileSync, writeFileSync, mkdirSync } from "fs"
 import { is } from "@electron-toolkit/utils"
 import { hasFeature } from "../pro"
 import {
@@ -8,7 +8,57 @@ import {
   clearBridgeLogs, queueScript, getCommandResult,
   getConsoleOutput, isStudioConnected
 } from "../pro/modules"
+import { log } from "../logger"
 import { PRO_REQUIRED } from "./shared"
+
+function getPluginsDir(): string | null {
+  if (process.platform === "win32") {
+    const localAppData = process.env["LOCALAPPDATA"] ?? join(app.getPath("home"), "AppData", "Local")
+    return join(localAppData, "Roblox", "Plugins")
+  }
+  if (process.platform === "darwin") {
+    return join(app.getPath("home"), "Library", "Application Support", "Roblox", "Plugins")
+  }
+  return null
+}
+
+function getPluginSourcePath(): string {
+  const resourcesDir = is.dev
+    ? join(app.getAppPath(), "resources")
+    : process.resourcesPath
+  return join(resourcesDir, "studio-plugin/LuanoPlugin.lua")
+}
+
+function buildPluginSource(token: string): string {
+  const src = readFileSync(getPluginSourcePath(), "utf8")
+  // Replace the placeholder line so re-running the install never double-substitutes.
+  return src.replace(
+    /local LUANO_TOKEN\s*=\s*"[^"]*"/,
+    `local LUANO_TOKEN    = "${token}"`
+  )
+}
+
+/**
+ * Rewrite the installed plugin file so it carries the current bridge token.
+ * The token is persisted, but a plugin installed under a previous build (or
+ * after userData was wiped) can hold a stale value and 403 on every report.
+ * Studio hot-reloads plugin files on change, so this is transparent.
+ * No-op if the plugin was never installed.
+ */
+export function refreshInstalledPluginToken(): void {
+  try {
+    const dir = getPluginsDir()
+    if (!dir) return
+    const dest = join(dir, "LuanoPlugin.lua")
+    if (!existsSync(dest)) return
+    const token = getBridgeToken()
+    if (!token) return
+    writeFileSync(dest, buildPluginSource(token), "utf8")
+    log.info("[bridge] refreshed Studio plugin token")
+  } catch (err) {
+    log.warn("[bridge] failed to refresh plugin token", err)
+  }
+}
 
 export function registerBridgeHandlers(): void {
   // ── Studio Bridge (legacy MCP) [Pro] ───────────────────────────────────────
@@ -52,17 +102,6 @@ export function registerBridgeHandlers(): void {
   })
 
   // ── Plugin Install ─────────────────────────────────────────────────────────
-  function getPluginsDir(): string | null {
-    if (process.platform === "win32") {
-      const localAppData = process.env["LOCALAPPDATA"] ?? join(app.getPath("home"), "AppData", "Local")
-      return join(localAppData, "Roblox", "Plugins")
-    }
-    if (process.platform === "darwin") {
-      return join(app.getPath("home"), "Library", "Application Support", "Roblox", "Plugins")
-    }
-    return null
-  }
-
   ipcMain.handle("bridge:is-plugin-installed", () => {
     const dir = getPluginsDir()
     if (!dir) return false
@@ -74,17 +113,13 @@ export function registerBridgeHandlers(): void {
       const pluginsDir = getPluginsDir()
       if (!pluginsDir) return { success: false, error: "Roblox Studio plugins not supported on this platform" }
 
-      const resourcesDir = is.dev
-        ? join(app.getAppPath(), "resources")
-        : process.resourcesPath
-      const srcPath = join(resourcesDir, "studio-plugin/LuanoPlugin.lua")
-
       if (!existsSync(pluginsDir)) {
         mkdirSync(pluginsDir, { recursive: true })
       }
 
       const destPath = join(pluginsDir, "LuanoPlugin.lua")
-      copyFileSync(srcPath, destPath)
+      const token = getBridgeToken()
+      writeFileSync(destPath, buildPluginSource(token), "utf8")
       return { success: true, path: destPath }
     } catch (err) {
       return { success: false, error: String(err) }

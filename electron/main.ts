@@ -4,6 +4,7 @@ import { log } from "./logger"
 import { join } from "path"
 import { electronApp, optimizer, is } from "@electron-toolkit/utils"
 import { registerIpcHandlers, cleanupPtys } from "./ipc/handlers"
+import { refreshInstalledPluginToken } from "./ipc/bridge-handlers"
 import { stopWatcher } from "./file/watcher"
 import { LspManager } from "./lsp/manager"
 import { SyncManager } from "./toolchain/sync-manager"
@@ -15,6 +16,23 @@ let mainWindow: BrowserWindow | null = null
 
 export const syncManager = new SyncManager()
 export const lspManager = new LspManager()
+
+// Vite dev needs unsafe-eval for HMR, so the CSP warning fires on every
+// renderer load. The warning auto-disables in packaged builds — suppress
+// it in dev to keep the console clean. Must be set before any window loads.
+if (!app.isPackaged) {
+  process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = "true"
+}
+
+// Sentry MUST init before app 'ready' fires — its configureProtocol step
+// calls protocol.registerSchemesAsPrivileged, which throws after ready.
+// Done at module top so it runs before any whenReady handler.
+try {
+  initSentry()
+} catch (err) {
+  const detail = err instanceof Error ? `${err.message}\n${err.stack}` : String(err)
+  log.error("Sentry init failed:", detail)
+}
 
 function createWindow(): void {
   mainWindow = new BrowserWindow({
@@ -102,17 +120,13 @@ app.whenReady().then(() => {
 
   log.info("Luano starting", { version: app.getVersion(), platform: process.platform })
 
-  // Sentry must init before any BrowserWindow is created so the sentry-ipc://
-  // protocol is registered before the renderer's Sentry SDK tries to use it.
-  try {
-    initSentry()
-  } catch (err) {
-    const detail = err instanceof Error ? `${err.message}\n${err.stack}` : String(err)
-    log.error("Sentry init failed:", detail)
-  }
-
   startBridgeServer()
   registerIpcHandlers()
+  // Ensure the installed Studio plugin file matches the current bridge token.
+  // The token is persisted across launches, but a plugin installed under an
+  // older Luano build (or after userData was wiped) can still carry a stale
+  // token and 403 on every report. Rewriting the file here is a safety net.
+  refreshInstalledPluginToken()
   setupUpdater()
   createWindow()
 

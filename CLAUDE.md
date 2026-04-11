@@ -113,6 +113,7 @@ npm install --package-lock-only
 
 ## 릴리즈 히스토리
 
+- **v0.8.0** — Studio Bridge Token Persistence, Markdown Chat and Roblox Class Icons
 - **v0.7.10** — Monaco Multi-language, Cold-start Speedup and Component Refactor
 - **v0.7.9** — Toolchain On-Demand Download and Design System Unification
 - **v0.7.8** — AI Panel and Editor UX Improvements

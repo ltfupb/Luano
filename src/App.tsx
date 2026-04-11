@@ -216,7 +216,14 @@ export default function App(): JSX.Element {
   }, [])
 
   // ── Session Restore — reopen last project + files on restart ────────────
+  // Ref guard prevents React StrictMode's dev double-mount from spawning the
+  // LSP and Argon twice. The actual session-restore work is one-shot and
+  // belongs outside the React effect lifecycle.
+  const sessionRestoredRef = useRef(false)
   useEffect(() => {
+    if (sessionRestoredRef.current) return
+    sessionRestoredRef.current = true
+
     const { projectPath: savedPath, openFiles: savedOpenFiles } = useProjectStore.getState()
     if (!savedPath) return
 
