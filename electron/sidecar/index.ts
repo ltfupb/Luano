@@ -53,6 +53,27 @@ export interface SidecarProcess {
   kill: () => void
 }
 
+// On Windows, child processes write stdout/stderr in the active console
+// codepage (e.g. cp949 on Korean systems), not UTF-8. Decoding raw bytes
+// with toString() (default UTF-8) garbles non-ASCII paths in log messages.
+// Pick a codepage-aware decoder once at module load.
+const decoder = ((): { decode: (b: Buffer) => string } => {
+  if (process.platform !== "win32") return { decode: (b) => b.toString("utf-8") }
+  // Map common Windows codepages from the LANG/LC_ALL env or system locale.
+  // Electron ships full ICU so TextDecoder supports cp949/cp932/cp936/cp1252.
+  const locale = (process.env.LANG || process.env.LC_ALL || Intl.DateTimeFormat().resolvedOptions().locale || "").toLowerCase()
+  const cp = locale.startsWith("ko") ? "cp949"
+    : locale.startsWith("ja") ? "shift_jis"
+    : locale.startsWith("zh") ? "gbk"
+    : "utf-8"
+  try {
+    const td = new TextDecoder(cp, { fatal: false })
+    return { decode: (b) => td.decode(b) }
+  } catch {
+    return { decode: (b) => b.toString("utf-8") }
+  }
+})()
+
 export function spawnSidecar(
   binary: string,
   args: string[],
@@ -65,8 +86,8 @@ export function spawnSidecar(
     stdio: ["pipe", "pipe", "pipe"]
   })
 
-  proc.stdout?.on("data", (data) => options?.onData?.(data.toString()))
-  proc.stderr?.on("data", (data) => options?.onError?.(data.toString()))
+  proc.stdout?.on("data", (data: Buffer) => options?.onData?.(decoder.decode(data)))
+  proc.stderr?.on("data", (data: Buffer) => options?.onError?.(decoder.decode(data)))
 
   return {
     process: proc,

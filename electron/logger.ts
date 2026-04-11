@@ -31,10 +31,23 @@ function rotateOldLogs(): void {
   } catch { /* ignore */ }
 }
 
+function format(a: unknown): string {
+  if (typeof a === "string") return a
+  if (a instanceof Error) return a.stack ? a.stack : `${a.name}: ${a.message}`
+  // Some thrown values are plain objects with message/stack but aren't Error instances
+  if (a && typeof a === "object") {
+    const o = a as { message?: unknown; stack?: unknown }
+    if (typeof o.stack === "string") return o.stack
+    if (typeof o.message === "string") return o.message
+    try { return JSON.stringify(a) } catch { return String(a) }
+  }
+  return String(a)
+}
+
 function write(level: string, ...args: unknown[]): void {
   ensureLogDir()
   const ts = new Date().toISOString()
-  const msg = args.map((a) => (typeof a === "string" ? a : JSON.stringify(a))).join(" ")
+  const msg = args.map(format).join(" ")
   const line = `[${ts}] [${level}] ${msg}\n`
 
   // In dev, mirror to stdout/stderr so logs show up in the terminal running `npm run dev`.

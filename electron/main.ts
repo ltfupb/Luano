@@ -104,7 +104,12 @@ app.whenReady().then(() => {
 
   // Sentry must init before any BrowserWindow is created so the sentry-ipc://
   // protocol is registered before the renderer's Sentry SDK tries to use it.
-  try { initSentry() } catch (err) { log.error("Sentry init failed", err) }
+  try {
+    initSentry()
+  } catch (err) {
+    const detail = err instanceof Error ? `${err.message}\n${err.stack}` : String(err)
+    log.error("Sentry init failed:", detail)
+  }
 
   startBridgeServer()
   registerIpcHandlers()
