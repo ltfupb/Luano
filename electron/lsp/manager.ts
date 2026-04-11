@@ -1,7 +1,5 @@
 import { ChildProcess } from "child_process"
 import { BrowserWindow } from "electron"
-import { existsSync, writeFileSync } from "fs"
-import { join } from "path"
 import { spawnSidecar, getResourcePath } from "../sidecar/index"
 import { LspBridge } from "./bridge"
 import { log } from "../logger"
@@ -27,26 +25,15 @@ export class LspManager {
 
   private async spawnProcess(projectPath: string): Promise<void> {
     const typeDefsPath = getResourcePath("type-defs", "globalTypes.d.luau")
-    const sourcemapPath = join(projectPath, "sourcemap.json")
-
-    // luau-lsp >=1.50 refuses to start if --sourcemap points at a missing file.
-    // Sync tools (Rojo/Argon) write sourcemap.json after they boot, so on a
-    // fresh project we have to seed an empty stub or the LSP exits 1 before
-    // sync ever gets a chance.
-    if (!existsSync(sourcemapPath)) {
-      try {
-        writeFileSync(sourcemapPath, JSON.stringify({ name: "", className: "DataModel", children: [] }))
-        log.info(`[lsp] seeded empty sourcemap.json at ${sourcemapPath}`)
-      } catch (err) {
-        log.warn("[lsp] failed to seed sourcemap.json:", err)
-      }
-    }
 
     let proc: ChildProcess | null = null
     try {
+      // --sourcemap is an `analyze` subcommand flag, not an `lsp` flag.
+      // Sourcemap content gets pushed via the luau-lsp/updateSourceMap LSP
+      // notification once the client connects (TODO: not yet implemented).
       const sidecar = spawnSidecar(
         "luau-lsp",
-        ["lsp", `--definitions=${typeDefsPath}`, `--sourcemap=${sourcemapPath}`],
+        ["lsp", `--definitions=${typeDefsPath}`],
         {
           cwd: projectPath,
           // luau-lsp emits diagnostics on stderr; without this listener exit
