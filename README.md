@@ -29,16 +29,17 @@ Luano is a desktop editor built specifically for Roblox game development. It bun
 - 3 themes: Dark, Light, Tokyo Night
 
 **Integrated Toolchain**
-- Customizable toolchain with 8 supported tools: Rojo, Argon, Selene, StyLua, luau-lsp, Wally, Pesde, Darklua
+- Customizable toolchain across 5 supported tools: Argon, Rojo, Selene, StyLua, luau-lsp
+- Argon is the default sync tool, with Rojo selectable as an alternative
 - On-demand binary download from GitHub Releases for non-bundled tools
 - Per-project tool configuration via `.luano/toolchain.json`
-- Argon support as alternative to Rojo for Studio sync
 - Format All / Lint All batch operations
 - Toolchain auto-update check for installed tools
 - Core tools (Rojo, Selene, StyLua, luau-lsp) bundled out of the box. Zero configuration.
 
 **AI Assistant**
 - Chat with AI that understands Roblox architecture, Luau patterns, and your project context
+- Markdown rendering in chat (code blocks, tables, GFM)
 - Three modes: **Chat** (Q&A), **Plan** (step-by-step), **Agent** (autonomous file editing)
 - Agent mode with explore-first workflow and self-verification (lint after every edit)
 - 10 built-in skills: `/explain`, `/fix`, `/optimize`, `/refactor`, `/test`, `/type`, `/doc`, `/security`, `/convert`, `/scaffold`
@@ -52,7 +53,8 @@ Luano is a desktop editor built specifically for Roblox game development. It bun
 
 **Studio Integration**
 - Studio Live Bridge — real-time instance tree, console logs, script execution
-- Rojo serve + sourcemap with status indicator
+- Persistent bridge token — paired plugins stay authenticated across restarts
+- Sync serve + sourcemap with status indicator (Argon or Rojo)
 - Studio plugin included (`resources/studio-plugin/LuanoPlugin.lua`)
 
 **Analysis Tools**
@@ -63,7 +65,7 @@ Luano is a desktop editor built specifically for Roblox game development. It bun
 
 **Developer Experience**
 - Built-in terminal (xterm.js + node-pty) with theme sync
-- File explorer with Roblox script type color indicators
+- File explorer with Roblox class icons and script type color indicators
 - Full-text search across project files
 - Quick Open (Ctrl+P) with fuzzy matching
 - Project templates (Obby, Tycoon, etc.)
@@ -171,7 +173,7 @@ The free plan is free forever.
 - **RAG:** better-sqlite3 + FTS5
 - **Update:** electron-updater (GitHub Releases)
 - **Crash Reporting:** Sentry (opt-in)
-- **Sidecar:** Rojo, Argon, Selene, StyLua, luau-lsp, Wally, Pesde, Darklua
+- **Sidecar:** Argon, Rojo, Selene, StyLua, luau-lsp
 
 ---
 
