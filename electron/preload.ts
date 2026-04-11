@@ -297,12 +297,6 @@ const api = {
   toolchainInitProjectConfig: (projectPath: string) =>
     ipcRenderer.invoke("toolchain:init-project-config", projectPath),
 
-  // ── Package Manager ────────────────────────────────────────────────────────
-  packageInstall: (projectPath: string) =>
-    ipcRenderer.invoke("package:install", projectPath),
-  packageInit: (projectPath: string) =>
-    ipcRenderer.invoke("package:init", projectPath),
-
   // ── Event Listeners ─────────────────────────────────────────────────────────
   on: (channel: string, callback: (...args: unknown[]) => void): (() => void) => {
     if (!ALLOWED_CHANNELS.some((prefix) => channel.startsWith(prefix))) {

@@ -13,9 +13,6 @@ import rojoLogo from "../assets/toolchain/rojo.png"
 import argonLogo from "../assets/toolchain/argon.png"
 import styluaLogo from "../assets/toolchain/stylua.png"
 import luauLspLogo from "../assets/toolchain/luau-lsp.png"
-import wallyLogo from "../assets/toolchain/wally.svg"
-import pesdeLogo from "../assets/toolchain/pesde.svg"
-import darkluaLogo from "../assets/toolchain/darklua.png"
 
 interface ToolDef {
   id: string
@@ -45,10 +42,7 @@ const TOOL_LOGOS: Record<string, string> = {
   rojo: rojoLogo,
   argon: argonLogo,
   stylua: styluaLogo,
-  "luau-lsp": luauLspLogo,
-  wally: wallyLogo,
-  pesde: pesdeLogo,
-  darklua: darkluaLogo
+  "luau-lsp": luauLspLogo
 }
 
 function ToolLogo({ id, name, className }: { id: string; name: string; className?: string }): JSX.Element {

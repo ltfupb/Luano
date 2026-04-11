@@ -5,7 +5,7 @@
  * Each tool has download URLs, version info, and category classification.
  */
 
-export type ToolCategory = "sync" | "linter" | "formatter" | "lsp" | "package-manager" | "processor"
+export type ToolCategory = "sync" | "linter" | "formatter" | "lsp"
 
 export interface ToolDefinition {
   id: string
@@ -138,69 +138,6 @@ export const TOOL_REGISTRY: Record<string, ToolDefinition> = {
       mac:   ghRelease("JohnnyMorganz/luau-lsp", "1.64.0", "luau-lsp-macos.zip"),
       linux: ghRelease("JohnnyMorganz/luau-lsp", "1.64.0", "luau-lsp-linux-x86_64.zip")
     }
-  },
-  wally: {
-    id: "wally",
-    name: "Wally",
-    description: "Package manager for Roblox projects",
-    category: "package-manager",
-    recommended: false,
-    version: "0.3.2",
-    github: "UpliftGames/wally",
-    binaryName: "wally",
-    configFiles: ["wally.toml"],
-    assetKeywords: {
-      win:   ["win64"],
-      mac:   ["macos"],
-      linux: ["linux"]
-    },
-    releaseUrls: {
-      win:   ghRelease("UpliftGames/wally", "v0.3.2", "wally-v0.3.2-win64.zip"),
-      mac:   ghRelease("UpliftGames/wally", "v0.3.2", "wally-v0.3.2-macos.zip"),
-      linux: ghRelease("UpliftGames/wally", "v0.3.2", "wally-v0.3.2-linux.zip")
-    }
-  },
-  pesde: {
-    id: "pesde",
-    name: "Pesde",
-    description: "Modern package manager for Luau with workspaces",
-    category: "package-manager",
-    recommended: false,
-    version: "0.7.3",
-    github: "pesde-pkg/pesde",
-    binaryName: "pesde",
-    configFiles: ["pesde.toml"],
-    assetKeywords: {
-      win:   ["windows", "x86_64"],
-      mac:   ["macos"],
-      linux: ["linux", "x86_64"]
-    },
-    releaseUrls: {
-      win:   ghRelease("pesde-pkg/pesde", "v0.7.3%2Bregistry.0.2.3", "pesde-0.7.3-windows-x86_64.zip"),
-      mac:   ghRelease("pesde-pkg/pesde", "v0.7.3%2Bregistry.0.2.3", "pesde-0.7.3-macos-aarch64.zip"),
-      linux: ghRelease("pesde-pkg/pesde", "v0.7.3%2Bregistry.0.2.3", "pesde-0.7.3-linux-x86_64.zip")
-    }
-  },
-  darklua: {
-    id: "darklua",
-    name: "Darklua",
-    description: "Lua/Luau code transformer, minifier, and bundler",
-    category: "processor",
-    recommended: false,
-    version: "0.18.0",
-    github: "seaofvoices/darklua",
-    binaryName: "darklua",
-    configFiles: [".darklua.json", ".darklua.json5"],
-    assetKeywords: {
-      win:   ["windows", "x86_64"],
-      mac:   ["macos"],
-      linux: ["linux", "x86_64"]
-    },
-    releaseUrls: {
-      win:   ghRelease("seaofvoices/darklua", "v0.18.0", "darklua-windows-x86_64.zip"),
-      mac:   ghRelease("seaofvoices/darklua", "v0.18.0", "darklua-macos-aarch64.zip"),
-      linux: ghRelease("seaofvoices/darklua", "v0.18.0", "darklua-linux-x86_64.zip")
-    }
   }
 }
 
@@ -210,9 +147,7 @@ export const CATEGORIES: { id: ToolCategory; label: string; allowNone: boolean }
   { id: "sync",            label: "Sync",             allowNone: false },
   // Optional — quality-of-life tools
   { id: "linter",          label: "Linter",           allowNone: true  },
-  { id: "formatter",       label: "Formatter",        allowNone: true  },
-  { id: "package-manager", label: "Package Manager",  allowNone: true  },
-  { id: "processor",       label: "Code Processor",   allowNone: true  }
+  { id: "formatter",       label: "Formatter",        allowNone: true  }
 ]
 
 export function getToolsForCategory(category: ToolCategory): ToolDefinition[] {

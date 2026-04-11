@@ -335,10 +335,6 @@ interface Window {
     toolchainHasProjectConfig: (projectPath: string) => Promise<boolean>
     toolchainInitProjectConfig: (projectPath: string) => Promise<{ success: boolean }>
 
-    // Package Manager
-    packageInstall: (projectPath: string) => Promise<{ success: boolean; output: string }>
-    packageInit: (projectPath: string) => Promise<{ success: boolean; output: string }>
-
     // Events
     on: (channel: string, callback: (...args: unknown[]) => void) => () => void
     off: (channel: string) => void

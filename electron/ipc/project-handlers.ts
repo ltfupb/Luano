@@ -23,7 +23,6 @@ import { activateLicense, deactivateLicense, getLicenseInfo, validateLicense as 
 import { getToolchainConfig, getActiveTool, setProjectTool, setGlobalDefault, isMinimumToolchainReady, hasProjectConfig, initProjectConfig } from "../toolchain/config"
 import { downloadTool, downloadMultiple, getDownloadStatus, removeTool, checkToolUpdates, updateTool, fetchToolMetadata } from "../toolchain/downloader"
 import { TOOL_REGISTRY, CATEGORIES, type ToolCategory } from "../toolchain/registry"
-import { packageInstall, packageInit } from "../toolchain/package-runner"
 
 export function registerProjectHandlers(): void {
   // ── Pro Status ──────────────────────────────────────────────────────────────
@@ -376,14 +375,5 @@ export function registerProjectHandlers(): void {
   ipcMain.handle("toolchain:init-project-config", (_, projectPath: string) => {
     initProjectConfig(projectPath)
     return { success: true }
-  })
-
-  // ── Package Manager ────────────────────────────────────────────────────
-  ipcMain.handle("package:install", async (_, projectPath: string) => {
-    return packageInstall(projectPath)
-  })
-
-  ipcMain.handle("package:init", async (_, projectPath: string) => {
-    return packageInit(projectPath)
   })
 }

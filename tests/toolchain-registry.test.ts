@@ -10,9 +10,6 @@ describe("TOOL_REGISTRY", () => {
     expect(ids).toContain("stylua")
     expect(ids).toContain("luau-lsp")
     expect(ids).toContain("argon")
-    expect(ids).toContain("wally")
-    expect(ids).toContain("pesde")
-    expect(ids).toContain("darklua")
   })
 
   it("every tool has valid releaseUrls for all platforms", () => {
@@ -47,8 +44,6 @@ describe("CATEGORIES", () => {
     expect(ids).toContain("linter")
     expect(ids).toContain("formatter")
     expect(ids).toContain("lsp")
-    expect(ids).toContain("package-manager")
-    expect(ids).toContain("processor")
   })
 })
 
@@ -69,10 +64,6 @@ describe("getDefaultToolId", () => {
   it("returns recommended tool for sync", () => {
     expect(getDefaultToolId("sync")).toBe("rojo")
   })
-
-  it("returns null for category with no recommended tool", () => {
-    expect(getDefaultToolId("package-manager")).toBeNull()
-  })
 })
 
 describe("getRecommendedToolIds", () => {
@@ -88,8 +79,5 @@ describe("getRecommendedToolIds", () => {
   it("does not include non-recommended tools", () => {
     const ids = getRecommendedToolIds()
     expect(ids).not.toContain("argon")
-    expect(ids).not.toContain("wally")
-    expect(ids).not.toContain("pesde")
-    expect(ids).not.toContain("darklua")
   })
 })

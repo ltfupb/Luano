@@ -240,7 +240,6 @@ src/types/ipc/
   license.d.ts      // license*, getProStatus
   updater.d.ts      // updater*
   telemetry.d.ts    // telemetry*
-  package.d.ts      // packageInstall, packageInit
   misc.d.ts         // perfStats, events, setZoomFactor
 ```
 `src/env.d.ts`는 각 파일을 reference하고 `Window.api` union만 조립.

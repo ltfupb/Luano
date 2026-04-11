@@ -58,12 +58,10 @@ luano/
 │   │   └── stylua.ts            # StyLua 포매터
 │   ├── toolchain/
 │   │   ├── config.ts            # Per-project/global 툴체인 설정 (.luano/toolchain.json)
-│   │   ├── registry.ts          # 8개 도구 레지스트리 + 메타데이터
+│   │   ├── registry.ts          # 도구 레지스트리 + 메타데이터
 │   │   ├── downloader.ts        # GitHub Releases에서 바이너리 다운로드 + 자동 업데이트 체크
 │   │   ├── sync-manager.ts      # Rojo/Argon 통합 SyncManager facade
-│   │   ├── argon-manager.ts     # Argon serve/build 관리
-│   │   ├── package-runner.ts    # Wally/Pesde 패키지 매니저 실행
-│   │   └── darklua-runner.ts    # Darklua 번들러 실행
+│   │   └── argon-manager.ts     # Argon serve/build 관리
 │   ├── lsp/
 │   │   ├── manager.ts           # luau-lsp 스폰 + WebSocket 브릿지
 │   │   └── bridge.ts            # stdio ↔ WebSocket 변환
