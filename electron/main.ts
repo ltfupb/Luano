@@ -9,6 +9,7 @@ import { LspManager } from "./lsp/manager"
 import { SyncManager } from "./toolchain/sync-manager"
 import { startBridgeServer, setBridgeWindow } from "./pro/modules"
 import { setupUpdater } from "./updater"
+import { initSentry } from "./sentry"
 
 let mainWindow: BrowserWindow | null = null
 
@@ -100,16 +101,15 @@ app.whenReady().then(() => {
   })
 
   log.info("Luano starting", { version: app.getVersion(), platform: process.platform })
+
+  // Sentry must init before any BrowserWindow is created so the sentry-ipc://
+  // protocol is registered before the renderer's Sentry SDK tries to use it.
+  try { initSentry() } catch (err) { log.error("Sentry init failed", err) }
+
   startBridgeServer()
   registerIpcHandlers()
   setupUpdater()
   createWindow()
-
-  // Defer Sentry init until after the window is shown — keeps crash reporting
-  // available but off the cold-start critical path.
-  setImmediate(() => {
-    import("./sentry").then(({ initSentry }) => initSentry()).catch((err) => log.error("Sentry init failed", err))
-  })
 
   // Validate license key on startup (non-blocking)
   import("./pro/license").then(({ validateLicense }) => validateLicense()).catch((err) => log.error("License validation failed", err))
