@@ -62,14 +62,14 @@ describe("getToolsForCategory", () => {
 
 describe("getDefaultToolId", () => {
   it("returns recommended tool for sync", () => {
-    expect(getDefaultToolId("sync")).toBe("rojo")
+    expect(getDefaultToolId("sync")).toBe("argon")
   })
 })
 
 describe("getRecommendedToolIds", () => {
   it("returns all recommended tool ids", () => {
     const ids = getRecommendedToolIds()
-    expect(ids).toContain("rojo")
+    expect(ids).toContain("argon")
     expect(ids).toContain("selene")
     expect(ids).toContain("stylua")
     expect(ids).toContain("luau-lsp")
@@ -78,6 +78,6 @@ describe("getRecommendedToolIds", () => {
 
   it("does not include non-recommended tools", () => {
     const ids = getRecommendedToolIds()
-    expect(ids).not.toContain("argon")
+    expect(ids).not.toContain("rojo")
   })
 })
