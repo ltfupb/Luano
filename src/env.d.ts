@@ -85,10 +85,10 @@ interface Window {
     moveEntry: (srcPath: string) => Promise<{ success: boolean; canceled?: boolean; path?: string }>
     searchFiles: (projectPath: string, query: string) => Promise<Array<{ file: string; line: number; text: string }>>
 
-    // Rojo
-    rojoServe: (projectPath: string) => Promise<{ success: boolean }>
-    rojoStop: () => Promise<{ success: boolean }>
-    rojoGetStatus: () => Promise<string>
+    // Sync (Rojo / Argon)
+    syncServe: (projectPath: string) => Promise<{ success: boolean }>
+    syncStop: () => Promise<{ success: boolean }>
+    syncGetStatus: () => Promise<string>
 
     // Lint
     formatFile: (path: string) => Promise<{ success: boolean }>

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, lazy, Suspense } from "react"
 import { useProjectStore } from "./stores/projectStore"
-import { useRojoStore } from "./stores/rojoStore"
+import { useSyncStore } from "./stores/syncStore"
 import { useAIStore } from "./stores/aiStore"
 import { useSettingsStore } from "./stores/settingsStore"
 import { useIpcEvent } from "./hooks/useIpc"
@@ -44,7 +44,7 @@ function IconChat(): JSX.Element {
 
 export default function App(): JSX.Element {
   const { projectPath, dirtyFiles, setProject, closeProject, setFileTree, openFile } = useProjectStore()
-  const { setStatus, setPort, setToolName, setError } = useRojoStore()
+  const { setStatus, setPort, setToolName, setError } = useSyncStore()
   const { setGlobalSummary, clearMessages, saveProjectChat, loadProjectChat } = useAIStore()
   const theme = useSettingsStore((s) => s.theme)
   const uiScale = useSettingsStore((s) => s.uiScale)
@@ -135,12 +135,12 @@ export default function App(): JSX.Element {
   }, [setChatPanelWidth])
   const handleChatResizeMouseDown = usePanelResize("x", chatPanelMin, chatPanelMax, setChatPanelWidth, true)
 
-  useIpcEvent("rojo:status-changed", useCallback((...args: unknown[]) => {
+  useIpcEvent("sync:status-changed", useCallback((...args: unknown[]) => {
     setStatus(args[0] as "stopped" | "starting" | "running" | "error")
     if (typeof args[1] === "number") setPort(args[1])
     setError(typeof args[2] === "string" ? args[2] : null)
   }, [setStatus, setPort, setError]))
-  useIpcEvent("rojo:notice", useCallback((...args: unknown[]) => {
+  useIpcEvent("sync:notice", useCallback((...args: unknown[]) => {
     const message = args[0]
     const type = args[1]
     if (typeof message !== "string") return

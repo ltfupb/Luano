@@ -6,7 +6,7 @@
 
 import { useState, useEffect } from "react"
 import { useProjectStore } from "../stores/projectStore"
-import { useRojoStore } from "../stores/rojoStore"
+import { useSyncStore } from "../stores/syncStore"
 import { useT } from "../i18n/useT"
 
 import rojoLogo from "../assets/toolchain/rojo.png"
@@ -216,7 +216,7 @@ export function ToolchainPanel({ onClose, onCancel, mode = "normal", targetProje
       try {
         await window.api.toolchainSetTool(cat, toolId, projectPath ?? undefined)
         if (cat === "sync") {
-          useRojoStore.getState().setToolName(toolId === "argon" ? "Argon" : "Rojo")
+          useSyncStore.getState().setToolName(toolId === "argon" ? "Argon" : "Rojo")
         }
       } catch (err) {
         setInstallError(err instanceof Error ? err.message : "Failed to set tool")

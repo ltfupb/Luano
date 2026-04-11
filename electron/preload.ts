@@ -18,7 +18,7 @@ const ALLOWED_CHANNELS = [
   "agent:checkpoint-available",
   "terminal:data:",
   "terminal:exit:",
-  "rojo:",
+  "sync:",
   "updater:",
   "sidecar:",
   "lint:",
@@ -54,10 +54,10 @@ const api = {
   searchFiles: (projectPath: string, query: string) =>
     ipcRenderer.invoke("file:search", projectPath, query),
 
-  // ── Rojo ──────────────────────────────────────────────────────────────────
-  rojoServe: (projectPath: string) => ipcRenderer.invoke("rojo:serve", projectPath),
-  rojoStop: () => ipcRenderer.invoke("rojo:stop"),
-  rojoGetStatus: () => ipcRenderer.invoke("rojo:status"),
+  // ── Sync (Rojo / Argon) ──────────────────────────────────────────────────
+  syncServe: (projectPath: string) => ipcRenderer.invoke("sync:serve", projectPath),
+  syncStop: () => ipcRenderer.invoke("sync:stop"),
+  syncGetStatus: () => ipcRenderer.invoke("sync:status"),
 
   // ── Lint ──────────────────────────────────────────────────────────────────
   formatFile: (path: string) => ipcRenderer.invoke("lint:format", path),

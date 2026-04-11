@@ -13,10 +13,10 @@ interface SyncStore {
   setError: (e: string | null) => void
 }
 
-export const useRojoStore = create<SyncStore>((set) => ({
+export const useSyncStore = create<SyncStore>((set) => ({
   status: "stopped",
   port: null,
-  toolName: "Rojo",
+  toolName: "Argon",
   error: null,
   setStatus: (s) => set({ status: s }),
   setPort: (p) => set({ port: p }),

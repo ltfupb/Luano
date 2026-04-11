@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react"
-import { useRojoStore } from "../stores/rojoStore"
+import { useSyncStore } from "../stores/syncStore"
 import { useProjectStore } from "../stores/projectStore"
 import { useIpcEvent } from "../hooks/useIpc"
 import { useT } from "../i18n/useT"
@@ -20,7 +20,7 @@ const statusDot: Record<string, string> = {
 }
 
 export function StatusBar(): JSX.Element {
-  const { status, toolName } = useRojoStore()
+  const { status, toolName } = useSyncStore()
 
   const statusLabel: Record<string, string> = {
     stopped: `${toolName} stopped`,

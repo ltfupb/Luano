@@ -69,7 +69,7 @@ export class ArgonManager {
 
   private notifyUser(message: string, type: "info" | "warn" | "error"): void {
     BrowserWindow.getAllWindows().forEach((win) => {
-      win.webContents.send("rojo:notice", message, type)
+      win.webContents.send("sync:notice", message, type)
     })
   }
 
@@ -225,7 +225,7 @@ export class ArgonManager {
   private notifyStatus(): void {
     const err = this.status === "error" ? this.lastError : null
     BrowserWindow.getAllWindows().forEach((win) => {
-      win.webContents.send("rojo:status-changed", this.status, this.port, err)
+      win.webContents.send("sync:status-changed", this.status, this.port, err)
     })
   }
 }

@@ -3,7 +3,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react"
 import { createPortal } from "react-dom"
-import { useRojoStore } from "../stores/rojoStore"
+import { useSyncStore } from "../stores/syncStore"
 import { useProjectStore } from "../stores/projectStore"
 import { useAIStore } from "../stores/aiStore"
 import { useT } from "../i18n/useT"
@@ -12,9 +12,9 @@ import { useT } from "../i18n/useT"
 
 type SyncTab = "console" | "tree"
 
-// ── Rojo status config ────────────────────────────────────────────────────────
+// ── Sync status config ────────────────────────────────────────────────────────
 
-const rojoStatusCfg: Record<string, { color: string; glow: boolean }> = {
+const syncStatusCfg: Record<string, { color: string; glow: boolean }> = {
   stopped:  { color: "var(--text-ghost)", glow: false },
   starting: { color: "var(--warning)", glow: false },
   running:  { color: "var(--success)", glow: true },
@@ -202,7 +202,7 @@ function TreeNode({ node, depth = 0 }: { node: BridgeInstanceNode; depth?: numbe
 // ── Main Component ───────────────────────────────────────────────────────────
 
 export function SyncPanel(): JSX.Element {
-  const { status: rojoStatus, port, toolName } = useRojoStore()
+  const { status: syncStatus, port, toolName } = useSyncStore()
   const { projectPath } = useProjectStore()
   const { globalSummary } = useAIStore()
   const t = useT()
@@ -220,8 +220,8 @@ export function SyncPanel(): JSX.Element {
 
   const consoleScrollRef = useRef<HTMLDivElement>(null)
 
-  const rcfg = rojoStatusCfg[rojoStatus] ?? rojoStatusCfg.stopped
-  const isRojoActive = rojoStatus === "running" || rojoStatus === "starting"
+  const scfg = syncStatusCfg[syncStatus] ?? syncStatusCfg.stopped
+  const isSyncActive = syncStatus === "running" || syncStatus === "starting"
 
   // ── Studio initial fetch ──────────────────────────────────────────────────
   useEffect(() => {
@@ -252,10 +252,10 @@ export function SyncPanel(): JSX.Element {
   }, [studioLogs, tab])
 
   // ── Handlers ──────────────────────────────────────────────────────────────
-  const handleRojoToggle = async () => {
+  const handleSyncToggle = async () => {
     if (!projectPath) return
-    if (isRojoActive) await window.api.rojoStop()
-    else await window.api.rojoServe(projectPath)
+    if (isSyncActive) await window.api.syncStop()
+    else await window.api.syncServe(projectPath)
   }
 
   const handleInstall = async () => {
@@ -297,31 +297,31 @@ export function SyncPanel(): JSX.Element {
 
       {/* Status cards */}
       <div className="px-3 py-2 flex flex-col gap-2 flex-shrink-0" style={{ borderBottom: "1px solid var(--border-subtle)" }}>
-        {/* Rojo status */}
+        {/* Sync status */}
         <div className="flex items-center gap-2">
           <span
             className="w-2 h-2 rounded-full flex-shrink-0"
             style={{
-              background: rcfg.color,
-              boxShadow: rcfg.glow ? `0 0 6px ${rcfg.color}` : "none",
+              background: scfg.color,
+              boxShadow: scfg.glow ? `0 0 6px ${scfg.color}` : "none",
               transition: "all 0.3s ease"
             }}
           />
           <span style={{ fontSize: "11px", color: "var(--text-secondary)", flex: 1 }}>
-            {toolName}{rojoStatus === "running" && port && (
+            {toolName}{syncStatus === "running" && port && (
               <span style={{ color: "var(--text-muted)" }}> :{port}</span>
             )}
           </span>
           <button
-            onClick={handleRojoToggle}
+            onClick={handleSyncToggle}
             className="px-2 py-0.5 rounded text-[10px] font-medium transition-all duration-150"
             style={{
-              background: isRojoActive ? "rgba(225,29,72,0.12)" : "rgba(37,99,235,0.12)",
-              color: isRojoActive ? "var(--danger)" : "var(--info)",
-              border: `1px solid ${isRojoActive ? "rgba(225,29,72,0.3)" : "rgba(37,99,235,0.3)"}`
+              background: isSyncActive ? "rgba(225,29,72,0.12)" : "rgba(37,99,235,0.12)",
+              color: isSyncActive ? "var(--danger)" : "var(--info)",
+              border: `1px solid ${isSyncActive ? "rgba(225,29,72,0.3)" : "rgba(37,99,235,0.3)"}`
             }}
           >
-            {isRojoActive ? t("stop") : t("startServing")}
+            {isSyncActive ? t("stop") : t("startServing")}
           </button>
         </div>
 

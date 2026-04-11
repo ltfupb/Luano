@@ -114,7 +114,7 @@ export class RojoManager {
   private notifyStatus(): void {
     const err = this.status === "error" ? this.lastError : null
     BrowserWindow.getAllWindows().forEach((win) => {
-      win.webContents.send("rojo:status-changed", this.status, this.port, err)
+      win.webContents.send("sync:status-changed", this.status, this.port, err)
     })
   }
 

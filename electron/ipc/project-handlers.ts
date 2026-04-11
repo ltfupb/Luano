@@ -133,15 +133,15 @@ export function registerProjectHandlers(): void {
   })
 
   // ── Sync (Rojo / Argon) ──────────────────────────────────────────────────
-  ipcMain.handle("rojo:serve", (_, projectPath: string) => {
+  ipcMain.handle("sync:serve", (_, projectPath: string) => {
     syncManager.serve(projectPath)
     return { success: true }
   })
-  ipcMain.handle("rojo:stop", () => {
+  ipcMain.handle("sync:stop", () => {
     syncManager.stop()
     return { success: true }
   })
-  ipcMain.handle("rojo:status", () => syncManager.getStatus())
+  ipcMain.handle("sync:status", () => syncManager.getStatus())
 
   // ── Lint/Format ─────────────────────────────────────────────────────────────
   ipcMain.handle("lint:format", async (_, filePath: string) => {
