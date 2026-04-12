@@ -390,7 +390,9 @@ export async function chat(messages: ChatMessage[], systemPrompt: string): Promi
   if (provider === "gemini") {
     const geminiModel = await getGeminiModel(systemPrompt)
     const response = await withRetry(() => withTimeout(
-      geminiModel.generateContent({ contents: toGeminiContents(messages) }),
+      geminiModel.generateContent({
+        contents: toGeminiContents(messages)
+      }),
       60_000
     ))
     return response.response.text()
@@ -451,7 +453,10 @@ export async function chatStream(
     if (provider === "gemini") {
       const geminiModel = await getGeminiModel(systemPrompt)
       const result = await withTimeout(
-        geminiModel.generateContentStream({ contents: toGeminiContents(messages) }),
+        geminiModel.generateContentStream({
+          contents: toGeminiContents(messages),
+          tools: [{ googleSearchRetrieval: {} }]
+        }),
         60_000
       )
       for await (const chunk of result.stream) {
@@ -468,6 +473,7 @@ export async function chatStream(
       type: "advisor_20260301" as const,
       name: "advisor" as const,
       model: "claude-opus-4-6" as const,
+      max_uses: 5,
       caching: { type: "ephemeral" as const }
     }] : []
 
@@ -489,6 +495,7 @@ export async function chatStream(
 
     let streamedChars = 0
     let inputTracked = false
+    let advisorBlockIndex = -1
     for await (const chunk of stream) {
       if (chunk.type === "message_start" && !inputTracked) {
         const msg = (chunk as unknown as { message: { usage: { input_tokens: number; cache_read_input_tokens?: number } } }).message
@@ -500,6 +507,29 @@ export async function chatStream(
         streamedChars += text.length
         broadcastUsage(Math.ceil(streamedChars / 4))
       }
+      // Advisor indicator — same pattern as agent.ts
+      if (
+        useAdvisor &&
+        chunk.type === "content_block_start" &&
+        // SAFETY: beta advisor events include content_block.name (advisor-tool-2026-03-01)
+        (chunk as unknown as { content_block: { name?: string } }).content_block?.name === "advisor"
+      ) {
+        advisorBlockIndex = (chunk as unknown as { index: number }).index
+        BrowserWindow.getAllWindows().forEach((win) =>
+          win.webContents.send(`${streamChannel}:advisor`, true)
+        )
+      }
+      if (
+        useAdvisor &&
+        chunk.type === "content_block_stop" &&
+        advisorBlockIndex >= 0 &&
+        (chunk as unknown as { index: number }).index === advisorBlockIndex
+      ) {
+        advisorBlockIndex = -1
+        BrowserWindow.getAllWindows().forEach((win) =>
+          win.webContents.send(`${streamChannel}:advisor`, false)
+        )
+      }
     }
     const finalMessage = await stream.finalMessage()
     const cache = finalMessage.usage.cache_read_input_tokens ?? 0
@@ -510,6 +540,12 @@ export async function chatStream(
     }
     send(null)
   } catch (err) {
+    // Clean up stuck advisor indicator on stream error
+    if (isAdvisorAvailable()) {
+      BrowserWindow.getAllWindows().forEach((win) =>
+        win.webContents.send(`${streamChannel}:advisor`, false)
+      )
+    }
     const waitSec = is429(err)
     if (waitSec !== null) {
       send(`\n\nRate limited. Please wait ${waitSec}s and try again.`)

@@ -106,12 +106,17 @@ const api = {
   aiChatStream: (
     messages: unknown[],
     context: unknown,
-    onChunk: (chunk: string | null) => void
+    onChunk: (chunk: string | null) => void,
+    onAdvisor?: (active: boolean) => void
   ): Promise<void> => {
     const channel = `ai:stream:${Date.now()}`
     ipcRenderer.on(channel, (_, chunk) => onChunk(chunk as string | null))
+    if (onAdvisor) {
+      ipcRenderer.on(`${channel}:advisor`, (_, active) => onAdvisor(active as boolean))
+    }
     return ipcRenderer.invoke("ai:chat-stream", messages, context, channel).finally(() => {
       ipcRenderer.removeAllListeners(channel)
+      ipcRenderer.removeAllListeners(`${channel}:advisor`)
     }) as Promise<void>
   },
 

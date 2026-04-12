@@ -46,7 +46,8 @@ interface AiApi {
   aiChatStream: (
     messages: unknown[],
     context: unknown,
-    onChunk: (chunk: string | null) => void
+    onChunk: (chunk: string | null) => void,
+    onAdvisor?: (active: boolean) => void
   ) => Promise<void>
 
   // Plan Chat

@@ -407,7 +407,8 @@ export function ChatPanel({ onClose }: ChatPanelProps): JSX.Element {
             if (chunk === null) return
             accumulated += chunk
             updateMessage(assistantId, accumulated, true)
-          }
+          },
+          (active) => { setAdvisorActive(active) }
         )
         updateMessage(assistantId, accumulated, false)
       } catch (err) {

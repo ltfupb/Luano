@@ -7,7 +7,10 @@ vi.mock("electron", () => ({
   BrowserWindow: { getAllWindows: () => [] }
 }))
 
-import { toCachedSystem, toCachedTools, MODELS, type Provider } from "../electron/ai/provider"
+import {
+  toCachedSystem, toCachedTools, MODELS, type Provider,
+  isAdvisorAvailable, setAdvisorEnabled, setProvider, setModel
+} from "../electron/ai/provider"
 
 describe("toCachedSystem", () => {
   it("wraps entire prompt with cache_control when no PROJECT CONTEXT marker", () => {
@@ -74,5 +77,35 @@ describe("MODELS", () => {
 
   it("local has empty model list (dynamic)", () => {
     expect(MODELS.local).toEqual([])
+  })
+})
+
+describe("isAdvisorAvailable", () => {
+  it("returns true for Anthropic Sonnet with advisor enabled", () => {
+    setProvider("anthropic")
+    setModel("claude-sonnet-4-6")
+    setAdvisorEnabled(true)
+    expect(isAdvisorAvailable()).toBe(true)
+  })
+
+  it("returns false for Opus (advisor is the same model)", () => {
+    setProvider("anthropic")
+    setModel("claude-opus-4-6")
+    setAdvisorEnabled(true)
+    expect(isAdvisorAvailable()).toBe(false)
+  })
+
+  it("returns false when advisor disabled", () => {
+    setProvider("anthropic")
+    setModel("claude-sonnet-4-6")
+    setAdvisorEnabled(false)
+    expect(isAdvisorAvailable()).toBe(false)
+  })
+
+  it("returns false for non-Anthropic providers", () => {
+    setProvider("openai")
+    setModel("gpt-4o")
+    setAdvisorEnabled(true)
+    expect(isAdvisorAvailable()).toBe(false)
   })
 })

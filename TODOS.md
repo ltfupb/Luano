@@ -205,7 +205,7 @@ Opus-Opus는 의미 없음. Haiku-Opus는 Haiku 비용을 올리지만 의도한
 - `resources/templates/_shared/ReplicatedStorage/Packages/Signal.lua` — signal-lua `src/init.lua` 그대로 복사. 상단에 한 줄 주석 `-- See LICENSES/signal-lua.txt`만 추가 (소스 파일에 라이선스 전문 주입 금지 — upstream diff 오염 방지).
 - `resources/templates/_shared/LICENSES/signal-lua.txt` — signal-lua 레포의 `LICENSE` 원문 그대로. 단일 위치. 앞으로 추가되는 3rd-party 소스는 모두 이 폴더에 `<project>.txt` 형식으로.
 - 템플릿 복사 로직에 `_shared/` prefix 처리 추가 (이미 공유 폴더라면 스킵).
-- `resources/type-defs/signal.d.luau` 추가 — luau-lsp가 `resources/type-defs/`에서 자동 로드 → `sig:Connect` 등 자동완성.
+- ~~`resources/type-defs/signal.d.luau`~~ — 제거됨. 글로벌 네임스페이스 오염 방지 (Signal을 쓰지 않는 프로젝트에 createSignal 자동완성 노출).
 - 에이전트 시스템 프롬프트 업데이트 (`electron/ai/provider.ts` 시스템 프롬프트 빌드) — "For internal event systems, prefer `require(ReplicatedStorage.Packages.Signal)` over `BindableEvent`".
 
 **Effort:** S (human: ~2h / CC: ~15min)
@@ -213,7 +213,7 @@ Opus-Opus는 의미 없음. Haiku-Opus는 Haiku 비용을 올리지만 의도한
 **Depends on:** 없음. 가장 빠른 승리.
 
 **추가 고민:**
-- **Rotriever 지원 고려?** — Luano는 현재 Rotriever를 번들하지 않음 (Wally/Rokit만). 단순히 `Signal.lua` 파일만 복사하는 방식으로 시작, 나중에 Rotriever 지원 요청이 나오면 추가.
+- **Rotriever 지원 고려?** — 단순히 `Signal.lua` 파일만 복사하는 방식으로 시작, 나중에 Rotriever 지원 요청이 나오면 추가.
 - **Upstream 업데이트 전략** — signal-lua는 v1.0 안정 상태. 새 릴리즈 나올 때마다 `Signal.lua` + `LICENSES/signal-lua.txt` 한 쌍만 교체. 버전 기록은 커밋 메시지로 충분.
 
 ---
@@ -273,6 +273,20 @@ src/types/ipc/
 ---
 
 ## 미결 백로그 (v0.8.1 범위 밖)
+
+### v0.8.2 — Code Quality
+
+#### SDK 타입 캐스팅 정리
+**What:** `agent.ts`의 `as unknown as` 캐스트 5곳 (advisor beta event 파싱). Anthropic SDK가 advisor types를 GA로 출시하면 제거.
+**Why:** beta API라 SDK 타입에 advisor event 필드가 아직 없음. `// SAFETY:` + `// TODO:` 주석으로 마킹 완료. SDK changelog 모니터링 필요.
+**Effort:** XS — SDK 업데이트 후 캐스트 제거 + 타입 체크만.
+**Depends on:** `@anthropic-ai/sdk`가 advisor types 출시.
+
+#### multi_edit 원자적 쓰기
+**What:** `multi_edit` 도구의 파일 쓰기를 `writeFileSync` → `temp + rename` 패턴으로 변경. 중간 실패 시 파일 손상 방지.
+**Why:** 현재는 edit 적용 중 크래시하면 파일이 반만 수정된 상태로 남을 수 있음. `create_file`도 동일 패턴 적용 권장.
+**Effort:** XS — `writeFileSync(tmp) + renameSync(tmp, target)` 2줄 변경.
+**Depends on:** 없음.
 
 ### v0.8.2 — Cloud Integration 테마
 

@@ -70,7 +70,7 @@ luano/
 │   │   ├── agent.ts             # Agent loop (Anthropic + OpenAI 양쪽 tool use)
 │   │   ├── evaluator.ts         # AI 코드 품질 평가기 (VERIFY 단계 독립 평가)
 │   │   ├── context.ts           # 3-레이어 컨텍스트 빌더 + topology/sourcemap 주입
-│   │   ├── tools.ts             # AI 도구 12개 (lint_file 포함)
+│   │   ├── tools.ts             # AI 도구 16개 (grep, multi_edit, todo_write, format_file, type_check 등)
 │   │   ├── memory.ts            # AI 대화 자동 메모리 감지/저장
 │   │   └── rag.ts               # FTS5 docs 검색
 │   ├── file/
@@ -152,7 +152,9 @@ luano/
 │   ├── roblox-docs/roblox_docs.db
 │   ├── type-defs/globalTypes.d.luau
 │   ├── studio-plugin/LuanoPlugin.lua
-│   └── templates/empty/         # 프로젝트 템플릿
+│   └── templates/
+│       ├── empty/               # 프로젝트 템플릿
+│       └── _shared/             # 공유 에셋 (Signal, LICENSES)
 │
 ├── tests/                       # Vitest 테스트
 │   ├── license.test.ts
@@ -220,12 +222,12 @@ chokidar 감지 → StyLua 포맷 → Selene 린트 → renderer IPC 알림 (300
 - `agent.ts`: Agent loop (Pro) — Anthropic + OpenAI 양쪽 tool use 지원
 
 **Phase-based Agent Loop (Claude Code subagent 패턴 참조)**:
-- 3단계 실행: EXPLORE → EXECUTE → VERIFY
-- EXPLORE: 읽기 전용 도구만 제공 (`read_file`, `list_files`, `grep_files`, `search_docs`, `read_instance_tree`, `get_runtime_logs`). 코드 이해 후 실행으로 전환
+- 3단계 실행: PLAN → EXECUTE → VERIFY
+- PLAN: 도구 없이 텍스트만. 사용자 요청에 대한 2-3줄 계획 생성 → EXECUTE로 전환
 - EXECUTE: 전체 도구. 파일 생성/수정/삭제 + lint 검증
 - VERIFY: 실행 완료 후 수정된 모든 .lua/.luau 파일 자동 lint → ERROR만 수정 (WARNING 무시), 동일 에러 반복 시 자동 중단
-- 순수 질문(`?`, `뭐야`, `explain` 등)은 EXPLORE 건너뛰고 바로 EXECUTE
-- Anthropic: `messages.stream()` + `tool_use` stop reason
+- 순수 질문(`?`, `뭐야`, `explain` 등)은 PLAN 건너뛰고 바로 EXECUTE
+- Anthropic: `messages.stream()` / `beta.messages.stream()` (advisor 사용 시) + `tool_use` stop reason
 - OpenAI: `chat.completions.create()` + function calling
 - MAX_ROUNDS (15) + MAX_VERIFY_ROUNDS (3), 동일한 abort/retry 로직
 
@@ -244,15 +246,27 @@ chokidar 감지 → StyLua 포맷 → Selene 린트 → renderer IPC 알림 (300
   - 동적 컨텍스트: 캐시 없음
 - `toCachedTools()`: 마지막 tool 정의에 `cache_control` 추가 → 전체 tool 스키마 캐시
 
-**AI 도구 12개**:
-`read_file`, `edit_file`, `create_file`, `delete_file`, `list_files`, `grep_files`, `search_docs`, `lint_file`, `read_instance_tree`, `get_runtime_logs`, `run_studio_script`, `set_property`
+**AI 도구 18개** (클라이언트 16 + 서버 2):
+- File: `read_file`, `edit_file`, `multi_edit`, `create_file`, `delete_file`, `list_files`, `grep`
+- Lint/Format: `lint_file`, `format_file`, `type_check`
+- Docs: `search_docs`
+- Studio Bridge: `read_instance_tree`, `get_runtime_logs`, `run_studio_script`, `set_property`
+- Task: `todo_write`
+- Server-side (Anthropic): `advisor` (Opus 4.6, beta), `web_search` (web_search_20250305)
+- Server-side (Gemini): `google_search` (googleSearchRetrieval)
 
 **AI Skills 10개** (`src/ai/skills.ts`):
 `/explain`, `/fix`, `/optimize`, `/refactor`, `/test`, `/type`, `/doc`, `/security`, `/convert`, `/scaffold`
 
+**Claude Advisor Tool** (Anthropic beta, `advisor-tool-2026-03-01`):
+- Sonnet 4.6 executor + Opus 4.6 advisor 페어링. 서버 측에서 처리, 클라이언트 루프 불필요
+- `max_uses: 5` per request. 3회 연속 에러 시 세션 내 자동 비활성화
+- Settings > AI에서 토글. Anthropic non-Opus 모델에서만 활성화 가능
+- 스트리밍 중 advisor 호출 감지 → `streamChannel:advisor` IPC 이벤트 → UI 인디케이터
+
 **Phase 전환 흐름**:
-1. EXPLORE: `list_files`, `read_file`, `grep_files`로 프로젝트 이해 → `end_turn` 시 전환 메시지 주입
-2. EXECUTE: `create_file`, `edit_file`로 수정 → `end_turn` 시 자동 lint 검증
+1. PLAN: 도구 없이 2-3줄 계획 → "Execute this plan" 전환 메시지 주입
+2. EXECUTE: `create_file`, `edit_file`, `multi_edit`로 수정 → `end_turn` 시 자동 lint 검증
 3. VERIFY: ERROR만 자동 수정 (WARNING 무시), 동일 에러 반복 시 중단
 
 **AI Evaluator** (`evaluator.ts`):
