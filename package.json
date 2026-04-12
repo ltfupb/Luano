@@ -25,7 +25,6 @@
   },
   "devDependencies": {
     "@electron-toolkit/preload": "^3.0.1",
-    "@electron-toolkit/utils": "^3.0.0",
     "@types/better-sqlite3": "^7.6.11",
     "@types/node": "^20.14.8",
     "@types/react": "^18.3.3",
@@ -49,6 +48,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.88.0",
+    "@electron-toolkit/utils": "^3.0.0",
     "@google/generative-ai": "^0.24.1",
     "@monaco-editor/react": "^4.6.0",
     "@sentry/electron": "^7.10.0",
