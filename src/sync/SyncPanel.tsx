@@ -254,8 +254,15 @@ export function SyncPanel(): JSX.Element {
   // ── Handlers ──────────────────────────────────────────────────────────────
   const handleSyncToggle = async () => {
     if (!projectPath) return
-    if (isSyncActive) await window.api.syncStop()
-    else await window.api.syncServe(projectPath)
+    try {
+      if (isSyncActive) await window.api.syncStop()
+      else await window.api.syncServe(projectPath)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      const cleaned = msg.replace(/^Error invoking remote method '[^']+': /, "")
+      setInstallMsg(cleaned)
+      setTimeout(() => setInstallMsg(null), 5000)
+    }
   }
 
   const handleInstall = async () => {
