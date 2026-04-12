@@ -146,7 +146,8 @@ export function ChatPanel({ onClose }: ChatPanelProps): JSX.Element {
   const [skillMatches, setSkillMatches] = useState<Skill[]>([])
   const [skillIndex, setSkillIndex] = useState(0)
   const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([])
-  const [agentRound, setAgentRound] = useState(0)
+  const [advisorActive, setAdvisorActive] = useState(false)
+  const [agentTodos, setAgentTodos] = useState<Array<{ content: string; status: string }>>([])
   const [showSessions, setShowSessions] = useState(false)
   const [sessionsClosing, setSessionsClosing] = useState(false)
   const [showModeDropdown, setShowModeDropdown] = useState(false)
@@ -206,6 +207,13 @@ export function ChatPanel({ onClose }: ChatPanelProps): JSX.Element {
     }
     if (typeof window.api.onTokenUsage === "function") {
       return window.api.onTokenUsage(setTokens)
+    }
+  }, [])
+
+  // Listen for agent todo updates
+  useEffect(() => {
+    if (typeof window.api.onTodosUpdated === "function") {
+      return window.api.onTodosUpdated(setAgentTodos)
     }
   }, [])
 
@@ -322,7 +330,7 @@ export function ChatPanel({ onClose }: ChatPanelProps): JSX.Element {
   const handleAbort = useCallback(() => {
     window.api.aiAbort()
     setStreaming(false)
-    setAgentRound(0)
+    setAdvisorActive(false)
     // Mark last streaming message as done
     const last = messages[messages.length - 1]
     if (last?.streaming) {
@@ -335,7 +343,7 @@ export function ChatPanel({ onClose }: ChatPanelProps): JSX.Element {
     async (apiMessages: Array<{role: string; content: string}>) => {
       const assistantId = addMessage({ role: "assistant", content: "", streaming: true })
       setStreaming(true)
-      setAgentRound(0)
+      setAdvisorActive(false)
       try {
         let accumulated = ""
         const result = await window.api.aiAgentChat(
@@ -354,8 +362,9 @@ export function ChatPanel({ onClose }: ChatPanelProps): JSX.Element {
               toolSuccess: event.success
             })
           },
-          (roundInfo) => {
-            setAgentRound(roundInfo.round)
+          undefined,
+          (active) => {
+            setAdvisorActive(active)
           }
         )
         updateMessage(assistantId, accumulated, false)
@@ -367,10 +376,13 @@ export function ChatPanel({ onClose }: ChatPanelProps): JSX.Element {
           }
         }
       } catch (err) {
-        updateMessage(assistantId, `Error: ${String(err)}`, false)
+        const errMsg = err instanceof Error ? err.message : String(err)
+        const cleaned = errMsg.replace(/^Error invoking remote method '[^']+': /, "")
+        updateMessage(assistantId, `Error: ${cleaned}`, false)
       } finally {
         setStreaming(false)
-        setAgentRound(0)
+        setAdvisorActive(false)
+        setAgentTodos([])
         // Auto-compress if context is getting large
         compressOldMessages()
         // Auto-detect memories from this exchange
@@ -399,7 +411,9 @@ export function ChatPanel({ onClose }: ChatPanelProps): JSX.Element {
         )
         updateMessage(assistantId, accumulated, false)
       } catch (err) {
-        updateMessage(assistantId, `Error: ${String(err)}`, false)
+        const errMsg = err instanceof Error ? err.message : String(err)
+        const cleaned = errMsg.replace(/^Error invoking remote method '[^']+': /, "")
+        updateMessage(assistantId, `Error: ${cleaned}`, false)
       } finally {
         setStreaming(false)
         // Auto-compress if context is getting large
@@ -427,7 +441,7 @@ export function ChatPanel({ onClose }: ChatPanelProps): JSX.Element {
       // Agent mode requires Pro — fall back to basic chat with a notice
       addMessage({
         role: "assistant",
-        content: "Agent mode requires **Luano Pro**. Switching to chat mode.\n\nUpgrade at [luano.dev/pricing](https://luano.dev/pricing) for autonomous coding, inline edit, Studio bridge, and more."
+        content: "Agent mode requires **Luano Pro**. Switching to chat mode.\n\nStart your **free 7-day trial** at [luano.dev/pricing](https://luano.dev/pricing) — includes autonomous coding, inline edit, Studio bridge, and more."
       })
       await doSendChat(apiMessages)
     } else {
@@ -506,22 +520,23 @@ export function ChatPanel({ onClose }: ChatPanelProps): JSX.Element {
 
         <div className="flex-1" />
 
-        {/* Agent round indicator */}
-        {isStreaming && agentRound > 0 && (
+        {/* Advisor indicator */}
+        {isStreaming && advisorActive && (
           <span
             className="flex items-center gap-1 px-1.5 py-0.5 rounded animate-fade-in"
             style={{
               fontSize: "10px",
-              color: "var(--accent)",
-              background: "rgba(37,99,235,0.08)",
-              border: "1px solid rgba(37,99,235,0.2)",
+              color: "rgb(168,85,247)",
+              background: "rgba(168,85,247,0.08)",
+              border: "1px solid rgba(168,85,247,0.2)",
               fontFamily: "monospace"
             }}
           >
-            <span className="animate-blink" style={{ width: 4, height: 4, borderRadius: "50%", background: "var(--accent)", display: "inline-block" }} />
-            Round {agentRound}
+            <span className="animate-blink" style={{ width: 4, height: 4, borderRadius: "50%", background: "rgb(168,85,247)", display: "inline-block" }} />
+            Advisor
           </span>
         )}
+
 
         {/* New Chat */}
         {messages.length > 0 && !isStreaming && !showSessions && (
@@ -685,6 +700,28 @@ export function ChatPanel({ onClose }: ChatPanelProps): JSX.Element {
               ))
             })()}
           </div>
+        </div>
+      )}
+
+      {/* Agent Todos */}
+      {agentTodos.length > 0 && (
+        <div className="px-3 py-2 flex flex-col gap-1" style={{ borderBottom: "1px solid var(--border-subtle)", background: "var(--bg-panel)" }}>
+          {agentTodos.map((t, i) => (
+            <div key={i} className="flex items-center gap-1.5" style={{ fontSize: "11px" }}>
+              <span style={{
+                color: t.status === "completed" ? "var(--success)" : t.status === "in_progress" ? "var(--accent)" : "var(--text-muted)",
+                fontFamily: "monospace", fontSize: "10px", width: 14, textAlign: "center"
+              }}>
+                {t.status === "completed" ? "\u2713" : t.status === "in_progress" ? "\u25B6" : "\u25CB"}
+              </span>
+              <span style={{
+                color: t.status === "completed" ? "var(--text-muted)" : "var(--text-primary)",
+                textDecoration: t.status === "completed" ? "line-through" : "none"
+              }}>
+                {t.content}
+              </span>
+            </div>
+          ))}
         </div>
       )}
 

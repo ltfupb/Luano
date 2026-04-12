@@ -253,6 +253,21 @@ export function setModel(model: string): void {
   store.set("model", model)
 }
 
+export function setAdvisorEnabled(enabled: boolean): void {
+  store.set("advisorEnabled", enabled)
+}
+
+export function getAdvisorEnabled(): boolean {
+  return (store.get("advisorEnabled") as boolean | undefined) ?? false
+}
+
+/** Advisor is usable only with Anthropic non-Opus models */
+export function isAdvisorAvailable(): boolean {
+  return getProvider() === "anthropic" &&
+    getAdvisorEnabled() &&
+    !getModel().includes("opus")
+}
+
 export function getProviderAndModel(): { provider: Provider; model: string } {
   return { provider: getProvider(), model: getModel() }
 }
@@ -390,7 +405,7 @@ export async function chat(messages: ChatMessage[], systemPrompt: string): Promi
   trackUsage(
     response.usage.input_tokens,
     response.usage.output_tokens,
-    "cache_read_input_tokens" in response.usage ? (response.usage as Record<string, number>).cache_read_input_tokens : 0
+    response.usage.cache_read_input_tokens ?? 0
   )
   return response.content[0].type === "text" ? response.content[0].text : ""
 }
@@ -448,12 +463,30 @@ export async function chatStream(
     }
 
     const anthropic = await getAnthropicClient()
-    const stream = anthropic.messages.stream({
-      model,
-      max_tokens: 8192,
-      system: toCachedSystem(systemPrompt),
-      messages
-    })
+    const useAdvisor = isAdvisorAvailable()
+    const advisorTool = useAdvisor ? [{
+      type: "advisor_20260301" as const,
+      name: "advisor" as const,
+      model: "claude-opus-4-6" as const,
+      caching: { type: "ephemeral" as const }
+    }] : []
+
+    const stream = useAdvisor
+      ? anthropic.beta.messages.stream({
+          model,
+          max_tokens: 8192,
+          system: toCachedSystem(systemPrompt),
+          messages,
+          tools: advisorTool,
+          betas: ["advisor-tool-2026-03-01"]
+        })
+      : anthropic.messages.stream({
+          model,
+          max_tokens: 8192,
+          system: toCachedSystem(systemPrompt),
+          messages
+        })
+
     let streamedChars = 0
     let inputTracked = false
     for await (const chunk of stream) {
@@ -469,7 +502,7 @@ export async function chatStream(
       }
     }
     const finalMessage = await stream.finalMessage()
-    const cache = "cache_read_input_tokens" in finalMessage.usage ? (finalMessage.usage as Record<string, number>).cache_read_input_tokens : 0
+    const cache = finalMessage.usage.cache_read_input_tokens ?? 0
     if (!inputTracked) {
       trackUsage(finalMessage.usage.input_tokens, finalMessage.usage.output_tokens, cache)
     } else {

@@ -80,12 +80,19 @@ const api = {
   aiSetProvider: (provider: string) => ipcRenderer.invoke("ai:set-provider", provider),
   aiSetModel: (model: string) => ipcRenderer.invoke("ai:set-model", model),
   aiGetProviderModel: () => ipcRenderer.invoke("ai:get-provider-model"),
+  aiSetAdvisor: (enabled: boolean) => ipcRenderer.invoke("ai:set-advisor", enabled),
+  aiGetAdvisor: () => ipcRenderer.invoke("ai:get-advisor"),
   aiGetTokenUsage: () => ipcRenderer.invoke("ai:token-usage"),
   aiResetTokenUsage: () => ipcRenderer.invoke("ai:reset-token-usage"),
   onTokenUsage: (cb: (usage: { input: number; output: number; cacheRead: number }) => void): (() => void) => {
     const handler = (_: unknown, usage: { input: number; output: number; cacheRead: number }) => cb(usage)
     ipcRenderer.on("ai:token-usage", handler)
     return () => ipcRenderer.removeListener("ai:token-usage", handler)
+  },
+  onTodosUpdated: (cb: (todos: Array<{ content: string; status: string }>) => void): (() => void) => {
+    const handler = (_: unknown, todos: Array<{ content: string; status: string }>) => cb(todos)
+    ipcRenderer.on("ai:todos-updated", handler)
+    return () => ipcRenderer.removeListener("ai:todos-updated", handler)
   },
 
   // ── AI Context ───────────────────────────────────────────────────────────
@@ -127,7 +134,8 @@ const api = {
     context: unknown,
     onChunk: (chunk: string | null) => void,
     onTool: (event: ToolEvent) => void,
-    onRound?: (info: { round: number; max: number }) => void
+    onRound?: (info: { round: number; max: number }) => void,
+    onAdvisor?: (active: boolean) => void
   ): Promise<{ modifiedFiles: string[] }> => {
     const channel = `ai:agent:${Date.now()}`
     ipcRenderer.on(channel, (_, chunk) => onChunk(chunk as string | null))
@@ -135,12 +143,16 @@ const api = {
     if (onRound) {
       ipcRenderer.on(`${channel}:round`, (_, info) => onRound(info as { round: number; max: number }))
     }
+    if (onAdvisor) {
+      ipcRenderer.on(`${channel}:advisor`, (_, active) => onAdvisor(active as boolean))
+    }
     return ipcRenderer
       .invoke("ai:agent-chat", messages, context, channel)
       .finally(() => {
         ipcRenderer.removeAllListeners(channel)
         ipcRenderer.removeAllListeners(`${channel}:tool`)
         ipcRenderer.removeAllListeners(`${channel}:round`)
+        ipcRenderer.removeAllListeners(`${channel}:advisor`)
       }) as Promise<{ modifiedFiles: string[] }>
   },
 

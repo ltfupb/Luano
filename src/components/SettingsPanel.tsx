@@ -148,7 +148,7 @@ function SkillEditor({
 export function SettingsPanel({ onClose }: SettingsPanelProps): JSX.Element {
   const {
     language, setLanguage, theme, setTheme,
-    setProvider, setModel,
+    setProvider, setModel, setAdvisorEnabled,
     autoSave, setAutoSave, autoSaveDelay, setAutoSaveDelay,
     fontSize, setFontSize,
     uiScale, setUiScale
@@ -174,6 +174,7 @@ export function SettingsPanel({ onClose }: SettingsPanelProps): JSX.Element {
       setModel(result.model)
       setModels(result.models as ProviderModels)
     })
+    window.api.aiGetAdvisor().then((v: boolean) => setAdvisorEnabled(v)).catch(() => {})
 
     // Load custom skills
     if (projectPath && typeof window.api.skillsLoad === "function") {
@@ -596,11 +597,13 @@ export function SettingsPanel({ onClose }: SettingsPanelProps): JSX.Element {
                 <span style={{ fontSize: "10px", color: "var(--text-muted)", lineHeight: 1.4 }}>
                   {t("getLicenseAt")}{" "}
                   <a
-                    href="https://luano.dev"
+                    href="https://luano.dev/pricing"
                     target="_blank"
                     rel="noreferrer"
                     style={{ color: "var(--accent)", textDecoration: "underline", cursor: "pointer" }}
-                  >luano.dev</a>
+                  >luano.dev/pricing</a>
+                  {" · "}
+                  <span style={{ color: "var(--accent)" }}>7-day free trial</span>
                 </span>
               </div>
             )}

@@ -10,7 +10,7 @@ import { lazy, Suspense, type ComponentType, type FC } from "react"
 function ProPlaceholder({ name }: { name: string }): JSX.Element {
   return (
     <div className="flex items-center justify-center h-full" style={{ color: "var(--text-muted)", fontSize: 12 }}>
-      {name} requires Luano Pro
+      {name} requires Luano Pro — try free for 7 days at luano.dev/pricing
     </div>
   )
 }

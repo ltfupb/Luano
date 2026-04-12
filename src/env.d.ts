@@ -121,6 +121,13 @@ interface Window {
       }
     }>
 
+    // Advisor
+    aiSetAdvisor: (enabled: boolean) => Promise<{ success: boolean }>
+    aiGetAdvisor: () => Promise<boolean>
+
+    // Agent Todos
+    onTodosUpdated: (cb: (todos: Array<{ content: string; status: string }>) => void) => () => void
+
     // Token usage
     aiGetTokenUsage: () => Promise<{ input: number; output: number; cacheRead: number }>
     aiResetTokenUsage: () => Promise<{ success: boolean }>
@@ -159,7 +166,8 @@ interface Window {
         output: string
         success: boolean
       }) => void,
-      onRound?: (info: { round: number; max: number }) => void
+      onRound?: (info: { round: number; max: number }) => void,
+      onAdvisor?: (active: boolean) => void
     ) => Promise<{ modifiedFiles: string[] }>
 
     // Agent Abort

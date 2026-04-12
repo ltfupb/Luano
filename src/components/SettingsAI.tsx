@@ -142,7 +142,8 @@ export function SettingsAI({ models, setModels }: {
   const {
     apiKey, setApiKey, openaiKey, setOpenAIKey, geminiKey, setGeminiKey,
     localEndpoint, setLocalEndpoint, localModel, setLocalModel,
-    provider, setProvider, model, setModel
+    provider, setProvider, model, setModel,
+    advisorEnabled, setAdvisorEnabled
   } = useSettingsStore()
   const t = useT()
   const [localModelsLoading, setLocalModelsLoading] = useState(false)
@@ -224,6 +225,38 @@ export function SettingsAI({ models, setModels }: {
               </option>
             ))}
           </select>
+        </div>
+      )}
+
+      {/* Advisor Toggle — Anthropic non-Opus only */}
+      {provider === "anthropic" && !model.includes("opus") && (
+        <div className="flex flex-col gap-1.5">
+          <div className="flex items-center justify-between">
+            <SectionLabel>{t("advisor" as never)}</SectionLabel>
+            <button
+              onClick={async () => {
+                const next = !advisorEnabled
+                setAdvisorEnabled(next)
+                await window.api.aiSetAdvisor(next)
+              }}
+              className="relative w-8 h-[18px] rounded-full transition-all duration-200"
+              style={{
+                background: advisorEnabled ? "var(--accent)" : "var(--bg-base)",
+                border: `1px solid ${advisorEnabled ? "transparent" : "var(--border)"}`
+              }}
+            >
+              <span
+                className="absolute top-[2px] w-3 h-3 rounded-full transition-all duration-200"
+                style={{
+                  background: advisorEnabled ? "white" : "var(--text-muted)",
+                  left: advisorEnabled ? "16px" : "2px"
+                }}
+              />
+            </button>
+          </div>
+          <span style={{ fontSize: "10px", color: "var(--text-muted)" }}>
+            {t("advisorHint" as never)}
+          </span>
         </div>
       )}
 

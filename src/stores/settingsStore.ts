@@ -20,6 +20,7 @@ interface SettingsStore {
   localModel: string
   provider: string
   model: string
+  advisorEnabled: boolean
   autoSave: boolean
   autoSaveDelay: number
   fontSize: number
@@ -40,6 +41,7 @@ interface SettingsStore {
   setLocalModel: (model: string) => void
   setProvider: (provider: string) => void
   setModel: (model: string) => void
+  setAdvisorEnabled: (enabled: boolean) => void
   setAutoSave: (enabled: boolean) => void
   setAutoSaveDelay: (ms: number) => void
   setFontSize: (size: number) => void
@@ -65,6 +67,7 @@ export const useSettingsStore = create<SettingsStore>()(
       localModel: "",
       provider: "anthropic",
       model: "claude-sonnet-4-6",
+      advisorEnabled: false,
       autoSave: true,
       autoSaveDelay: 1000,
       fontSize: 13,
@@ -84,6 +87,7 @@ export const useSettingsStore = create<SettingsStore>()(
       setLocalModel: (localModel) => set({ localModel }),
       setProvider: (provider) => set({ provider }),
       setModel: (model) => set({ model }),
+      setAdvisorEnabled: (advisorEnabled) => set({ advisorEnabled }),
       setAutoSave: (autoSave) => set({ autoSave }),
       setAutoSaveDelay: (autoSaveDelay) => set({ autoSaveDelay }),
       setFontSize: (fontSize) => set({ fontSize }),
@@ -115,6 +119,7 @@ export const useSettingsStore = create<SettingsStore>()(
         localModel: state.localModel,
         provider: state.provider,
         model: state.model,
+        advisorEnabled: state.advisorEnabled,
         autoSave: state.autoSave,
         autoSaveDelay: state.autoSaveDelay,
         fontSize: state.fontSize,

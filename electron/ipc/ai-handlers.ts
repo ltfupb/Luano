@@ -10,6 +10,7 @@ import {
   setLocalModel, getLocalModel,
   fetchLocalModels,
   setProvider, setModel, getProviderAndModel,
+  setAdvisorEnabled, getAdvisorEnabled,
   MODELS, getTokenUsage, resetTokenUsage
 } from "../ai/provider"
 import { hasFeature } from "../pro"
@@ -90,6 +91,11 @@ export function registerAIHandlers(): void {
   ipcMain.handle("ai:get-provider-model", () => {
     return { ...getProviderAndModel(), models: MODELS }
   })
+  ipcMain.handle("ai:set-advisor", (_, enabled: boolean) => {
+    setAdvisorEnabled(enabled)
+    return { success: true }
+  })
+  ipcMain.handle("ai:get-advisor", () => getAdvisorEnabled())
   ipcMain.handle("ai:token-usage", () => getTokenUsage())
   ipcMain.handle("ai:reset-token-usage", () => {
     resetTokenUsage()

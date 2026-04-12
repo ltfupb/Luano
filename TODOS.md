@@ -1,19 +1,19 @@
 # Luano — TODOS
 
-> 현재 미완료 항목과 v0.8.0 빌드 계획.
+> 현재 미완료 항목과 v0.8.1 빌드 계획.
 > 완료된 항목은 릴리즈 히스토리(CLAUDE.md)를 참조.
 
 ---
 
-## v0.8.0 빌드 계획 (2026-04-11 기준, plan-eng-review 반영)
+## v0.8.1 빌드 계획 (2026-04-11 기준, plan-eng-review 반영)
 
 > 목표: **AI 에이전트 성숙도**. v0.7.x에서 올린 속도/안정성 기반 위에 Claude Advisor, 툴 품질 업그레이드, Signals 기본 패턴을 쌓는다.
 >
-> **제외 (v0.8.1로 연기):** rocale-cli 통합 (독립 "클라우드 통합" 테마로 분리), AI 툴 10개 중 4개 (glob / get_diagnostics / web_fetch / git_status).
+> **제외 (v0.8.2로 연기):** rocale-cli 통합 (독립 "클라우드 통합" 테마로 분리), AI 툴 10개 중 4개 (glob / get_diagnostics / web_fetch / git_status).
 
 ### 0. 툴체인 개별 검증 (사용자 수동 릴리즈 게이트)
 
-**What:** v0.8.0 코드 작업 시작 전에 **사용자가 직접** Rojo / Selene / StyLua / luau-lsp / Rokit을 앱에서 하나씩 꼼꼼히 돌려보고 정상 동작을 확인. 코딩 범위 아님 — 릴리즈 품질 게이트.
+**What:** v0.8.1 코드 작업 시작 전에 **사용자가 직접** Rojo / Selene / StyLua / luau-lsp / Rokit을 앱에서 하나씩 꼼꼼히 돌려보고 정상 동작을 확인. 코딩 범위 아님 — 릴리즈 품질 게이트.
 
 **Why:** v0.7.9에서 번들링 → 온디맨드 다운로드 전환 이후 v0.7.5/6/7 연속 핫픽스. 툴체인이 매 릴리즈마다 회귀하는 영역이라 신기능에 리소스 쓰기 전에 바닥이 단단한지 직접 확인해야 안심하고 진행 가능.
 
@@ -25,7 +25,7 @@
 - **Rokit** — `rokit.toml` 감지 시 install 자동 실행, PATH에 올바르게 등록
 
 **Effort:** 엔지니어링 범위 밖 (사용자 QA 시간 ~반나절)
-**Depends on:** 없음. v0.8.0 착수 선결 조건.
+**Depends on:** 없음. v0.8.1 착수 선결 조건.
 **산출물:** 없음 (코드 아님). 문제 발견 시 백로그에 핫픽스 항목 추가.
 
 ---
@@ -104,7 +104,7 @@ Opus-Opus는 의미 없음. Haiku-Opus는 Haiku 비용을 올리지만 의도한
 - 이건 **타 에디터가 따라하기 어려운 차별점**. OpenAI/Gemini는 동일 메커니즘 없음. Luano Claude 사용자만 얻는 가치.
 - 비용 중립 (오히려 절감). "Pro 티어 전용" 이유가 없음 — 오히려 Community에 오픈해서 "Luano = 같은 API 키로 더 나은 결과" 포지셔닝.
 - Zero Data Retention 지원 → 기업 사용자 대응.
-- v0.8.0 "AI 성숙도" 테마에 완벽히 부합.
+- v0.8.1 "AI 성숙도" 테마에 완벽히 부합.
 
 **Effort:** M (human: ~1 day / CC: ~45min)
 - provider.ts 수정: 30분 (tools 배열, betas, beta client 사용)
@@ -135,7 +135,7 @@ Opus-Opus는 의미 없음. Haiku-Opus는 Haiku 비용을 올리지만 의도한
 
 ### 3. AI 에이전트 툴 확장 (6개로 축소)
 
-**What:** 현재 Luano AI 에이전트는 13개 툴. grep은 literal match, glob 없음, 웹 검색 없음, 태스크 추적 없음. 가치 70%가 모여있는 **6개만** v0.8.0에 추가.
+**What:** 현재 Luano AI 에이전트는 13개 툴. grep은 literal match, glob 없음, 웹 검색 없음, 태스크 추적 없음. 가치 70%가 모여있는 **6개만** v0.8.1에 추가.
 
 **현재 툴 (13개):**
 - File: `read_file`, `edit_file`, `create_file`, `delete_file`, `list_files`, `grep_files`
@@ -148,7 +148,7 @@ Opus-Opus는 의미 없음. Haiku-Opus는 Haiku 비용을 올리지만 의도한
 1. **`grep` (기존 `grep_files` 재작성)** — 정규식 + glob 필터(`**/*.server.luau`) + `-A/-B/-C` 컨텍스트 + output 모드 (`content` / `files_with_matches` / `count`). 기존은 literal match만 가능해서 에이전트가 "RemoteEvent.*FireServer" 같은 패턴을 못 찾음. **ReDoS 방어**: 사용자 정규식 입력은 `safe-regex` 또는 timeout (300ms)으로 감싸기.
 2. **`multi_edit`** — 한 파일 내 여러 edit을 원자적으로 적용. `edits: [{old_text, new_text}, ...]` 순차 적용, **중간 실패 시 원본 복구** (edit 시작 전 snapshot 유지). 토큰/시간 낭비 제거.
 3. **`todo_write`** — 다단계 작업 체크리스트. 에이전트가 `[{content, status}, ...]` 업데이트 → ChatPanel 옆 패널에 진행 상황 표시. IPC 이벤트 `ai:todos-updated` 추가.
-4. **`web_search`** — **Anthropic 네이티브 서버 툴** (`web_search_20250305`) + **Gemini `google_search`** 사용. 사용자 API 키 불필요, 비용은 기본 API 요금에 포함, 소스 인용 자동. OpenAI 프로바이더는 v0.8.1 (Responses API 마이그레이션 필요). Local 프로바이더는 미지원.
+4. **`web_search`** — **Anthropic 네이티브 서버 툴** (`web_search_20250305`) + **Gemini `google_search`** 사용. 사용자 API 키 불필요, 비용은 기본 API 요금에 포함, 소스 인용 자동. OpenAI 프로바이더는 v0.8.2 (Responses API 마이그레이션 필요). Local 프로바이더는 미지원.
 5. **`format_file`** — StyLua 포맷 실행. 기존 `electron/sidecar/stylua.ts` 재사용. 에이전트가 파일 수정 후 자동 포맷.
 6. **`type_check`** — luau-lsp JSON-RPC로 단일 파일 타입 체크. `lint_file`(Selene)보다 강력. Luau 타입 에러를 에이전트가 직접 피드백 루프에 넣을 수 있음. LSP 프록시 아키텍처 가치 있음.
 
@@ -168,15 +168,15 @@ Opus-Opus는 의미 없음. Haiku-Opus는 Haiku 비용을 올리지만 의도한
 
 **Depends on:** #1(SDK 업그레이드) — tool_use 파싱 타입 검증 이후.
 
-**v0.8.1로 연기:**
-- **`glob`** — `grep`의 glob 필터가 파일명만 반환하는 모드 지원하면 사실상 중복. v0.8.1에서 실사용 데이터 보고 결정.
+**v0.8.2로 연기:**
+- **`glob`** — `grep`의 glob 필터가 파일명만 반환하는 모드 지원하면 사실상 중복. v0.8.2에서 실사용 데이터 보고 결정.
 - **`get_diagnostics`** — `type_check`와 커버리지 겹침. 실제 필요 발생 시 추가.
-- **`web_fetch`** — `web_search`가 본문 일부까지 반환하므로 마진 가치. v0.8.1.
+- **`web_fetch`** — `web_search`가 본문 일부까지 반환하므로 마진 가치. v0.8.2.
 - **`git_status` / `git_diff`** — 가치 약함. 에이전트가 "방금 뭘 바꿨어"에 필요한 컨텍스트는 세션 히스토리로 충분.
 - **OpenAI `web_search`** — Responses API 마이그레이션은 별도 작업 단위.
 
-**v0.9.0으로 밀린 항목:**
-- **`spawn_explorer` (제한된 서브에이전트)** — read-only 탐색 전용 서브에이전트. 별도 대화 상태, 툴 화이트리스트, depth=1 제한 필요. 아키텍처 변경이 커서 v0.8.0 범위 초과.
+**v0.9.1으로 밀린 항목:**
+- **`spawn_explorer` (제한된 서브에이전트)** — read-only 탐색 전용 서브에이전트. 별도 대화 상태, 툴 화이트리스트, depth=1 제한 필요. 아키텍처 변경이 커서 v0.8.1 범위 초과.
 
 ---
 
@@ -218,7 +218,7 @@ Opus-Opus는 의미 없음. Haiku-Opus는 Haiku 비용을 올리지만 의도한
 
 ---
 
-### 5. env.d.ts IPC 도메인 분리 (v0.8.0 마지막)
+### 5. env.d.ts IPC 도메인 분리 (v0.8.1 마지막)
 
 **What:** 현재 `src/env.d.ts`의 `Window.api` 인터페이스가 ~280줄 단일 블록. #2 Advisor + #3 AI 툴 확장으로 신규 IPC가 ~10개 추가되므로, 추가분까지 포함해 도메인별 파일로 분할.
 
@@ -247,7 +247,7 @@ src/types/ipc/
 **Why:**
 - 현 구조는 신규 API 추가 시 항상 거대 파일 끝에 붙이므로 merge conflict 빈도 높음.
 - #3 AI 툴 6개 추가 시 `ai.d.ts`가 명확한 home이 있어야 리뷰 편함.
-- v0.8.0 **마지막**에 하는 이유: Advisor/툴 확장으로 추가되는 모든 신규 IPC를 한 번에 포함해 분할해야 작업이 1회에 끝남. 먼저 하면 Advisor PR에서 또 env.d.ts를 건드려야 함.
+- v0.8.1 **마지막**에 하는 이유: Advisor/툴 확장으로 추가되는 모든 신규 IPC를 한 번에 포함해 분할해야 작업이 1회에 끝남. 먼저 하면 Advisor PR에서 또 env.d.ts를 건드려야 함.
 
 **Effort:** S (human: ~2h / CC: ~20min) — 순수 리팩토링, 런타임 변화 없음.
 
@@ -257,7 +257,7 @@ src/types/ipc/
 
 ---
 
-### v0.8.0 실행 순서 (의존성 반영)
+### v0.8.1 실행 순서 (의존성 반영)
 
 0. **#0 툴체인 수동 검증** — 사용자 릴리즈 게이트. 통과 못하면 아래 착수 금지. 엔지니어링 예산 밖.
 1. **#1 Anthropic SDK 업그레이드** — `@anthropic-ai/sdk` 0.24.3 → ^0.60. 기계적 마이그레이션. #2의 선행 블로커.
@@ -272,9 +272,9 @@ src/types/ipc/
 
 ---
 
-## 미결 백로그 (v0.8.0 범위 밖)
+## 미결 백로그 (v0.8.1 범위 밖)
 
-### v0.8.1 — Cloud Integration 테마
+### v0.8.2 — Cloud Integration 테마
 
 #### rocale-cli 통합 (Open Cloud Luau Execution)
 **What:** `Roblox/rocale-cli`를 번들/자동 설치해서 Luano에서 "Studio 없이 Roblox 클라우드에서 스크립트 실행" 지원. 사이드바 **Remote Run** 패널 + 에이전트 툴 `run_remote_script` 추가.
@@ -289,11 +289,11 @@ src/types/ipc/
 
 **Effort:** XL (human: ~2-3 days / CC: ~1.5h) — 바이너리 관리 + 온보딩 UX + 권한 게이트 + 튜토리얼.
 
-**Depends on:** v0.8.0 #1~5 완료. 툴체인 시스템이 새 바이너리 흡수 가능한 상태.
+**Depends on:** v0.8.1 #1~5 완료. 툴체인 시스템이 새 바이너리 흡수 가능한 상태.
 
 **리스크:** Open Cloud API 키 발급이 사용자에게 새로운 단계. `universe-places:write` + `luau-execution-sessions:write` 권한 설명 튜토리얼 필수. 잘못된 permission으로 실행 실패 시 UX 붕괴.
 
-**v0.8.0에서 연기한 이유:** "Cloud Integration"은 자체로 테마. v0.8.0의 "AI 성숙도"와 섞으면 둘 다 희석됨. 독립 릴리즈로 내면 마케팅/변경 이력이 깔끔.
+**v0.8.1에서 연기한 이유:** "Cloud Integration"은 자체로 테마. v0.8.1의 "AI 성숙도"와 섞으면 둘 다 희석됨. 독립 릴리즈로 내면 마케팅/변경 이력이 깔끔.
 
 ---
 

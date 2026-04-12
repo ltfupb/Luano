@@ -2,6 +2,7 @@ import { join } from "path"
 import { existsSync, readFileSync, readdirSync } from "fs"
 import { buildSystemPrompt, buildDocsContext, buildGlobalSummary } from "../pro/modules"
 import { buildMemoryIndex, loadInstructions } from "../ai/memory"
+import { isAdvisorAvailable } from "../ai/provider"
 import type { ProFeature } from "../pro"
 
 // ── Shared types ─────────────────────────────────────────────────────────────
@@ -35,7 +36,7 @@ export const PRO_REQUIRED = (feature: ProFeature) => ({
   success: false,
   error: "pro_required",
   feature,
-  message: `This feature requires Luano Pro. Upgrade at luano.dev/pricing`
+  message: `This feature requires Luano Pro. Start your free 7-day trial at luano.dev/pricing`
 })
 
 /** Extract last user message and build RAG docs context */
@@ -100,6 +101,16 @@ export function buildFullSystemPrompt(
   }
 
   if (ctx.sessionHandoff) layers.push(`# Session context\n${ctx.sessionHandoff}`)
+
+  if (isAdvisorAvailable()) {
+    layers.push(`# Advisor tool
+You have access to an advisor tool (Opus). Use it strategically:
+- Before starting substantive work (architecture decisions, complex refactors)
+- When stuck or unsure about the best approach
+- Before completing a task (final review of your plan)
+Keep advisor queries concise — under 100 words, enumerated when possible.
+Do NOT call advisor for simple file reads, small edits, or routine tasks.`)
+  }
 
   layers.push("# Language\nAlways respond in the same language the user writes in.")
 
