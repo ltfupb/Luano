@@ -60,7 +60,19 @@ export function StatusBar(): JSX.Element {
         setToolUpdates(updates.length)
       } catch { /* ignore */ }
     }, 5000)
-    return () => clearTimeout(timer)
+
+    // Sync with ToolchainPanel: the panel dispatches this event whenever its
+    // local `updates` state changes (initial load, after update, after remove).
+    const handleUpdatesChanged = (e: Event) => {
+      const detail = (e as CustomEvent<{ count: number }>).detail
+      if (typeof detail?.count === "number") setToolUpdates(detail.count)
+    }
+    window.addEventListener("toolchain-updates-changed", handleUpdatesChanged)
+
+    return () => {
+      clearTimeout(timer)
+      window.removeEventListener("toolchain-updates-changed", handleUpdatesChanged)
+    }
   }, [])
 
   // Poll memory usage every 10s

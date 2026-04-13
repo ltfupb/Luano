@@ -4,7 +4,7 @@
  * Full-screen modal showing all available tools with install/activate controls.
  */
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useProjectStore } from "../stores/projectStore"
 import { useSyncStore } from "../stores/syncStore"
 import { useT } from "../i18n/useT"
@@ -80,6 +80,9 @@ export function ToolchainPanel({ onClose, onCancel, mode = "normal", targetProje
   const [updates, setUpdates] = useState<Record<string, { latestVersion: string; downloadUrl: string }>>({})
   const [updating, setUpdating] = useState<Set<string>>(new Set())
   const [metadata, setMetadata] = useState<Record<string, { license: string | null; updatedAt: string | null }>>({})
+  // Gate the toolchain-updates-changed dispatch: suppress the initial mount
+  // fire (updates={}) which would overwrite StatusBar's real count from polling.
+  const hasLoaded = useRef(false)
 
   const effectiveSelection = (category: string): string | null =>
     category in pending ? pending[category] : (selections[category] ?? null)
@@ -97,6 +100,17 @@ export function ToolchainPanel({ onClose, onCancel, mode = "normal", targetProje
     loadData()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // Notify StatusBar so its "N updates" counter stays in sync after the user
+  // updates or removes a tool from within the panel.
+  // hasLoaded gates the initial fire (updates={}) which would overwrite the
+  // real count that StatusBar already fetched via its 5s polling timer.
+  useEffect(() => {
+    if (!hasLoaded.current) return
+    window.dispatchEvent(
+      new CustomEvent("toolchain-updates-changed", { detail: { count: Object.keys(updates).length } })
+    )
+  }, [updates])
 
   const loadData = async () => {
     const [registry, config] = await Promise.all([
@@ -126,7 +140,21 @@ export function ToolchainPanel({ onClose, onCancel, mode = "normal", targetProje
       setPending(autoPending)
     } else {
       setSelections(config.selections)
+      // When opened without a project (e.g. from title bar on Welcome screen),
+      // config.selections is all-null. Locked single-tool required categories
+      // would then be stuck unchecked with no way to enable them, permanently
+      // disabling Continue. Seed them via pending like setup mode does.
+      const autoPending: Record<string, string | null> = {}
+      for (const cat of registry.categories) {
+        const toolsInCat = Object.values(registry.tools).filter(t => t.category === cat.id)
+        if (!cat.allowNone && toolsInCat.length === 1 && !config.selections[cat.id]) {
+          autoPending[cat.id] = toolsInCat[0].id
+        }
+      }
+      if (Object.keys(autoPending).length > 0) setPending(autoPending)
     }
+
+    hasLoaded.current = true
 
     // Check for updates on installed tools
     const installedIds = Object.entries(config.installed)
@@ -235,6 +263,8 @@ export function ToolchainPanel({ onClose, onCancel, mode = "normal", targetProje
     const result = await window.api.toolchainRemove(toolId)
     if (result.success) {
       setInstalled(prev => ({ ...prev, [toolId]: false }))
+      // Uninstalling a tool invalidates any pending update badge for it
+      setUpdates(prev => { const n = { ...prev }; delete n[toolId]; return n })
       // Clear selection (persisted + pending) if this tool was the project's choice
       const tool = tools[toolId]
       if (!tool) return
@@ -334,11 +364,12 @@ export function ToolchainPanel({ onClose, onCancel, mode = "normal", targetProje
                   const hasSelection = !!effectiveSelection(cat.id)
                   const unmet = isRequired && !hasSelection
                   const isActive = filter === cat.id
+                  const catUpdateCount = Object.keys(updates).filter(id => tools[id]?.category === cat.id && installed[id]).length
                   return (
                     <button
                       key={cat.id}
                       onClick={() => setFilter(cat.id)}
-                      className="relative py-1.5 pr-3 text-left text-xs transition-all duration-100"
+                      className="relative py-1.5 pr-3 text-left text-xs transition-all duration-100 flex items-center justify-between"
                       style={{
                         paddingLeft: "14px",
                         background: isActive ? "var(--bg-elevated)" : "transparent",
@@ -363,7 +394,16 @@ export function ToolchainPanel({ onClose, onCancel, mode = "normal", targetProje
                           }}
                         />
                       )}
-                      {cat.label}
+                      <span>{cat.label}</span>
+                      {catUpdateCount > 0 && (
+                        <span
+                          aria-label={`${catUpdateCount} update${catUpdateCount > 1 ? "s" : ""} available`}
+                          className="ml-2 min-w-[16px] h-[14px] px-1 rounded-full flex items-center justify-center text-[9px] font-semibold"
+                          style={{ background: "#fb923c", color: "white" }}
+                        >
+                          {catUpdateCount}
+                        </span>
+                      )}
                     </button>
                   )
                 })}
@@ -434,6 +474,18 @@ export function ToolchainPanel({ onClose, onCancel, mode = "normal", targetProje
                             style={{ background: "rgba(59,130,246,0.15)", color: "#3b82f6" }}
                           >
                             Recommended
+                          </span>
+                        )}
+                        {updates[tool.id] && installed[tool.id] && (
+                          <span
+                            className="px-1.5 py-0.5 rounded text-[9px] font-medium flex items-center gap-0.5"
+                            style={{ background: "rgba(251,146,60,0.15)", color: "#fb923c" }}
+                            title={`Update available: ${updates[tool.id].latestVersion}`}
+                          >
+                            <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M12 19V5M5 12l7-7 7 7" />
+                            </svg>
+                            {updates[tool.id].latestVersion}
                           </span>
                         )}
                       </div>
