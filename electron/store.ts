@@ -3,8 +3,9 @@ import { join } from "path"
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "fs"
 import { log } from "./logger"
 
-// Keys that contain secrets and should be encrypted at rest
-const ENCRYPTED_KEYS = new Set(["apiKey", "openaiKey", "geminiKey"])
+// Keys that contain secrets and should be encrypted at rest.
+// Supports both string values (apiKey etc.) and object values (license).
+const ENCRYPTED_KEYS = new Set(["apiKey", "openaiKey", "geminiKey", "license"])
 
 // Simple JSON file-based store with safeStorage encryption (replaces electron-store)
 class SimpleStore {
@@ -64,14 +65,23 @@ class SimpleStore {
   get<T>(key: string): T | undefined {
     const raw = this.data[key]
     if (ENCRYPTED_KEYS.has(key) && typeof raw === "string" && raw) {
-      return this.decrypt(raw) as T
+      const decrypted = this.decrypt(raw)
+      try {
+        return JSON.parse(decrypted) as T
+      } catch {
+        // Legacy or plain string value (not JSON-serialized)
+        return decrypted as unknown as T
+      }
     }
+    // Legacy unencrypted object (e.g. license stored before this fix) — return as-is;
+    // will be re-encrypted on next set()
     return raw as T | undefined
   }
 
   set(key: string, value: unknown): void {
-    if (ENCRYPTED_KEYS.has(key) && typeof value === "string" && value) {
-      this.data[key] = this.encrypt(value)
+    if (ENCRYPTED_KEYS.has(key) && value != null) {
+      const serialized = typeof value === "string" ? value : JSON.stringify(value)
+      this.data[key] = this.encrypt(serialized)
     } else {
       this.data[key] = value
     }
