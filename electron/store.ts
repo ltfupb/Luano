@@ -73,8 +73,10 @@ class SimpleStore {
         return decrypted as unknown as T
       }
     }
-    // Legacy unencrypted object (e.g. license stored before this fix) — return as-is;
-    // will be re-encrypted on next set()
+    // Legacy unencrypted object (e.g. license stored before this fix) — re-encrypt immediately
+    if (ENCRYPTED_KEYS.has(key) && raw != null) {
+      this.set(key, raw)
+    }
     return raw as T | undefined
   }
 

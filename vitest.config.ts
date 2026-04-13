@@ -4,6 +4,10 @@ export default defineConfig({
   test: {
     globals: true,
     environment: "node",
+    environmentMatchGlobs: [
+      ["tests/*store*.test.ts", "jsdom"],
+      ["tests/smoke/**", "node"]
+    ],
     include: ["tests/**/*.test.ts", "tests/**/*.test.tsx"],
     coverage: {
       include: ["electron/**/*.ts", "src/stores/**/*.ts"],

@@ -79,4 +79,21 @@ describe("SimpleStore", () => {
     // Should not throw, should start with empty data
     expect(store.get("anything")).toBeUndefined()
   })
+
+  it("re-encrypts legacy unencrypted object on get()", async () => {
+    const { mkdirSync: mkdir, writeFileSync: write } = await import("fs")
+    mkdir(TEST_DIR, { recursive: true })
+    // Simulate a legacy config file where 'license' was stored as a plain object (pre-fix)
+    write(join(TEST_DIR, "config.json"), JSON.stringify({ license: { key: "abc", valid: true } }), "utf-8")
+
+    const { store } = await import("../electron/store")
+
+    // get() should return the original object value
+    expect(store.get("license")).toEqual({ key: "abc", valid: true })
+
+    // After get(), the on-disk value must be re-encrypted (no longer a raw object)
+    const onDisk = JSON.parse(readFileSync(join(TEST_DIR, "config.json"), "utf-8"))
+    expect(typeof onDisk.license).toBe("string") // was re-encrypted to a string
+    expect(onDisk.license).not.toEqual({ key: "abc", valid: true })
+  })
 })
