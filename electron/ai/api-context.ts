@@ -103,6 +103,17 @@ export function detectServices(code: string): string[] {
   return [...services]
 }
 
+/** Detect Enum names from code (Enum.Material, Enum.UserInputType, etc.) */
+export function detectEnums(code: string): string[] {
+  const enums = new Set<string>()
+  const pattern = /Enum\.([A-Z][a-zA-Z0-9]+)/g
+  let match
+  while ((match = pattern.exec(code)) !== null) {
+    enums.add(match[1])
+  }
+  return [...enums]
+}
+
 /** Detect non-service class names from code (Instance.new, :FindFirstChildOfClass, etc.) */
 export function detectClasses(code: string): string[] {
   const classes = new Set<string>()
@@ -128,7 +139,7 @@ export function detectClasses(code: string): string[] {
 
 /**
  * Build API context string for the AI, based on what the current file uses.
- * Returns formatted API definitions for detected services and classes.
+ * Returns formatted API definitions for detected services, classes, and enums.
  */
 export function buildApiContext(fileContent: string): string {
   const dump = loadApiDump()
@@ -137,16 +148,31 @@ export function buildApiContext(fileContent: string): string {
   const serviceNames = detectServices(fileContent)
   const classNames = detectClasses(fileContent)
   const allNames = new Set([...serviceNames, ...classNames])
+  const enumNames = detectEnums(fileContent)
 
-  if (allNames.size === 0) return ""
+  if (allNames.size === 0 && enumNames.length === 0) return ""
 
-  const classMap = new Map(dump.Classes.map((c) => [c.Name, c]))
   const sections: string[] = []
 
-  for (const name of allNames) {
-    const cls = classMap.get(name)
-    if (!cls || cls.Tags?.includes("Deprecated")) continue
-    sections.push(formatClass(cls))
+  // Classes and services
+  if (allNames.size > 0) {
+    const classMap = new Map(dump.Classes.map((c) => [c.Name, c]))
+    for (const name of allNames) {
+      const cls = classMap.get(name)
+      if (!cls || cls.Tags?.includes("Deprecated")) continue
+      sections.push(formatClass(cls))
+    }
+  }
+
+  // Enums
+  if (enumNames.length > 0 && dump.Enums) {
+    const enumMap = new Map(dump.Enums.map((e) => [e.Name, e]))
+    for (const name of enumNames) {
+      const en = enumMap.get(name)
+      if (!en) continue
+      const items = en.Items.map((i) => `  ${i.Name} = ${i.Value}`).join("\n")
+      sections.push(`enum ${en.Name}\n${items}`)
+    }
   }
 
   if (sections.length === 0) return ""

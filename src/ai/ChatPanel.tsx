@@ -137,7 +137,8 @@ export function ChatPanel({ onClose }: ChatPanelProps): JSX.Element {
     globalSummary, planMode, autoAccept, setPlanMode, setAutoAccept,
     pendingReview, setPendingReview,
     sessionHandoff, startNewSession, compressedContext, compressOldMessages,
-    getProjectSessions, switchSession, deleteSession, saveProjectChat
+    getProjectSessions, switchSession, deleteSession, saveProjectChat,
+    clearMessages
   } = useAIStore()
   const { projectPath, activeFile, fileContents } = useProjectStore()
   const [input, setInput] = useState("")
@@ -431,6 +432,13 @@ export function ChatPanel({ onClose }: ChatPanelProps): JSX.Element {
   const sendMessage = useCallback(async () => {
     if (!input.trim() || isStreaming) return
     const userMsg = input.trim()
+
+    if (userMsg === "/clear") {
+      setInput("")
+      clearMessages()
+      return
+    }
+
     setInput("")
     setAttachedFiles([])
     addMessage({ role: "user", content: userMsg })
@@ -448,7 +456,7 @@ export function ChatPanel({ onClose }: ChatPanelProps): JSX.Element {
     } else {
       await executeAgent(apiMessages)
     }
-  }, [input, isStreaming, planMode, proFeatures, addMessage, buildApiMessages, doSendChat, executeAgent])
+  }, [input, isStreaming, planMode, proFeatures, addMessage, buildApiMessages, doSendChat, executeAgent, clearMessages])
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     // Skills autocomplete navigation
