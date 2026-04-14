@@ -113,6 +113,7 @@ npm install --package-lock-only
 
 ## 릴리즈 히스토리
 
+- **v0.8.2** — Install Size Reduction, Build Bundling and Test Coverage Expansion
 - **v0.8.1** — Claude Advisor Tool, Agent Tools Expansion and Signal Package
 - **v0.8.0** — Studio Bridge Token Persistence, Markdown Chat and Roblox Class Icons
 - **v0.7.10** — Monaco Multi-language, Cold-start Speedup and Component Refactor

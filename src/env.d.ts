@@ -7,6 +7,16 @@ declare module "*?worker" {
   export default WorkerConstructor
 }
 
+// ── Monaco ESM sub-path imports (no bundled .d.ts for these paths) ────────────
+// edcore.main = editor features (editor.all + standalone) without language packs
+declare module "monaco-editor/esm/vs/editor/edcore.main" {
+  export * from "monaco-editor/esm/vs/editor/editor.api"
+}
+declare module "monaco-editor/esm/vs/basic-languages/lua/lua.contribution" {}
+declare module "monaco-editor/esm/vs/language/json/monaco.contribution" {}
+declare module "monaco-editor/esm/vs/basic-languages/yaml/yaml.contribution" {}
+declare module "monaco-editor/esm/vs/basic-languages/markdown/markdown.contribution" {}
+
 // ── IPC domain types ─────────────────────────────────────────────────────────
 /// <reference path="types/ipc/project.d.ts" />
 /// <reference path="types/ipc/file.d.ts" />

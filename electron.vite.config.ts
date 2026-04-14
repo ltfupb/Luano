@@ -1,7 +1,20 @@
 import { resolve } from "path"
 import { existsSync } from "fs"
-import { defineConfig, externalizeDepsPlugin } from "electron-vite"
+import { defineConfig } from "electron-vite"
 import react from "@vitejs/plugin-react"
+
+// Only native modules + electron stay external. Everything else is bundled
+// into out/main/index.js so node_modules can be aggressively pruned from
+// the final asar (see package.json build.files).
+const mainExternals = [
+  "electron",
+  /^node:/,
+  "better-sqlite3",
+  "node-pty",
+  "electron-updater",
+  "chokidar",
+  "fsevents"
+]
 
 // Auto-detect Pro files by checking if they exist on disk.
 // Private repo has them, public mirror does not.
@@ -29,9 +42,10 @@ const isPro = Object.keys(proEntries).length > 0
 
 export default defineConfig({
   main: {
-    plugins: [externalizeDepsPlugin()],
     build: {
+      minify: true,
       rollupOptions: {
+        external: mainExternals,
         input: {
           index: resolve(__dirname, "electron/main.ts"),
           ...proEntries
@@ -51,9 +65,10 @@ export default defineConfig({
     }
   },
   preload: {
-    plugins: [externalizeDepsPlugin()],
     build: {
+      minify: true,
       rollupOptions: {
+        external: mainExternals,
         input: {
           index: resolve(__dirname, "electron/preload.ts")
         }

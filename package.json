@@ -1,6 +1,6 @@
 {
   "name": "luano",
-  "version": "0.8.1",
+  "version": "0.8.2",
   "description": "The all-in-one AI-powered code editor for Roblox developers",
   "homepage": "https://github.com/ltfupb/luano",
   "repository": {
@@ -74,6 +74,7 @@
     "zustand": "^4.5.4"
   },
   "build": {
+    "afterPack": "scripts/afterPack.js",
     "appId": "io.luano.app",
     "productName": "Luano",
     "copyright": "Copyright © 2026 Luano",
@@ -83,11 +84,57 @@
       "node_modules/better-sqlite3/**",
       "node_modules/node-pty/**"
     ],
+    "electronLanguages": [
+      "en-US",
+      "ko"
+    ],
+    "removePackageScripts": true,
     "directories": {
       "output": "release"
     },
     "files": [
-      "out/**"
+      "out/**",
+      "!**/*.{md,markdown,map}",
+      "!**/{test,tests,__tests__,example,examples,docs,doc}/**",
+      "!**/*.{d.ts,ts,tsx}",
+      "!**/node_modules/*/{CHANGELOG.md,README.md,readme.md,LICENSE,license,LICENSE.md,LICENSE.txt,CHANGELOG}",
+      "!**/node_modules/**/*.{flow,ts,tsx,map}",
+      "!**/node_modules/**/.bin",
+      "!**/node_modules/**/.package-lock.json",
+      "!**/node_modules/monaco-editor/**",
+      "!**/node_modules/@monaco-editor/**",
+      "!**/node_modules/monaco-languageclient/**",
+      "!**/node_modules/vscode/**",
+      "!**/node_modules/vscode-languageclient/**",
+      "!**/node_modules/vscode-jsonrpc/**",
+      "!**/node_modules/vscode-languageserver-protocol/**",
+      "!**/node_modules/vscode-languageserver-types/**",
+      "!**/node_modules/@codingame/**",
+      "!**/node_modules/react/**",
+      "!**/node_modules/react-dom/**",
+      "!**/node_modules/react-markdown/**",
+      "!**/node_modules/remark-gfm/**",
+      "!**/node_modules/remark-*/**",
+      "!**/node_modules/rehype-*/**",
+      "!**/node_modules/micromark*/**",
+      "!**/node_modules/unist-*/**",
+      "!**/node_modules/mdast-*/**",
+      "!**/node_modules/hast-*/**",
+      "!**/node_modules/xterm/**",
+      "!**/node_modules/xterm-*/**",
+      "!**/node_modules/zustand/**",
+      "!**/node_modules/scheduler/**",
+      "!**/node_modules/@sentry/**",
+      "!**/node_modules/@sentry-internal/**",
+      "!**/node_modules/@opentelemetry/**",
+      "!**/node_modules/openai/**",
+      "!**/node_modules/@anthropic-ai/**",
+      "!**/node_modules/@google/generative-ai/**",
+      "!**/node_modules/@google/**",
+      "!**/node_modules/ws/**",
+      "!**/node_modules/@electron-toolkit/**",
+      "!**/node_modules/import-in-the-middle/**",
+      "!**/node_modules/require-in-the-middle/**"
     ],
     "extraResources": [
       {
