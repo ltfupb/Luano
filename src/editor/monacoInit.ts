@@ -11,6 +11,7 @@
 import { loader } from "@monaco-editor/react"
 import * as monaco from "monaco-editor/esm/vs/editor/edcore.main"
 import editorWorker from "monaco-editor/esm/vs/editor/editor.worker?worker"
+import jsonWorker from "monaco-editor/esm/vs/language/json/json.worker?worker"
 
 // Language contributions — only what Luano uses
 import "monaco-editor/esm/vs/basic-languages/lua/lua.contribution"
@@ -20,7 +21,8 @@ import "monaco-editor/esm/vs/basic-languages/markdown/markdown.contribution"
 
 // Use local bundle instead of CDN (CSP bypass)
 ;(self as unknown as { MonacoEnvironment: unknown }).MonacoEnvironment = {
-  getWorker() {
+  getWorker(_: string, label: string) {
+    if (label === "json") return new jsonWorker()
     return new editorWorker()
   }
 }
