@@ -174,7 +174,7 @@ export function SettingsPanel({ onClose }: SettingsPanelProps): JSX.Element {
       setModel(result.model)
       setModels(result.models as ProviderModels)
     })
-    window.api.aiGetAdvisor().then((v: boolean) => setAdvisorEnabled(v)).catch(() => {})
+    window.api.aiGetAdvisor?.()?.then((v: boolean) => setAdvisorEnabled(v))
 
     // Load custom skills
     if (projectPath && typeof window.api.skillsLoad === "function") {

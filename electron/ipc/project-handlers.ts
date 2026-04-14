@@ -128,8 +128,12 @@ export function registerProjectHandlers(): void {
     const resourcesDir = is.dev
       ? join(app.getAppPath(), "resources")
       : process.resourcesPath
-    initProject(projectPath, resourcesDir)
-    return { success: true }
+    try {
+      initProject(projectPath, resourcesDir)
+      return { success: true }
+    } catch (err) {
+      return { success: false, error: (err as Error).message }
+    }
   })
 
   // ── Sync (Rojo / Argon) ──────────────────────────────────────────────────
