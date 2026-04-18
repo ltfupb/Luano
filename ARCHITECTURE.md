@@ -125,6 +125,7 @@ luano/
 │   │   ├── SettingsPanel.tsx
 │   │   ├── SettingsAI.tsx       # AI 프로바이더/모델 설정 (분리됨)
 │   │   ├── QuickOpen.tsx
+│   │   ├── CommandPalette.tsx   # Ctrl+Shift+P 명령 팔레트
 │   │   ├── SearchPanel.tsx
 │   │   ├── ErrorBoundary.tsx
 │   │   ├── Toast.tsx
@@ -259,9 +260,9 @@ chokidar 감지 → StyLua 포맷 → Selene 린트 → renderer IPC 알림 (300
 `/explain`, `/fix`, `/optimize`, `/refactor`, `/test`, `/type`, `/doc`, `/security`, `/convert`, `/scaffold`
 
 **Claude Advisor Tool** (Anthropic beta, `advisor-tool-2026-03-01`):
-- Sonnet 4.6 executor + Opus 4.6 advisor 페어링. 서버 측에서 처리, 클라이언트 루프 불필요
+- Sonnet 4.6 executor + Opus 4.7 / 4.6 advisor 페어링. 서버 측에서 처리, 클라이언트 루프 불필요
 - `max_uses: 5` per request. 3회 연속 에러 시 세션 내 자동 비활성화
-- Settings > AI에서 토글. Anthropic non-Opus 모델에서만 활성화 가능
+- Settings > AI에서 advisor 모델 선택 + 토글. Anthropic non-Opus 모델에서만 활성화 가능
 - 스트리밍 중 advisor 호출 감지 → `streamChannel:advisor` IPC 이벤트 → UI 인디케이터
 
 **Phase 전환 흐름**:
@@ -293,6 +294,10 @@ chokidar 감지 → StyLua 포맷 → Selene 린트 → renderer IPC 알림 (300
 **테마 시스템**: Dark / Light / Tokyo Night 3종. CSS 커스텀 변수(`data-theme` 속성) + Monaco 테마(`luano-dark`, `luano-light`, `luano-tokyo-night`) + Terminal 테마 동기화.
 
 **앱 종료 미저장 확인**: `mainWindow.on("close")`에서 `dirtyFiles` 개수 확인 → 네이티브 다이얼로그 (Save & Quit / Quit without Saving / Cancel). `__luanoDirtyCount()`, `__luanoSaveAll()` 글로벌 함수를 renderer에서 노출.
+
+**Command Palette**: `Ctrl/Cmd+Shift+P`로 모든 앱 액션 접근. 단축키 힌트 표시, 퍼지 매칭. 네이티브 OS 메뉴(File / Edit / View / Help)와 같은 명령 레지스트리 공유.
+
+**Drag-and-drop folder open**: 창에 폴더 드롭 → `openFolder(path)` 직접 호출. 상대 경로는 거절하고 토스트로 에러 표시.
 
 ### 5.6 Studio Bridge
 

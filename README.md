@@ -24,6 +24,7 @@ Luano is a desktop editor built specifically for Roblox game development. It bun
 - Split editor — side-by-side editing with independent file selection
 - 30+ Roblox-specific code snippets (RemoteEvent, DataStore, OOP patterns, etc.)
 - Cmd/Ctrl+K inline AI editing
+- Command palette (Cmd/Ctrl+Shift+P) for every action
 - Auto-save with configurable delay
 - Tab drag reordering
 - 3 themes: Dark, Light, Tokyo Night
@@ -68,11 +69,13 @@ Luano is a desktop editor built specifically for Roblox game development. It bun
 - File explorer with Roblox class icons and script type color indicators
 - Full-text search across project files
 - Quick Open (Ctrl+P) with fuzzy matching
+- Native OS menus (File / Edit / View / Help)
+- Drag and drop a folder onto the window to open it as a project
 - Project templates (Obby, Tycoon, etc.)
 - Unsaved file confirmation on quit
-- Session restore — projects, open files, chat history, and layout persist across restarts
+- Session restore — projects, open files, chat history, layout, and window bounds persist across restarts
 - Auto-update via GitHub Releases
-- Sentry crash reporting (opt-in)
+- Opt-in crash reporting (Sentry) — no telemetry by default
 - Multi-language UI: English, 한국어
 
 ---
@@ -150,7 +153,7 @@ The free plan is free forever.
 
 ## Supported AI Models
 
-**Anthropic** — Claude Sonnet 4.6, Claude Opus 4.6, Claude Haiku 4.5
+**Anthropic** — Claude Opus 4.7, Claude Sonnet 4.6, Claude Opus 4.6, Claude Haiku 4.5
 
 **OpenAI** — GPT-4o, GPT-4o mini, GPT-4 Turbo, o1, o1 mini
 
@@ -182,10 +185,13 @@ The free plan is free forever.
 | Shortcut | Action |
 |----------|--------|
 | Ctrl+P | Quick Open |
+| Ctrl+Shift+P | Command Palette |
 | Ctrl+Shift+F | Search in files |
 | Ctrl+K | Inline AI Edit |
 | Ctrl+S | Save file |
 | Ctrl+W | Close tab |
+
+On macOS, substitute Cmd for Ctrl.
 
 ---
 
