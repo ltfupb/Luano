@@ -133,7 +133,9 @@
       "!node_modules/@google/generative-ai/**",
       "!node_modules/@google/**",
       "!node_modules/import-in-the-middle/**",
-      "!node_modules/require-in-the-middle/**"
+      "!node_modules/require-in-the-middle/**",
+      "out/main/node_modules/**",
+      "!out/main/node_modules/**/*.{flow,ts,tsx,map,md}"
     ],
     "extraResources": [
       {
