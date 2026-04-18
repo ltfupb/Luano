@@ -125,15 +125,15 @@
       "!**/node_modules/xterm-*/**",
       "!**/node_modules/zustand/**",
       "!**/node_modules/scheduler/**",
-      "!**/node_modules/@sentry/**",
-      "!**/node_modules/@sentry-internal/**",
-      "!**/node_modules/@opentelemetry/**",
-      "!**/node_modules/openai/**",
-      "!**/node_modules/@anthropic-ai/**",
-      "!**/node_modules/@google/generative-ai/**",
-      "!**/node_modules/@google/**",
-      "!**/node_modules/import-in-the-middle/**",
-      "!**/node_modules/require-in-the-middle/**"
+      "!node_modules/@sentry/**",
+      "!node_modules/@sentry-internal/**",
+      "!node_modules/@opentelemetry/**",
+      "!node_modules/openai/**",
+      "!node_modules/@anthropic-ai/**",
+      "!node_modules/@google/generative-ai/**",
+      "!node_modules/@google/**",
+      "!node_modules/import-in-the-middle/**",
+      "!node_modules/require-in-the-middle/**"
     ],
     "extraResources": [
       {

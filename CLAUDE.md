@@ -130,6 +130,32 @@ npm install --package-lock-only
 
 **과거 사례:** `@electron-toolkit/utils` (3번), `ws` (1번). 커밋 `5fcd0ce` / `8dd3fbc` / `e89dc43` / `696223d`는 한쪽만 고쳐서 다시 터짐.
 
+### 9. `**/node_modules/xxx/**` 글롭은 preserveModules 출력도 삭제함 (v0.8.1~v0.8.3 터진 버그)
+
+`electron.vite.config.ts`의 main 빌드가 `preserveModules: true` 옵션을 쓰면 rollup이 번들 출력을 `out/main/node_modules/<pkg>/` 경로로 내보낸다. 번들된 코드가 원래 import 경로 그대로 require하기 위함.
+
+그런데 `package.json`의 `build.files`에 `!**/node_modules/xxx/**` 패턴이 있으면 이 `**/` prefix가 **모든 깊이**의 node_modules를 매칭하므로:
+- 루트 `./node_modules/@sentry/` → 삭제됨 (의도된 동작, 용량 절감)
+- 번들 출력 `./out/main/node_modules/@sentry/` → **같이 삭제됨** ← **치명적**
+
+런타임에 `out/main/index.js`가 `require("./node_modules/@sentry/...")` 시도 → 파일 없음 → `Cannot find module` 에러로 앱 실행 불가.
+
+**규칙:** 번들되는 (= mainExternals에 없는) 패키지를 `build.files`에서 제외할 때는 `**/` prefix 빼고 `!node_modules/xxx/**`로 써야 한다. 이러면 루트만 매칭, 번들 출력은 보존.
+
+**현재 번들되는 패키지** (`out/main/node_modules/`에 생성됨):
+- `@sentry/*`, `@sentry-internal/*`, `@opentelemetry/*`
+- `@anthropic-ai/*`, `openai/*`, `@google/*`
+- `import-in-the-middle`, `require-in-the-middle`
+
+**확인 방법:**
+```bash
+# 빌드 후 asar 내용 검사:
+npx asar list release/win-unpacked/resources/app.asar | grep "out/main/node_modules"
+# 번들된 패키지들이 보여야 정상. 아무것도 안 나오면 글롭이 날린 것.
+```
+
+**과거 사례:** v0.8.1 / v0.8.2 / v0.8.3 모두 이 버그 있음. 커밋 `5860878`(bundle 도입)부터 `build.files` 글롭을 `!**/node_modules/xxx/**`로 잘못 씀. "Install Size Reduction"이 의도였지만 실제로는 런타임 require 경로까지 같이 날아감.
+
 ---
 
 ## 릴리즈 히스토리
