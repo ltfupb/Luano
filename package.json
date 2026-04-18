@@ -83,7 +83,8 @@
     "asar": true,
     "asarUnpack": [
       "node_modules/better-sqlite3/**",
-      "node_modules/node-pty/**"
+      "node_modules/node-pty/**",
+      "out/main/node_modules/**"
     ],
     "electronLanguages": [
       "en-US",
@@ -133,9 +134,7 @@
       "!node_modules/@google/generative-ai/**",
       "!node_modules/@google/**",
       "!node_modules/import-in-the-middle/**",
-      "!node_modules/require-in-the-middle/**",
-      "out/main/node_modules/**",
-      "!out/main/node_modules/**/*.{flow,ts,tsx,map,md}"
+      "!node_modules/require-in-the-middle/**"
     ],
     "extraResources": [
       {
