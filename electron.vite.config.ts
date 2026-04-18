@@ -11,9 +11,16 @@ const pkgVersion = (JSON.parse(readFileSync(resolve(__dirname, "package.json"), 
 const sentryAuthToken = process.env.SENTRY_AUTH_TOKEN
 const sentrySourceMapsEnabled = !!sentryAuthToken && process.env.CI === "true"
 
-// Only native modules + electron stay external. Everything else is bundled
-// into out/main/index.js so node_modules can be aggressively pruned from
-// the final asar (see package.json build.files).
+// Externalized modules: loaded at runtime via require() from the installed
+// node_modules. electron-builder ships these automatically as declared
+// production dependencies.
+//
+// Why @sentry/electron + AI SDKs are external (not bundled): electron-builder
+// aggressively filters any path containing `node_modules/` inside the app —
+// including rollup's preserveModules output under `out/main/node_modules/`.
+// No `files` pattern, `asarUnpack`, or re-include glob defeats this filter.
+// Bundling these deps with preserveModules therefore produces broken installs.
+// Externalizing keeps the build simple and predictable at a modest asar size cost.
 const mainExternals = [
   "electron",
   /^node:/,
@@ -25,7 +32,14 @@ const mainExternals = [
   "fsevents",
   "bufferutil",
   "utf-8-validate",
-  "ws"
+  "ws",
+  // Regexes needed for subpath imports — e.g. "@sentry/electron/main",
+  // "openai/resources/chat/completions". Exact-string externals don't match
+  // subpaths, so rollup would bundle them.
+  /^@sentry\/electron(\/|$)/,
+  /^@anthropic-ai\/sdk(\/|$)/,
+  /^openai(\/|$)/,
+  /^@google\/generative-ai(\/|$)/
 ]
 
 // Auto-detect Pro files by checking if they exist on disk.
