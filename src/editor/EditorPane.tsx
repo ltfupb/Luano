@@ -3,6 +3,8 @@
 
 import "./monacoInit"
 import { useEffect, useCallback, useState, useRef } from "react"
+import ReactMarkdown from "react-markdown"
+import remarkGfm from "remark-gfm"
 import Editor from "@monaco-editor/react"
 import type * as Monaco from "monaco-editor"
 import { useProjectStore } from "../stores/projectStore"
@@ -151,6 +153,9 @@ const isMac = typeof navigator !== "undefined" &&
 
 const KB_LABEL = isMac ? "⌘K" : "Ctrl+K"
 
+const isWagFile = (path: string | null | undefined): boolean =>
+  !!(path && (path.includes("/wag/") || path.includes("\\wag\\")))
+
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export function EditorPane(): JSX.Element {
@@ -168,6 +173,8 @@ export function EditorPane(): JSX.Element {
   const monacoTheme = appTheme === "tokyo-night" ? "luano-tokyo-night" : appTheme === "light" ? "luano-light" : "luano-dark"
 
   const [inlineEditOpen, setInlineEditOpen] = useState(false)
+  const [previewMode, setPreviewMode] = useState(false)
+  const [previewContent, setPreviewContent] = useState<string | null>(null) // null = use activeFile content
   const [splitFile, setSplitFile] = useState<string | null>(null)
   const [closeConfirm, setCloseConfirm] = useState<string | null>(null)
   const [isDragging, setIsDragging] = useState(false)
@@ -439,6 +446,12 @@ export function EditorPane(): JSX.Element {
     if (splitFile && !openFiles.includes(splitFile)) setSplitFile(null)
   }, [openFiles, splitFile])
 
+  // Default to preview mode for wag/ files, source mode for everything else
+  useEffect(() => {
+    setPreviewMode(!!(isWagFile(activeFile)))
+    setPreviewContent(null)
+  }, [activeFile])
+
   const handleEditorMount = useCallback(
     (editor: Monaco.editor.IStandaloneCodeEditor, monacoInstance: typeof Monaco) => {
       editorRef.current = editor
@@ -460,9 +473,15 @@ export function EditorPane(): JSX.Element {
 
   // ── Empty state ────────────────────────────────────────────────────────────
   if (openFiles.length === 0) {
+    const shortcuts: Array<{ keys: string; desc: string }> = [
+      { keys: "Ctrl+P",       desc: "Quick open file" },
+      { keys: "Ctrl+Shift+F", desc: "Search in files" },
+      { keys: KB_LABEL,       desc: "Inline AI edit" },
+      { keys: "Ctrl+`",       desc: "Toggle terminal" }
+    ]
     return (
       <div
-        className="flex-1 flex flex-col items-center justify-center gap-2 animate-fade-in"
+        className="flex-1 flex flex-col items-center justify-center gap-3 animate-fade-in"
         style={{ color: "var(--text-secondary)" }}
       >
         <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" style={{ opacity: 0.4 }}>
@@ -470,7 +489,32 @@ export function EditorPane(): JSX.Element {
           <polyline points="13 2 13 9 20 9" />
         </svg>
         <p className="text-xs">Open a file to edit</p>
-        <p className="text-xs" style={{ color: "var(--text-muted)", marginTop: "2px" }}>{KB_LABEL} — Inline AI Edit</p>
+        <div
+          className="grid gap-x-4 gap-y-1.5 mt-2 pt-3"
+          style={{
+            gridTemplateColumns: "auto auto",
+            fontSize: "11px",
+            color: "var(--text-muted)",
+            borderTop: "1px solid var(--border-subtle)",
+            minWidth: "220px"
+          }}
+        >
+          {shortcuts.map(({ keys, desc }) => (
+            <div key={keys} className="contents">
+              <kbd
+                className="justify-self-end px-1.5 py-0.5 rounded text-[10px] font-mono"
+                style={{
+                  background: "var(--bg-elevated)",
+                  border: "1px solid var(--border-subtle)",
+                  color: "var(--text-secondary)"
+                }}
+              >
+                {keys}
+              </kbd>
+              <span className="self-center">{desc}</span>
+            </div>
+          ))}
+        </div>
       </div>
     )
   }
@@ -582,6 +626,25 @@ export function EditorPane(): JSX.Element {
           className="absolute top-0 flex items-center gap-1 px-2 flex-shrink-0"
           style={{ height: "34px", right: rightPanelOpen ? `${chatPanelWidth + 3}px` : 0, zIndex: 10, background: "var(--bg-panel)" }}
         >
+          {/* Markdown preview toggle (only for .md files) */}
+          {isWagFile(activeFile) && (
+            <button
+              className="flex items-center justify-center w-7 h-7 rounded-md transition-all duration-150"
+              style={{
+                color: previewMode ? "var(--accent)" : "var(--text-muted)",
+                background: previewMode ? "var(--accent-muted)" : "transparent"
+              }}
+              onClick={() => setPreviewMode(p => !p)}
+              title="Preview Markdown"
+              onMouseEnter={e => { if (!previewMode) (e.currentTarget as HTMLElement).style.color = "var(--text-secondary)" }}
+              onMouseLeave={e => { if (!previewMode) (e.currentTarget as HTMLElement).style.color = "var(--text-muted)" }}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                <circle cx="12" cy="12" r="3" />
+              </svg>
+            </button>
+          )}
           {/* Split editor toggle */}
           <button
             className="flex items-center justify-center w-7 h-7 rounded-md transition-all duration-150"
@@ -631,8 +694,51 @@ export function EditorPane(): JSX.Element {
         </div>
       )}
 
+      {/* Markdown preview (wag/ files) */}
+      {activeFile && previewMode && (activeFile.includes("/wag/") || activeFile.includes("\\wag\\")) && (
+        <div
+          className="flex-1 overflow-auto p-5 markdown-body selectable"
+          style={{ fontSize: "13px", lineHeight: "1.7", color: "var(--text-primary)", background: "var(--bg-base)" }}
+        >
+          <ReactMarkdown
+            remarkPlugins={[remarkGfm]}
+            components={{
+              a({ href, children }) {
+                if (href?.startsWith("wag://")) {
+                  const wagPath = href.slice(6)
+                  return (
+                    <a
+                      href="#"
+                      style={{ color: "var(--accent)", textDecoration: "underline", cursor: "pointer" }}
+                      onClick={e => {
+                        e.preventDefault()
+                        // Path traversal guard: reject paths with .. or absolute segments
+                        if (/\.\./.test(wagPath) || /^[/\\]/.test(wagPath)) return
+                        const { projectPath } = useProjectStore.getState()
+                        if (!projectPath) return
+                        window.api.readFile(`${projectPath}/wag/${wagPath}.md`)
+                          .then((content: string) => setPreviewContent(content))
+                          .catch(() => setPreviewContent(`*Entity not found: ${wagPath}*`))
+                      }}
+                    >
+                      {children}
+                    </a>
+                  )
+                }
+                return <a href={href} target="_blank" rel="noreferrer">{children}</a>
+              }
+            }}
+          >
+            {(previewContent ?? fileContents[activeFile] ?? "").replace(/\[\[([^\]]+)\]\]/g, (_, path) => {
+              const name = path.split("/").pop() ?? path
+              return `[${name}](wag://${path})`
+            })}
+          </ReactMarkdown>
+        </div>
+      )}
+
       {/* Monaco editor(s) */}
-      {activeFile && (
+      {activeFile && !previewMode && (
         <div className="flex-1 flex overflow-hidden">
           {/* Primary editor */}
           <div className="flex-1 overflow-hidden min-w-0">
@@ -651,7 +757,7 @@ export function EditorPane(): JSX.Element {
                 fontLigatures: true,
                 minimap: { enabled: false },
                 scrollBeyondLastLine: false,
-                wordWrap: "on",
+                wordWrap: "off",
                 lineNumbers: "on",
                 renderLineHighlight: "line",
                 tabSize: 2,
@@ -728,7 +834,7 @@ export function EditorPane(): JSX.Element {
                       fontLigatures: true,
                       minimap: { enabled: false },
                       scrollBeyondLastLine: false,
-                      wordWrap: "on",
+                      wordWrap: "off",
                       lineNumbers: "on",
                       renderLineHighlight: "line",
                       tabSize: 2,

@@ -39,6 +39,9 @@ yarn-error.log*
 
 # Electron
 app-update.yml
+# electron-vite dev occasionally emits a minified sentry.js stub at the repo
+# root — never part of the source tree, always safe to ignore.
+/sentry.js
 
 # Sidecar binaries — downloaded at build time via scripts/download-binaries.ts
 resources/binaries/

@@ -42,10 +42,75 @@ export interface AgentChatResult {
   modifiedFiles: string[]
 }
 
+/** Anthropic stream event shapes not yet exposed in SDK public types — internal */
+interface StreamContentBlockStart {
+  type: "content_block_start"
+  index: number
+  content_block: { type: string; name?: string }
+}
+interface StreamContentBlockStop {
+  type: "content_block_stop"
+  index: number
+}
+interface StreamMessageStart {
+  type: "message_start"
+  message: { usage: { input_tokens: number; cache_read_input_tokens?: number } }
+}
+
+/**
+ * Tracks advisor / thinking block lifecycle in Anthropic streams and broadcasts
+ * start/stop events to renderer. Replaces ~30 lines of duplicated state logic
+ * across agentChatAnthropic and chatStream.
+ *
+ * `advisorEnabled` defaults to true. Pass false when the advisor tool is not
+ * registered for this stream — defensive guard against the model emitting an
+ * unexpected advisor block, which would flash the renderer's advisor indicator.
+ */
+export class StreamBlockTracker {
+  private advisorIdx = -1
+  private thinkingIdx = -1
+
+  constructor(
+    private streamChannel: string,
+    private advisorEnabled: boolean = true
+  ) {}
+
+  onStart(event: unknown): void {
+    const cb = event as StreamContentBlockStart
+    if (this.advisorEnabled && cb.content_block?.name === "advisor") {
+      this.advisorIdx = cb.index
+      this.broadcast("advisor", true)
+    }
+    if (cb.content_block?.type === "thinking") {
+      this.thinkingIdx = cb.index
+      this.broadcast("thinking", true)
+    }
+  }
+
+  onStop(event: unknown): void {
+    const idx = (event as StreamContentBlockStop).index
+    if (this.advisorIdx >= 0 && idx === this.advisorIdx) {
+      this.advisorIdx = -1
+      this.broadcast("advisor", false)
+    }
+    if (this.thinkingIdx >= 0 && idx === this.thinkingIdx) {
+      this.thinkingIdx = -1
+      this.broadcast("thinking", false)
+    }
+  }
+
+  private broadcast(kind: "advisor" | "thinking", active: boolean): void {
+    BrowserWindow.getAllWindows().forEach((win) =>
+      win.webContents.send(`${this.streamChannel}:${kind}`, active)
+    )
+  }
+}
+
 export type Provider = "anthropic" | "openai" | "gemini" | "local"
 
 export const MODELS: Record<Provider, Array<{ id: string; label: string }>> = {
   anthropic: [
+    { id: "claude-opus-4-7", label: "Opus 4.7" },
     { id: "claude-sonnet-4-6", label: "Sonnet 4.6" },
     { id: "claude-opus-4-6", label: "Opus 4.6" },
     { id: "claude-haiku-4-5-20251001", label: "Haiku 4.5" }
@@ -114,12 +179,29 @@ export function getModel(): string {
   return MODELS[provider][0].id
 }
 
+/** Network timeout bounds. Opus 4.7 long reasoning can exceed 60s, so the
+ *  default is 180s. Values below MIN_NETWORK_TIMEOUT_MS are treated as unset. */
+export const MIN_NETWORK_TIMEOUT_MS = 30_000
+export const DEFAULT_NETWORK_TIMEOUT_MS = 180_000
+
+export function getNetworkTimeoutMs(): number {
+  const stored = store.get("networkTimeoutMs") as number | undefined
+  return typeof stored === "number" && stored >= MIN_NETWORK_TIMEOUT_MS ? stored : DEFAULT_NETWORK_TIMEOUT_MS
+}
+
+export function setNetworkTimeoutMs(ms: number): void {
+  store.set("networkTimeoutMs", ms)
+  // Invalidate clients so they re-init with the new timeout
+  anthropicClient = null
+  openaiClient = null
+}
+
 export async function getAnthropicClient(): Promise<Anthropic> {
   if (!anthropicClient) {
     const apiKey = store.get("apiKey") as string | undefined
     if (!apiKey) throw new Error("Anthropic API key not set")
     const AnthropicCtor = await loadAnthropic()
-    anthropicClient = new AnthropicCtor({ apiKey, timeout: 60_000 })
+    anthropicClient = new AnthropicCtor({ apiKey, timeout: getNetworkTimeoutMs() })
   }
   return anthropicClient
 }
@@ -129,7 +211,7 @@ export async function getOpenAIClient(): Promise<OpenAI> {
     const apiKey = store.get("openaiKey") as string | undefined
     if (!apiKey) throw new Error("OpenAI API key not set")
     const OpenAICtor = await loadOpenAI()
-    openaiClient = new OpenAICtor({ apiKey, timeout: 60_000 })
+    openaiClient = new OpenAICtor({ apiKey, timeout: getNetworkTimeoutMs() })
   }
   return openaiClient
 }
@@ -266,6 +348,95 @@ export function isAdvisorAvailable(): boolean {
   return getProvider() === "anthropic" &&
     getAdvisorEnabled() &&
     !getModel().includes("opus")
+}
+
+/**
+ * Which Claude model the Advisor server-side tool should invoke.
+ * Defaults to opus-4-6 — the known-working advisor model on the advisor_20260301 beta.
+ * opus-4-7 compatibility with that beta is unverified as of this commit;
+ * users can opt-in via Settings once verified.
+ */
+export function getAdvisorModel(): "claude-opus-4-7" | "claude-opus-4-6" | "claude-sonnet-4-6" {
+  const stored = store.get("advisorModel") as string | undefined
+  if (stored === "claude-opus-4-7" || stored === "claude-sonnet-4-6") return stored
+  return "claude-opus-4-6"
+}
+
+export function setAdvisorModel(model: "claude-opus-4-7" | "claude-opus-4-6" | "claude-sonnet-4-6"): void {
+  store.set("advisorModel", model)
+}
+
+/**
+ * Extended thinking / reasoning effort — mirrors Claude Code's /effort levels.
+ * Low for quick edits, max for heavy architectural reasoning.
+ */
+export type ThinkingEffort = "low" | "medium" | "high" | "xhigh" | "max"
+
+const EFFORT_LEVELS: ReadonlySet<ThinkingEffort> = new Set(["low", "medium", "high", "xhigh", "max"])
+
+/** Anthropic extended-thinking token budget per effort level. Must stay below
+ *  `max_tokens` on the request — agent.ts sizes max_tokens accordingly. */
+export const ANTHROPIC_THINKING_BUDGET: Record<ThinkingEffort, number> = {
+  low:    1024,
+  medium: 4096,
+  high:   16_384,
+  xhigh:  32_768,
+  max:    65_536
+}
+
+/** OpenAI reasoning_effort only has three levels; higher Luano levels all map to 'high'. */
+export const OPENAI_REASONING_EFFORT: Record<ThinkingEffort, "low" | "medium" | "high"> = {
+  low:    "low",
+  medium: "medium",
+  high:   "high",
+  xhigh:  "high",
+  max:    "high"
+}
+
+export function getThinkingEffort(): ThinkingEffort {
+  const stored = store.get("thinkingEffort") as string | undefined
+  return stored && EFFORT_LEVELS.has(stored as ThinkingEffort) ? (stored as ThinkingEffort) : "medium"
+}
+
+export function setThinkingEffort(effort: ThinkingEffort): void {
+  store.set("thinkingEffort", effort)
+}
+
+/** Does the current (provider, model) accept a thinking / reasoning hint? */
+export function supportsThinking(): boolean {
+  const provider = getProvider()
+  const model = getModel()
+  if (provider === "anthropic") {
+    // Opus + Sonnet support extended thinking; Haiku does not (as of 4.5).
+    return model.includes("opus") || model.includes("sonnet")
+  }
+  if (provider === "openai") {
+    // o1, o1-mini, o3, o3-mini, o4 — the reasoning family.
+    return /^o[1-9]/.test(model)
+  }
+  return false
+}
+
+/**
+ * Model capability tier — drives prompt detail, round limits, and other
+ * behaviors that should scale with how much the model can figure out on its own.
+ *
+ * `frontier` — latest Anthropic/OpenAI/Gemini top-tier. Trust inline planning,
+ * slim prompts, shorter round budgets.
+ * `standard` — smaller/older models, mini/flash variants, local. Need more
+ * scaffolding: extended Luau guide, higher round budget.
+ */
+export type ModelTier = "frontier" | "standard"
+
+const FRONTIER_MODELS = new Set([
+  "claude-opus-4-7", "claude-sonnet-4-6", "claude-opus-4-6",
+  "gpt-4o", "gpt-4-turbo", "o1",
+  "gemini-2.5-pro"
+])
+
+export function getModelTier(): ModelTier {
+  if (getProvider() === "local") return "standard"
+  return FRONTIER_MODELS.has(getModel()) ? "frontier" : "standard"
 }
 
 export function getProviderAndModel(): { provider: Provider; model: string } {
@@ -472,7 +643,7 @@ export async function chatStream(
     const advisorTool = useAdvisor ? [{
       type: "advisor_20260301" as const,
       name: "advisor" as const,
-      model: "claude-opus-4-6" as const,
+      model: getAdvisorModel(),
       max_uses: 5,
       caching: { type: "ephemeral" as const }
     }] : []
@@ -495,10 +666,10 @@ export async function chatStream(
 
     let streamedChars = 0
     let inputTracked = false
-    let advisorBlockIndex = -1
+    const blocks = new StreamBlockTracker(streamChannel, useAdvisor)
     for await (const chunk of stream) {
       if (chunk.type === "message_start" && !inputTracked) {
-        const msg = (chunk as unknown as { message: { usage: { input_tokens: number; cache_read_input_tokens?: number } } }).message
+        const msg = (chunk as unknown as StreamMessageStart).message
         trackUsage(msg.usage.input_tokens, 0, msg.usage.cache_read_input_tokens ?? 0)
         inputTracked = true
       } else if (chunk.type === "content_block_delta" && chunk.delta.type === "text_delta") {
@@ -507,29 +678,8 @@ export async function chatStream(
         streamedChars += text.length
         broadcastUsage(Math.ceil(streamedChars / 4))
       }
-      // Advisor indicator — same pattern as agent.ts
-      if (
-        useAdvisor &&
-        chunk.type === "content_block_start" &&
-        // SAFETY: beta advisor events include content_block.name (advisor-tool-2026-03-01)
-        (chunk as unknown as { content_block: { name?: string } }).content_block?.name === "advisor"
-      ) {
-        advisorBlockIndex = (chunk as unknown as { index: number }).index
-        BrowserWindow.getAllWindows().forEach((win) =>
-          win.webContents.send(`${streamChannel}:advisor`, true)
-        )
-      }
-      if (
-        useAdvisor &&
-        chunk.type === "content_block_stop" &&
-        advisorBlockIndex >= 0 &&
-        (chunk as unknown as { index: number }).index === advisorBlockIndex
-      ) {
-        advisorBlockIndex = -1
-        BrowserWindow.getAllWindows().forEach((win) =>
-          win.webContents.send(`${streamChannel}:advisor`, false)
-        )
-      }
+      if (chunk.type === "content_block_start") blocks.onStart(chunk)
+      if (chunk.type === "content_block_stop") blocks.onStop(chunk)
     }
     const finalMessage = await stream.finalMessage()
     const cache = finalMessage.usage.cache_read_input_tokens ?? 0
@@ -556,27 +706,3 @@ export async function chatStream(
   }
 }
 
-// ── Plan Chat ─────────────────────────────────────────────────────────────────
-
-export async function planChat(messages: ChatMessage[], systemPrompt: string): Promise<string[]> {
-  const planPrompt = `${systemPrompt}
-
-PLAN MODE: Before executing anything, output ONLY a JSON array of steps you will take to fulfill the user's request. Do not write any code or modify files yet.
-Format strictly: ["Step 1: description", "Step 2: description", ...]
-Output ONLY the JSON array — no explanation, no markdown fences.`
-
-  let text = ""
-  try {
-    text = await chat(messages, planPrompt)
-  } catch {
-    return ["Unable to generate plan — check API key or connection"]
-  }
-
-  const match = text.match(/\[[\s\S]*\]/)
-  if (!match) return [text.trim().slice(0, 300)]
-  try {
-    const parsed = JSON.parse(match[0])
-    if (Array.isArray(parsed)) return parsed.map(String).slice(0, 12)
-  } catch {}
-  return [text.trim().slice(0, 300)]
-}

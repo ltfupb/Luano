@@ -1,14 +1,14 @@
-import React, { useState, useRef, useEffect, useCallback } from "react"
-import ReactMarkdown from "react-markdown"
-import remarkGfm from "remark-gfm"
+import { useState, useRef, useEffect, useCallback, useMemo, type KeyboardEvent } from "react"
 import { useAIStore, ChatMessage } from "../stores/aiStore"
 import { useProjectStore } from "../stores/projectStore"
 import { useSettingsStore } from "../stores/settingsStore"
-import { CodeBlock } from "./CodeBlock"
 import { useT } from "../i18n/useT"
 import { useIpcEvent } from "../hooks/useIpc"
 import { BUILT_IN_SKILLS, mergeSkills, findSkills, expandSkill, Skill } from "./skills"
 import { getFileName } from "../lib/utils"
+import { AskUserCard } from "./AskUserCard"
+import { ToolCallGroup } from "./ToolCallGroup"
+import { MessageBubble } from "./MessageBubble"
 
 interface ToolEvent {
   tool: string
@@ -148,6 +148,9 @@ export function ChatPanel({ onClose }: ChatPanelProps): JSX.Element {
   const [skillIndex, setSkillIndex] = useState(0)
   const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([])
   const [advisorActive, setAdvisorActive] = useState(false)
+  const [thinkingActive, setThinkingActive] = useState(false)
+  const [pendingApproval, setPendingApproval] = useState<{ id: string; tool: string; input: Record<string, unknown> } | null>(null)
+  const [pendingAskUser, setPendingAskUser] = useState<{ id: string; questions: AskUserQuestion[] } | null>(null)
   const [agentTodos, setAgentTodos] = useState<Array<{ content: string; status: string }>>([])
   const [showSessions, setShowSessions] = useState(false)
   const [sessionsClosing, setSessionsClosing] = useState(false)
@@ -259,6 +262,23 @@ export function ChatPanel({ onClose }: ChatPanelProps): JSX.Element {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
   }, [messages])
 
+  const groupedMessages = useMemo(() => {
+    const grouped: (ChatMessage | ChatMessage[])[] = []
+    for (const msg of messages) {
+      if (isToolMsg(msg)) {
+        const last = grouped[grouped.length - 1]
+        if (Array.isArray(last)) {
+          last.push(msg)
+        } else {
+          grouped.push([msg])
+        }
+      } else {
+        grouped.push(msg)
+      }
+    }
+    return grouped
+  }, [messages])
+
   const buildContext = () => ({
     globalSummary,
     projectPath: projectPath ?? undefined,
@@ -332,6 +352,8 @@ export function ChatPanel({ onClose }: ChatPanelProps): JSX.Element {
     window.api.aiAbort()
     setStreaming(false)
     setAdvisorActive(false)
+    setThinkingActive(false)
+    setPendingApproval(null); setPendingAskUser(null)
     // Mark last streaming message as done
     const last = messages[messages.length - 1]
     if (last?.streaming) {
@@ -345,6 +367,8 @@ export function ChatPanel({ onClose }: ChatPanelProps): JSX.Element {
       const assistantId = addMessage({ role: "assistant", content: "", streaming: true })
       setStreaming(true)
       setAdvisorActive(false)
+      setThinkingActive(false)
+      setPendingApproval(null); setPendingAskUser(null)
       try {
         let accumulated = ""
         const result = await window.api.aiAgentChat(
@@ -364,9 +388,10 @@ export function ChatPanel({ onClose }: ChatPanelProps): JSX.Element {
             })
           },
           undefined,
-          (active) => {
-            setAdvisorActive(active)
-          }
+          (active) => { setAdvisorActive(active) },
+          (active) => { setThinkingActive(active) },
+          (req) => { setPendingApproval(req) },
+          (req) => { setPendingAskUser(req) }
         )
         updateMessage(assistantId, accumulated, false)
         if (result.modifiedFiles.length > 0) {
@@ -383,6 +408,8 @@ export function ChatPanel({ onClose }: ChatPanelProps): JSX.Element {
       } finally {
         setStreaming(false)
         setAdvisorActive(false)
+        setThinkingActive(false)
+        setPendingApproval(null); setPendingAskUser(null)
         setAgentTodos([])
         // Auto-compress if context is getting large
         compressOldMessages()
@@ -409,7 +436,8 @@ export function ChatPanel({ onClose }: ChatPanelProps): JSX.Element {
             accumulated += chunk
             updateMessage(assistantId, accumulated, true)
           },
-          (active) => { setAdvisorActive(active) }
+          (active) => { setAdvisorActive(active) },
+          (active) => { setThinkingActive(active) }
         )
         updateMessage(assistantId, accumulated, false)
       } catch (err) {
@@ -418,6 +446,7 @@ export function ChatPanel({ onClose }: ChatPanelProps): JSX.Element {
         updateMessage(assistantId, `Error: ${cleaned}`, false)
       } finally {
         setStreaming(false)
+        setThinkingActive(false)
         // Auto-compress if context is getting large
         compressOldMessages()
         // Auto-detect memories from this exchange
@@ -458,7 +487,7 @@ export function ChatPanel({ onClose }: ChatPanelProps): JSX.Element {
     }
   }, [input, isStreaming, planMode, proFeatures, addMessage, buildApiMessages, doSendChat, executeAgent, clearMessages])
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
+  const handleKeyDown = (e: KeyboardEvent) => {
     // Skills autocomplete navigation
     if (skillMatches.length > 0) {
       if (e.key === "ArrowDown") {
@@ -757,28 +786,67 @@ export function ChatPanel({ onClose }: ChatPanelProps): JSX.Element {
             </div>
           </div>
         )}
-        {(() => {
-          const grouped: (ChatMessage | ChatMessage[])[] = []
-          for (const msg of messages) {
-            if (isToolMsg(msg)) {
-              const last = grouped[grouped.length - 1]
-              if (Array.isArray(last)) {
-                last.push(msg)
-              } else {
-                grouped.push([msg])
-              }
-            } else {
-              grouped.push(msg)
-            }
-          }
-          return grouped.map((item, i) =>
-            Array.isArray(item) ? (
-              <ToolCallGroup key={`tg-${i}`} events={item} />
-            ) : (
-              <MessageBubble key={item.id} message={item} />
-            )
+        {groupedMessages.map((item, i) =>
+          Array.isArray(item) ? (
+            <ToolCallGroup key={`tg-${i}`} events={item} />
+          ) : (
+            <MessageBubble key={item.id} message={item} thinkingActive={item.streaming ? thinkingActive : false} />
           )
-        })()}
+        )}
+
+        {/* Ask user interactive card */}
+        {pendingAskUser && isStreaming && (
+          <AskUserCard
+            request={pendingAskUser}
+            onSubmit={(id, answers) => {
+              window.api.sendAskUserResponse(id, answers)
+              setPendingAskUser(null)
+            }}
+          />
+        )}
+
+        {/* Tool approval request */}
+        {pendingApproval && isStreaming && (
+          <div
+            className="mx-2 mb-2 rounded-xl px-3 py-2.5 animate-fade-in"
+            style={{ background: "var(--bg-elevated)", border: "1px solid rgba(239,68,68,0.35)" }}
+          >
+            <div className="flex items-center gap-2 mb-2">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--error, #ef4444)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                <line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" />
+              </svg>
+              <span style={{ fontSize: "12px", color: "var(--text-primary)", fontWeight: 500 }}>
+                AI wants to <span style={{ color: "var(--error, #ef4444)" }}>{pendingApproval.tool.replace(/_/g, " ")}</span>
+              </span>
+            </div>
+            {typeof pendingApproval.input.path === "string" && (
+              <div className="mb-2 font-mono" style={{ fontSize: "11px", color: "var(--text-secondary)" }}>
+                {String(pendingApproval.input.path)}
+              </div>
+            )}
+            <div className="flex gap-1.5">
+              <button
+                onClick={() => { window.api.sendToolApproval(pendingApproval.id, true); setPendingApproval(null); setPendingAskUser(null) }}
+                className="flex-1 py-1 rounded-md font-medium transition-colors duration-150"
+                style={{ fontSize: "11px", background: "rgba(239,68,68,0.12)", color: "var(--error, #ef4444)", border: "1px solid rgba(239,68,68,0.25)" }}
+                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = "rgba(239,68,68,0.22)" }}
+                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = "rgba(239,68,68,0.12)" }}
+              >
+                Allow
+              </button>
+              <button
+                onClick={() => { window.api.sendToolApproval(pendingApproval.id, false); setPendingApproval(null); setPendingAskUser(null) }}
+                className="flex-1 py-1 rounded-md font-medium transition-colors duration-150"
+                style={{ fontSize: "11px", background: "var(--bg-secondary)", color: "var(--text-secondary)", border: "1px solid var(--border-subtle)" }}
+                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = "var(--bg-tertiary, var(--bg-secondary))" }}
+                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = "var(--bg-secondary)" }}
+              >
+                Deny
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Accept / Reject review bar */}
         {pendingReview && !isStreaming && (
@@ -1106,315 +1174,4 @@ export function ChatPanel({ onClose }: ChatPanelProps): JSX.Element {
   )
 }
 
-// ── Message bubble ────────────────────────────────────────────────────────────
 
-const MARKDOWN_COMPONENTS = {
-  code({ inline, className, children, ...props }: {
-    inline?: boolean
-    className?: string
-    children?: React.ReactNode
-  } & Record<string, unknown>): JSX.Element {
-    const text = String(children ?? "").replace(/\n$/, "")
-    if (inline) {
-      return (
-        <code
-          className={className}
-          style={{
-            background: "var(--bg-base)",
-            border: "1px solid var(--border-subtle)",
-            borderRadius: 4,
-            padding: "1px 5px",
-            fontSize: "0.9em",
-            fontFamily: "var(--font-mono, ui-monospace, monospace)"
-          }}
-          {...props}
-        >
-          {children}
-        </code>
-      )
-    }
-    const lang = /language-(\w+)/.exec(className || "")?.[1] || "lua"
-    return <CodeBlock code={text} lang={lang} />
-  },
-  pre({ children }: { children?: React.ReactNode }): JSX.Element {
-    return <>{children}</>
-  },
-  a({ href, children }: { href?: string; children?: React.ReactNode }): JSX.Element {
-    return (
-      <a
-        href={href}
-        target="_blank"
-        rel="noopener noreferrer"
-        style={{ color: "var(--accent)", textDecoration: "underline" }}
-      >
-        {children}
-      </a>
-    )
-  },
-  ul({ children }: { children?: React.ReactNode }): JSX.Element {
-    return <ul style={{ margin: "4px 0", paddingLeft: 18, listStyle: "disc" }}>{children}</ul>
-  },
-  ol({ children }: { children?: React.ReactNode }): JSX.Element {
-    return <ol style={{ margin: "4px 0", paddingLeft: 18, listStyle: "decimal" }}>{children}</ol>
-  },
-  li({ children }: { children?: React.ReactNode }): JSX.Element {
-    return <li style={{ margin: "2px 0" }}>{children}</li>
-  },
-  p({ children }: { children?: React.ReactNode }): JSX.Element {
-    return <p style={{ margin: "4px 0" }}>{children}</p>
-  },
-  h1({ children }: { children?: React.ReactNode }): JSX.Element {
-    return <h1 style={{ fontSize: "1.25em", fontWeight: 600, margin: "8px 0 4px" }}>{children}</h1>
-  },
-  h2({ children }: { children?: React.ReactNode }): JSX.Element {
-    return <h2 style={{ fontSize: "1.15em", fontWeight: 600, margin: "8px 0 4px" }}>{children}</h2>
-  },
-  h3({ children }: { children?: React.ReactNode }): JSX.Element {
-    return <h3 style={{ fontSize: "1.05em", fontWeight: 600, margin: "6px 0 4px" }}>{children}</h3>
-  },
-  blockquote({ children }: { children?: React.ReactNode }): JSX.Element {
-    return (
-      <blockquote
-        style={{
-          borderLeft: "3px solid var(--border-subtle)",
-          paddingLeft: 8,
-          margin: "4px 0",
-          color: "var(--text-secondary)"
-        }}
-      >
-        {children}
-      </blockquote>
-    )
-  },
-  table({ children }: { children?: React.ReactNode }): JSX.Element {
-    return (
-      <table style={{ borderCollapse: "collapse", margin: "4px 0", fontSize: "0.95em" }}>
-        {children}
-      </table>
-    )
-  },
-  th({ children }: { children?: React.ReactNode }): JSX.Element {
-    return (
-      <th style={{ border: "1px solid var(--border-subtle)", padding: "3px 6px", textAlign: "left" }}>
-        {children}
-      </th>
-    )
-  },
-  td({ children }: { children?: React.ReactNode }): JSX.Element {
-    return (
-      <td style={{ border: "1px solid var(--border-subtle)", padding: "3px 6px" }}>
-        {children}
-      </td>
-    )
-  }
-} as const
-
-const MessageBubble = React.memo(function MessageBubble({ message }: { message: ChatMessage }): JSX.Element {
-  const isUser = message.role === "user"
-
-  return (
-    <div
-      className={`flex flex-col gap-1 animate-slide-up ${isUser ? "items-end" : "items-start"}`}
-    >
-      {isUser ? (
-        <div
-          className="max-w-full rounded-xl px-3 py-2 selectable"
-          style={{
-            fontSize: "12px",
-            lineHeight: "1.6",
-            whiteSpace: "pre-wrap",
-            wordBreak: "break-word",
-            background: "var(--accent-muted)",
-            border: "1px solid rgba(37,99,235,0.25)",
-            color: "var(--text-primary)"
-          }}
-        >
-          {message.content}
-        </div>
-      ) : (
-        <div className="max-w-full w-full flex flex-col gap-1">
-          {message.content ? (
-            <div
-              className="rounded-xl px-3 py-2 selectable markdown-body"
-              style={{
-                fontSize: "12px",
-                lineHeight: "1.65",
-                wordBreak: "break-word",
-                background: "var(--bg-elevated)",
-                border: "1px solid var(--border-subtle)",
-                color: "var(--text-primary)"
-              }}
-            >
-              {/* @ts-expect-error react-markdown component prop typing is loose */}
-              <ReactMarkdown remarkPlugins={[remarkGfm]} components={MARKDOWN_COMPONENTS}>
-                {message.content}
-              </ReactMarkdown>
-              {message.streaming && (
-                <span className="animate-blink" style={{ color: "var(--accent)" }}>{"\u258C"}</span>
-              )}
-            </div>
-          ) : message.streaming ? (
-            <div
-              className="rounded-xl px-3 py-2"
-              style={{ background: "var(--bg-elevated)", border: "1px solid var(--border-subtle)" }}
-            >
-              <span className="animate-blink" style={{ color: "var(--accent)" }}>{"\u258C"}</span>
-            </div>
-          ) : null}
-        </div>
-      )}
-    </div>
-  )
-})
-
-// ── Tool call bubble ──────────────────────────────────────────────────────────
-
-const TOOL_META: Record<string, { label: string; icon: string; bridge?: boolean }> = {
-  read_file:            { label: "Read file",           icon: "eye" },
-  edit_file:            { label: "Edit file",           icon: "pencil" },
-  create_file:          { label: "Create file",         icon: "plus" },
-  delete_file:          { label: "Delete file",         icon: "trash" },
-  list_files:           { label: "List files",          icon: "folder" },
-  grep_files:           { label: "Search in files",     icon: "search" },
-  search_docs:          { label: "Search docs",         icon: "book" },
-  read_instance_tree:   { label: "Read instance tree",  icon: "tree",   bridge: true },
-  get_runtime_logs:     { label: "Get runtime logs",    icon: "log",    bridge: true },
-  run_studio_script:    { label: "Run Studio script",   icon: "play",   bridge: true },
-  set_property:         { label: "Set property",        icon: "gear",   bridge: true }
-}
-
-function ToolIcon({ type, size = 10 }: { type: string; size?: number }): JSX.Element {
-  const s = { width: size, height: size, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round" as const, strokeLinejoin: "round" as const }
-  switch (type) {
-    case "eye":    return <svg {...s}><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>
-    case "pencil": return <svg {...s}><path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>
-    case "plus":   return <svg {...s}><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
-    case "trash":  return <svg {...s}><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></svg>
-    case "folder": return <svg {...s}><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" /></svg>
-    case "search": return <svg {...s}><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></svg>
-    case "book":   return <svg {...s}><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" /><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" /></svg>
-    case "tree":   return <svg {...s}><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></svg>
-    case "log":    return <svg {...s}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /><line x1="16" y1="13" x2="8" y2="13" /><line x1="16" y1="17" x2="8" y2="17" /></svg>
-    case "play":   return <svg {...s}><polygon points="5 3 19 12 5 21 5 3" /></svg>
-    case "gear":   return <svg {...s}><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" /></svg>
-    default:       return <svg {...s}><circle cx="12" cy="12" r="10" /><path d="M12 8v4l3 3" /></svg>
-  }
-}
-
-function ToolCallGroup({ events }: { events: ChatMessage[] }): JSX.Element {
-  const [groupOpen, setGroupOpen] = useState(false)
-  const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set())
-
-  const toggleItem = (id: string) => {
-    setExpandedItems((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
-  }
-
-  // Extract filename from tool output — only for file-related tools
-  const FILE_TOOLS = new Set(["read_file", "edit_file", "create_file", "delete_file", "list_files", "grep_files"])
-  const getToolTarget = (event: ChatMessage): string => {
-    try {
-      if (!FILE_TOOLS.has(event.toolName ?? "")) return ""
-      const content = event.content
-      const pathMatch = content?.match(/(?:^|\s)([\w.\\/:-]+\.\w+)/)
-      return pathMatch ? getFileName(pathMatch[1]) : ""
-    } catch { return "" }
-  }
-
-  const failCount = events.filter(e => e.toolSuccess === false).length
-  const hasFails = failCount > 0
-
-  return (
-    <div className="animate-fade-in" style={{ margin: "6px 0" }}>
-      {/* Group header */}
-      <button
-        onClick={() => setGroupOpen(prev => !prev)}
-        className="flex items-center gap-2 w-full py-1.5 px-2 rounded transition-colors duration-100"
-        style={{ textAlign: "left" }}
-        onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "var(--bg-elevated)"}
-        onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "transparent"}
-      >
-        <svg
-          width="12" height="12" viewBox="0 0 24 24" fill="none"
-          stroke={hasFails ? "var(--danger)" : "var(--text-muted)"}
-          strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-          className="flex-shrink-0"
-          style={{ opacity: 0.6, transform: groupOpen ? "rotate(90deg)" : "rotate(0deg)", transition: "transform 150ms" }}
-        >
-          <polyline points="9 18 15 12 9 6" />
-        </svg>
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={hasFails ? "var(--danger)" : "var(--text-muted)"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0" style={{ opacity: hasFails ? 1 : 0.6 }}>
-          <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
-        </svg>
-        <span style={{ fontSize: "12px", color: hasFails ? "var(--danger)" : "var(--text-muted)" }}>
-          Used {events.length} tool{events.length > 1 ? "s" : ""}{hasFails ? ` (${failCount} failed)` : ""}
-        </span>
-      </button>
-
-      {/* Expanded tool list */}
-      {groupOpen && (
-        <div style={{ marginLeft: "12px", borderLeft: "1px solid var(--border-subtle)", paddingLeft: "10px", paddingTop: "4px", paddingBottom: "4px" }}>
-          {events.map((event, i) => {
-            const toolName = event.toolName ?? "unknown"
-            const meta = TOOL_META[toolName] ?? { label: toolName, icon: "default" }
-            const isBridge = meta.bridge === true
-            const isOpen = expandedItems.has(event.id)
-            const failed = event.toolSuccess === false
-            const target = getToolTarget(event)
-
-            return (
-              <div key={event.id} className="animate-fade-in" style={{ animationDelay: `${i * 20}ms` }}>
-                <button
-                  onClick={() => toggleItem(event.id)}
-                  className="flex items-center gap-2 w-full py-1 px-1.5 rounded transition-colors duration-100"
-                  style={{ textAlign: "left" }}
-                  onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "var(--bg-elevated)"}
-                  onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "transparent"}
-                >
-                  <span className="flex-shrink-0" style={{ color: failed ? "var(--danger)" : isBridge ? "var(--accent)" : "var(--text-muted)", opacity: failed ? 1 : 0.7 }}>
-                    {failed ? (
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <circle cx="12" cy="12" r="10" /><line x1="15" y1="9" x2="9" y2="15" /><line x1="9" y1="9" x2="15" y2="15" />
-                      </svg>
-                    ) : (
-                      <ToolIcon type={meta.icon} size={12} />
-                    )}
-                  </span>
-                  <span className="truncate" style={{
-                    fontSize: "12px",
-                    color: failed ? "var(--danger)" : isBridge ? "var(--accent)" : "var(--text-muted)",
-                  }}>
-                    {meta.label}{target ? ` ${target}` : ""}
-                  </span>
-                </button>
-                {isOpen && (
-                  <div
-                    className="ml-6 mt-1 mb-2 rounded selectable animate-fade-in"
-                    style={{
-                      fontSize: "10px",
-                      color: "var(--text-muted)",
-                      fontFamily: "'JetBrains Mono', monospace",
-                      lineHeight: "1.6",
-                      wordBreak: "break-all",
-                      padding: "4px 8px",
-                      background: "var(--bg-base)",
-                      border: "1px solid var(--border-subtle)",
-                      maxHeight: "120px",
-                      overflowY: "auto"
-                    }}
-                  >
-                    {event.content || <span style={{ fontStyle: "italic", opacity: 0.5 }}>No output</span>}
-                  </div>
-                )}
-              </div>
-            )
-          })}
-        </div>
-      )}
-    </div>
-  )
-}

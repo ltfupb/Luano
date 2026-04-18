@@ -93,7 +93,7 @@ describe("pro/modules — all exports are callable", () => {
     expect(typeof m.isBridgeConnected).toBe("function")
     expect(typeof m.clearBridgeLogs).toBe("function")
     expect(typeof m.queueScript).toBe("function")
-    expect(typeof m.getCommandResult).toBe("function")
+    expect(typeof m.consumeCommandResult).toBe("function")
     expect(typeof m.getBridgeToken).toBe("function")
   })
 

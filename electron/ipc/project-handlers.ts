@@ -1,9 +1,9 @@
 import { ipcMain, dialog, app } from "electron"
 import { join } from "path"
-import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync } from "fs"
+import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync, lstatSync } from "fs"
 import { is } from "@electron-toolkit/utils"
 import { syncManager, lspManager } from "../main"
-import { readDir, readFile, writeFile, createFile, createFolder, renameEntry, deleteEntry, moveEntry, initProject } from "../file/project"
+import { readDir, readFile, writeFile, createFile, createFolder, renameEntry, deleteEntry, moveEntry, initProject, ensureLintConfig } from "../file/project"
 import { watchProject, stopWatcher } from "../file/watcher"
 import { cleanupPtys } from "./terminal-handlers"
 import { lintFile } from "../sidecar/selene"
@@ -55,6 +55,13 @@ export function registerProjectHandlers(): void {
 
   ipcMain.handle("project:open", async (_, projectPath: string) => {
     setCurrentProject(projectPath)
+    // Seed selene.toml with the Roblox stdlib config before the LSP/linter
+    // starts — otherwise Selene flags every game:GetService/script/Instance
+    // usage as an error and the AI agent "fixes" valid code.
+    const resourcesDir = is.dev
+      ? join(app.getAppPath(), "resources")
+      : process.resourcesPath
+    ensureLintConfig(projectPath, resourcesDir)
     watchProject(projectPath)
     await lspManager.start(projectPath)
     syncManager.serve(projectPath)
@@ -73,7 +80,14 @@ export function registerProjectHandlers(): void {
   })
 
   // ── File ──────────────────────────────────────────────────────────────────
-  ipcMain.handle("file:read", (_, filePath: string) => readFile(filePath))
+  ipcMain.handle("file:read", (_, filePath: string) => {
+    try { return readFile(filePath) } catch (err) {
+      // Only swallow missing-file errors (e.g. file deleted between reads).
+      // Other errors (EACCES, EISDIR, etc.) re-throw so renderer sees the real failure.
+      if ((err as NodeJS.ErrnoException).code === "ENOENT") return null
+      throw err
+    }
+  })
   ipcMain.handle("file:write", (_, filePath: string, content: string) => {
     const aiContent = aiGeneratedFiles.get(filePath)
     if (aiContent && content !== aiContent) {
@@ -114,6 +128,19 @@ export function registerProjectHandlers(): void {
     deleteEntry(entryPath)
     return { success: true }
   })
+  // Used by drag-drop: verify a dropped path is a real directory (not a file,
+  // not a symlink, not a missing path) before passing to project open.
+  // lstatSync so symlinks report as symlinks instead of chasing to the target.
+  ipcMain.handle("file:is-directory", (_, p: string) => {
+    try {
+      if (typeof p !== "string" || p.length === 0) return false
+      const st = lstatSync(p)
+      return st.isDirectory() && !st.isSymbolicLink()
+    } catch {
+      return false
+    }
+  })
+
   ipcMain.handle("file:move", async (_, srcPath: string) => {
     const result = await dialog.showOpenDialog({
       properties: ["openDirectory"],

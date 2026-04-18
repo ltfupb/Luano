@@ -22,7 +22,13 @@ vi.mock("../electron/bridge/server", () => ({
   getBridgeLogs: vi.fn(),
   isBridgeConnected: vi.fn(() => false),
   queueScript: vi.fn(),
-  getCommandResult: vi.fn()
+  consumeCommandResult: vi.fn()
+}))
+vi.mock("../electron/mcp/client", () => ({
+  isMcpConnected: vi.fn(async () => false),
+  mcpRunCode: vi.fn(async () => ({ success: false, output: "MCP not connected" })),
+  mcpGetConsole: vi.fn(async () => null),
+  mcpInsertModel: vi.fn(async () => ({ success: false, output: "MCP not connected" }))
 }))
 vi.mock("../electron/ai/rag", () => ({
   searchDocs: vi.fn()
@@ -73,14 +79,15 @@ describe("multi_edit tool schema", () => {
 
 describe("tool list completeness", () => {
   const expectedTools = [
-    "read_file", "edit_file", "multi_edit", "create_file", "delete_file",
+    "read_file", "edit_file", "multi_edit", "patch_file", "create_file", "delete_file",
     "list_files", "grep", "search_docs", "lint_file", "format_file",
     "type_check", "todo_write", "read_instance_tree", "get_runtime_logs",
-    "run_studio_script", "set_property"
+    "run_studio_script", "set_property", "insert_model",
+    "wag_read", "wag_search", "wag_update", "ask_user"
   ]
 
-  it("has all 16 client tools", () => {
-    expect(TOOLS).toHaveLength(16)
+  it("has all 22 client tools", () => {
+    expect(TOOLS).toHaveLength(22)
   })
 
   for (const name of expectedTools) {

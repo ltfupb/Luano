@@ -1,16 +1,8 @@
 import { useState, useEffect } from "react"
 import { useSyncStore } from "../stores/syncStore"
 import { useProjectStore } from "../stores/projectStore"
-import { useIpcEvent } from "../hooks/useIpc"
-import { useT } from "../i18n/useT"
+import { useElapsed } from "../hooks/useElapsed"
 import { getFileName } from "../lib/utils"
-
-type UpdateStatus = "idle" | "checking" | "available" | "downloading" | "downloaded" | "error"
-interface UpdateState {
-  status: UpdateStatus
-  version?: string
-  progress?: number
-}
 
 const statusDot: Record<string, string> = {
   stopped: "var(--text-ghost)",
@@ -19,33 +11,19 @@ const statusDot: Record<string, string> = {
   error: "var(--danger)"
 }
 
+// Escalation threshold (seconds) after which "starting" text goes amber and
+// hints the user that something may be hung.
+const SLOW_START_THRESHOLD_SEC = 15
+
 export function StatusBar(): JSX.Element {
-  const { status, toolName } = useSyncStore()
+  const { status, toolName, startedAt } = useSyncStore()
+  const { activeFile, lspPort, lspStatus, lspStartedAt } = useProjectStore()
 
-  const statusLabel: Record<string, string> = {
-    stopped: `${toolName} stopped`,
-    starting: `${toolName} starting…`,
-    running: `${toolName} serving`,
-    error: `${toolName} error`
-  }
-  const { activeFile, lspPort } = useProjectStore()
-  const [update, setUpdate] = useState<UpdateState>({ status: "idle" })
-  const t = useT()
-
-  // Listen for updater status events from main process
-  useIpcEvent("updater:status", (data) => {
-    setUpdate(data as UpdateState)
-  })
+  const syncElapsed = useElapsed(status === "starting" ? startedAt : null)
+  const lspElapsed = useElapsed(lspStatus === "starting" ? lspStartedAt : null)
 
   const [memMB, setMemMB] = useState(0)
   const [toolUpdates, setToolUpdates] = useState(0)
-
-  // Fetch initial status
-  useEffect(() => {
-    if (typeof window.api.updaterStatus === "function") {
-      window.api.updaterStatus().then(setUpdate).catch(() => {})
-    }
-  }, [])
 
   // Check toolchain updates after startup
   useEffect(() => {
@@ -87,13 +65,35 @@ export function StatusBar(): JSX.Element {
     return () => clearInterval(id)
   }, [])
 
-  const handleUpdateAction = async () => {
-    if (update.status === "available") {
-      await window.api.updaterDownload()
-    } else if (update.status === "downloaded") {
-      await window.api.updaterInstall()
-    }
+  // Sync label — "rojo starting… · 3s" when starting, elapsed only shown after 1s
+  const syncLabelBase: Record<string, string> = {
+    stopped: `${toolName} stopped`,
+    starting: `${toolName} starting…`,
+    running: `${toolName} serving`,
+    error: `${toolName} error`
   }
+  const syncLabel = status === "starting" && syncElapsed !== null && syncElapsed > 0
+    ? `${syncLabelBase.starting} · ${syncElapsed}s`
+    : (syncLabelBase[status] ?? status)
+  const syncSlow = status === "starting" && (syncElapsed ?? 0) > SLOW_START_THRESHOLD_SEC
+
+  // LSP label — show phase, not just port presence. Port is only interesting
+  // once running; during startup we show elapsed seconds instead.
+  const lspShown = lspStatus !== "stopped" || lspPort !== null
+  const lspLabel = (() => {
+    if (lspStatus === "starting") {
+      return lspElapsed !== null && lspElapsed > 0
+        ? `LSP starting… · ${lspElapsed}s`
+        : "LSP starting…"
+    }
+    if (lspStatus === "error") return "LSP error"
+    if (lspStatus === "running" || lspPort) return `LSP :${lspPort ?? ""}`
+    return "LSP stopped"
+  })()
+  const lspSlow = lspStatus === "starting" && (lspElapsed ?? 0) > SLOW_START_THRESHOLD_SEC
+  const lspDotKey = lspStatus !== "stopped" ? lspStatus : (lspPort ? "running" : "stopped")
+
+  const slowTooltip = "Taking longer than usual. Check Toolchain panel if this hangs."
 
   return (
     <div
@@ -104,24 +104,51 @@ export function StatusBar(): JSX.Element {
         fontSize: "11px"
       }}
     >
-      {/* Rojo status */}
+      {/* Sync (Rojo/Argon) status */}
       <div className="flex items-center gap-1.5">
         <span
-          className="w-1.5 h-1.5 rounded-full flex-shrink-0"
+          className={status === "starting" ? "status-pulse" : ""}
           style={{
+            width: "6px",
+            height: "6px",
+            borderRadius: "9999px",
+            flexShrink: 0,
             background: statusDot[status] ?? statusDot.stopped,
             boxShadow: status === "running" ? "0 0 4px var(--success)" : "none"
           }}
         />
-        <span style={{ color: "var(--text-secondary)" }}>{statusLabel[status] ?? status}</span>
+        <span
+          style={{ color: syncSlow ? "var(--warning)" : "var(--text-secondary)" }}
+          title={syncSlow ? slowTooltip : undefined}
+        >
+          {syncLabel}
+        </span>
       </div>
 
       {/* Separator */}
-      {lspPort && <span style={{ color: "var(--border)", userSelect: "none" }}>·</span>}
+      {lspShown && <span style={{ color: "var(--border)", userSelect: "none" }}>·</span>}
 
-      {/* LSP port */}
-      {lspPort && (
-        <span style={{ color: "var(--text-secondary)" }}>LSP :{lspPort}</span>
+      {/* LSP phase */}
+      {lspShown && (
+        <div className="flex items-center gap-1.5">
+          <span
+            className={lspStatus === "starting" ? "status-pulse" : ""}
+            style={{
+              width: "6px",
+              height: "6px",
+              borderRadius: "9999px",
+              flexShrink: 0,
+              background: statusDot[lspDotKey] ?? statusDot.stopped,
+              boxShadow: lspDotKey === "running" ? "0 0 4px var(--success)" : "none"
+            }}
+          />
+          <span
+            style={{ color: lspSlow ? "var(--warning)" : "var(--text-secondary)" }}
+            title={lspSlow ? slowTooltip : undefined}
+          >
+            {lspLabel}
+          </span>
+        </div>
       )}
 
       {/* Toolchain updates */}
@@ -142,48 +169,6 @@ export function StatusBar(): JSX.Element {
         </>
       )}
 
-      {/* Update notification — right side */}
-      {(update.status === "available" || update.status === "downloading" || update.status === "downloaded") && (
-        <>
-          <span style={{ color: "var(--border)", userSelect: "none" }} className="ml-auto">·</span>
-          <button
-            onClick={handleUpdateAction}
-            className="flex items-center gap-1 transition-colors duration-100"
-            style={{
-              color: update.status === "downloaded" ? "var(--success)" : "var(--info)",
-              cursor: update.status === "downloading" ? "default" : "pointer",
-              background: "none",
-              border: "none",
-              fontSize: "11px"
-            }}
-            disabled={update.status === "downloading"}
-          >
-            {update.status === "available" && (
-              <>
-                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                  <polyline points="7 10 12 15 17 10" />
-                  <line x1="12" y1="15" x2="12" y2="3" />
-                </svg>
-                v{update.version} {t("updateAvailable")}
-              </>
-            )}
-            {update.status === "downloading" && (
-              <span>{update.progress ?? 0}% {t("downloading")}</span>
-            )}
-            {update.status === "downloaded" && (
-              <>
-                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
-                  <polyline points="22 4 12 14.01 9 11.01" />
-                </svg>
-                {t("restartToUpdate")}
-              </>
-            )}
-          </button>
-        </>
-      )}
-
       {/* Memory usage */}
       {memMB > 0 && (
         <>
@@ -200,7 +185,7 @@ export function StatusBar(): JSX.Element {
       {/* Active file — right aligned */}
       {activeFile && (
         <span
-          className={update.status === "available" || update.status === "downloading" || update.status === "downloaded" ? "truncate max-w-[240px]" : "ml-auto truncate max-w-[240px]"}
+          className="ml-auto truncate max-w-[240px]"
           style={{ color: "var(--text-secondary)" }}
         >
           {getFileName(activeFile)}

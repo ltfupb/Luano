@@ -8,9 +8,11 @@ import { Sidebar, SidePanel } from "./components/Sidebar"
 import { QuickOpen } from "./components/QuickOpen"
 import { FileExplorer } from "./explorer/FileExplorer"
 import { StatusBar } from "./components/StatusBar"
+import { UpdateBanner } from "./components/UpdateBanner"
 import { WelcomeScreen } from "./components/WelcomeScreen"
 import { AppTitlebar } from "./components/AppTitlebar"
 import { ConfirmDialog } from "./components/ConfirmDialog"
+import { CommandPalette, type Command } from "./components/CommandPalette"
 
 // Heavy panels — lazy-loaded to keep cold start fast. Each panel only mounts
 // once the user actually opens it.
@@ -34,6 +36,43 @@ const TERMINAL_MAX = 600
 const SIDEPANEL_MIN = 150
 const SIDEPANEL_MAX = 500
 
+interface CommandContext {
+  projectPath: string | null
+  hasProject: boolean
+  openSettings: () => void
+  openToolchain: () => void
+  openFolder: () => void
+  newProject: () => void
+  closeProject: () => void
+  toggleSidebar: () => void
+  toggleChat: () => void
+  toggleTerminal: () => void
+  openQuickFile: () => void
+  openSearchPanel: () => void
+}
+
+function buildCommands(ctx: CommandContext): Command[] {
+  return [
+    // Panels
+    { id: "toggle.sidebar", section: "Panels", label: "Toggle Side Panel", shortcut: "Ctrl+B", available: ctx.hasProject, run: ctx.toggleSidebar },
+    { id: "toggle.chat", section: "Panels", label: "Toggle AI Chat", shortcut: "Ctrl+J", available: ctx.hasProject, run: ctx.toggleChat },
+    { id: "toggle.terminal", section: "Panels", label: "Toggle Terminal", shortcut: "Ctrl+`", available: ctx.hasProject, run: ctx.toggleTerminal },
+    { id: "panel.search", section: "Panels", label: "Search in Files", shortcut: "Ctrl+Shift+F", available: ctx.hasProject, run: ctx.openSearchPanel },
+
+    // File
+    { id: "file.quickOpen", section: "File", label: "Quick Open File…", shortcut: "Ctrl+P", available: ctx.hasProject, run: ctx.openQuickFile },
+
+    // Project
+    { id: "project.new", section: "Project", label: "New Game…", run: ctx.newProject },
+    { id: "project.open", section: "Project", label: "Open Folder…", run: ctx.openFolder },
+    { id: "project.close", section: "Project", label: "Close Project", available: ctx.hasProject, run: ctx.closeProject },
+
+    // Settings
+    { id: "settings.open", section: "Settings", label: "Open Settings", shortcut: "Ctrl+,", run: ctx.openSettings },
+    { id: "settings.toolchain", section: "Settings", label: "Open Toolchain", run: ctx.openToolchain }
+  ]
+}
+
 function IconChat(): JSX.Element {
   return (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -43,7 +82,7 @@ function IconChat(): JSX.Element {
 }
 
 export default function App(): JSX.Element {
-  const { projectPath, dirtyFiles, setProject, closeProject, setFileTree, openFile } = useProjectStore()
+  const { projectPath, dirtyFiles, setProject, closeProject, setFileTree, openFile, setLspStatus } = useProjectStore()
   const { setStatus, setPort, setToolName, setError } = useSyncStore()
   const { setGlobalSummary, clearMessages, saveProjectChat, loadProjectChat } = useAIStore()
   const theme = useSettingsStore((s) => s.theme)
@@ -58,6 +97,29 @@ export default function App(): JSX.Element {
   useEffect(() => {
     window.api.setZoomFactor(uiScale / 100)
   }, [uiScale])
+
+  // System theme auto-detect on first launch only. Subsequent launches respect
+  // the user's saved choice.
+  useEffect(() => {
+    const { hasInitialized, setHasInitialized, setTheme } = useSettingsStore.getState()
+    if (hasInitialized) return
+    const prefersLight = typeof window !== "undefined"
+      && window.matchMedia?.("(prefers-color-scheme: light)").matches
+    if (prefersLight) setTheme("light")
+    setHasInitialized(true)
+  }, [])
+
+  // Sync thinking effort → main process on boot and whenever user changes it.
+  const thinkingEffort = useSettingsStore((s) => s.thinkingEffort)
+  useEffect(() => {
+    void window.api.aiSetThinkingEffort(thinkingEffort)
+  }, [thinkingEffort])
+
+  // Rebuild native OS menu when project-scoped items (Close Project, Quick Open,
+  // Toggle *) should toggle between enabled and disabled.
+  useEffect(() => {
+    void window.api.menuSetProjectState(Boolean(projectPath))
+  }, [projectPath])
   const [activePanel, _setActivePanel] = useState<SidePanel>("explorer")
   const setActivePanel = useCallback((panel: SidePanel) => {
     _setActivePanel(panel)
@@ -70,6 +132,13 @@ export default function App(): JSX.Element {
   const [toolchainSetupMode, setToolchainSetupMode] = useState(false)
   const [setupTargetPath, setSetupTargetPath] = useState<string | null>(null)
   const pendingProjectRef = useRef<{ path: string; isNew: boolean } | null>(null)
+  const _lastSidePanelWidth = useRef<number>(224)
+  // Late-bound action refs — menu handlers fire before these closures are
+  // defined in render order; refs let us point to the current handler at
+  // dispatch time without re-subscribing each render.
+  const handleNewProjectRef = useRef<(() => Promise<void>) | null>(null)
+  const handleOpenFolderRef = useRef<(() => Promise<void>) | null>(null)
+  const handleCloseProjectRef = useRef<(() => Promise<void>) | null>(null)
 
   // Allow StatusBar to open toolchain panel via custom event
   useEffect(() => {
@@ -83,35 +152,24 @@ export default function App(): JSX.Element {
   const [sidePanelWidth, _setSidePanelWidth] = useState(() => useSettingsStore.getState().sidePanelWidth)
   const [chatPanelWidth, _setChatPanelWidth] = useState(() => useSettingsStore.getState().chatPanelWidth)
   const [quickOpenVisible, setQuickOpenVisible] = useState(false)
+  const [paletteVisible, setPaletteVisible] = useState(false)
   const [showTopology, setShowTopology] = useState(false)
   const [showTutorial, setShowTutorial] = useState(() => shouldShowTutorial())
 
-  // Sync layout to store on change
+  // Sync layout to store on change. Store writes happen in useEffect AFTER render
+  // commits — calling them inside a setState updater is a React 18 render-phase
+  // side effect and triggers "Cannot update a component while rendering" warnings.
   const storeSetTerminalHeight = useSettingsStore((s) => s.setTerminalHeight)
   const storeSetSidePanelWidth = useSettingsStore((s) => s.setSidePanelWidth)
   const storeSetChatPanelWidth = useSettingsStore((s) => s.setChatPanelWidth)
 
-  const setTerminalHeight: React.Dispatch<React.SetStateAction<number>> = useCallback((v) => {
-    _setTerminalHeight((prev) => {
-      const next = typeof v === "function" ? v(prev) : v
-      storeSetTerminalHeight(next)
-      return next
-    })
-  }, [storeSetTerminalHeight])
-  const setSidePanelWidth: React.Dispatch<React.SetStateAction<number>> = useCallback((v) => {
-    _setSidePanelWidth((prev) => {
-      const next = typeof v === "function" ? v(prev) : v
-      storeSetSidePanelWidth(next)
-      return next
-    })
-  }, [storeSetSidePanelWidth])
-  const setChatPanelWidth: React.Dispatch<React.SetStateAction<number>> = useCallback((v) => {
-    _setChatPanelWidth((prev) => {
-      const next = typeof v === "function" ? v(prev) : v
-      storeSetChatPanelWidth(next)
-      return next
-    })
-  }, [storeSetChatPanelWidth])
+  const setTerminalHeight = _setTerminalHeight
+  const setSidePanelWidth = _setSidePanelWidth
+  const setChatPanelWidth = _setChatPanelWidth
+
+  useEffect(() => { storeSetTerminalHeight(terminalHeight) }, [terminalHeight, storeSetTerminalHeight])
+  useEffect(() => { storeSetSidePanelWidth(sidePanelWidth) }, [sidePanelWidth, storeSetSidePanelWidth])
+  useEffect(() => { storeSetChatPanelWidth(chatPanelWidth) }, [chatPanelWidth, storeSetChatPanelWidth])
 
   // Panel resize hooks
   const handleResizeMouseDown = usePanelResize("y", TERMINAL_MIN, TERMINAL_MAX, setTerminalHeight, true)
@@ -153,8 +211,40 @@ export default function App(): JSX.Element {
   useIpcEvent("sidecar:error", useCallback((data: unknown) => {
     const { tool } = data as { tool: string; message: string }
     const labels: Record<string, string> = { "luau-lsp": "LSP", stylua: "StyLua", selene: "Selene" }
-    toast(`${labels[tool] ?? tool} ${t("sidecarFailed")}`, "warn")
+    toast(`${labels[tool] ?? tool} ${t("sidecarFailed")}`, "warn", {
+      label: "Open Toolchain",
+      onClick: () => setToolchainOpen(true)
+    })
   }, [t]))
+
+  // ── Native OS menu → renderer actions ───────────────────────────────────
+  useIpcEvent("menu:new-project", useCallback(() => { void handleNewProjectRef.current?.() }, []))
+  useIpcEvent("menu:open-folder", useCallback(() => { void handleOpenFolderRef.current?.() }, []))
+  useIpcEvent("menu:close-project", useCallback(() => { void handleCloseProjectRef.current?.() }, []))
+  useIpcEvent("menu:open-settings", useCallback(() => setSettingsOpen(true), []))
+  useIpcEvent("menu:open-toolchain", useCallback(() => setToolchainOpen(true), []))
+  useIpcEvent("menu:command-palette", useCallback(() => setPaletteVisible(true), []))
+  useIpcEvent("menu:quick-open", useCallback(() => { if (projectPath) setQuickOpenVisible(true) }, [projectPath]))
+  useIpcEvent("menu:toggle-sidebar", useCallback(() => {
+    const { sidePanelWidth: w, setSidePanelWidth: setW } = useSettingsStore.getState()
+    if (w > 0) { _lastSidePanelWidth.current = w; setW(0); _setSidePanelWidth(0) }
+    else { const r = _lastSidePanelWidth.current || 224; setW(r); _setSidePanelWidth(r) }
+  }, []))
+  useIpcEvent("menu:toggle-chat", useCallback(() => {
+    const { rightPanelOpen: open, setRightPanelOpen: setOpen } = useSettingsStore.getState()
+    setOpen(!open)
+  }, []))
+  useIpcEvent("menu:toggle-terminal", useCallback(() => {
+    setTerminalOpen(!useSettingsStore.getState().terminalOpen)
+  }, [setTerminalOpen]))
+
+  // ── LSP boot phase → projectStore ───────────────────────────────────────
+  useIpcEvent("sidecar:lsp-status", useCallback((data: unknown) => {
+    const payload = data as { status?: string; port?: number | null } | undefined
+    const status = payload?.status
+    if (status !== "stopped" && status !== "starting" && status !== "running" && status !== "error") return
+    setLspStatus(status)
+  }, [setLspStatus]))
 
   const refreshFileTree = async () => {
     if (!projectPath) return
@@ -296,6 +386,20 @@ export default function App(): JSX.Element {
     const handler = (e: KeyboardEvent) => {
       const ctrl = e.ctrlKey || e.metaKey
 
+      // Ctrl+Shift+P — Command palette (works without project)
+      if (ctrl && e.shiftKey && (e.key === "P" || e.key === "p")) {
+        e.preventDefault()
+        setPaletteVisible((v) => !v)
+        return
+      }
+
+      // Ctrl+, — Open Settings (works without project)
+      if (ctrl && e.key === "," && !e.shiftKey) {
+        e.preventDefault()
+        setSettingsOpen(true)
+        return
+      }
+
       // Ctrl+P — Quick file open
       if (ctrl && e.key === "p" && !e.shiftKey) {
         if (!projectPath) return
@@ -309,6 +413,33 @@ export default function App(): JSX.Element {
         if (!projectPath) return
         e.preventDefault()
         setActivePanel("search")
+        return
+      }
+
+      // Ctrl+B — Toggle sidebar (side panel)
+      if (ctrl && (e.key === "b" || e.key === "B") && !e.shiftKey) {
+        if (!projectPath) return
+        e.preventDefault()
+        const { sidePanelWidth: w, setSidePanelWidth: setW } = useSettingsStore.getState()
+        // Width of 0 = collapsed. Remember previous width on toggle.
+        if (w > 0) {
+          _lastSidePanelWidth.current = w
+          setW(0)
+          _setSidePanelWidth(0)
+        } else {
+          const restored = _lastSidePanelWidth.current || 224
+          setW(restored)
+          _setSidePanelWidth(restored)
+        }
+        return
+      }
+
+      // Ctrl+J — Toggle AI chat panel
+      if (ctrl && (e.key === "j" || e.key === "J") && !e.shiftKey) {
+        if (!projectPath) return
+        e.preventDefault()
+        const { rightPanelOpen: open, setRightPanelOpen: setOpen } = useSettingsStore.getState()
+        setOpen(!open)
         return
       }
 
@@ -419,9 +550,70 @@ export default function App(): JSX.Element {
     await checkRojoAndOpen(path)
   }
 
+  handleNewProjectRef.current = handleNewProject
+  handleOpenFolderRef.current = handleOpenFolder
+  handleCloseProjectRef.current = handleCloseProject
+
+  // Drag-and-drop: dropping a folder onto the window opens it as a project.
+  // Electron extends File with a non-standard `path` property so we don't need
+  // to round-trip through FilePath IPC.
+  const [dropOver, setDropOver] = useState(false)
+  const handleDragOver = (e: React.DragEvent) => {
+    if (e.dataTransfer.types.includes("Files")) {
+      e.preventDefault()
+      e.dataTransfer.dropEffect = "copy"
+      setDropOver(true)
+    }
+  }
+  const handleDragLeave = (e: React.DragEvent) => {
+    if (e.currentTarget === e.target) setDropOver(false)
+  }
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault()
+    setDropOver(false)
+    const file = e.dataTransfer.files[0]
+    if (!file) return
+    const path = (file as File & { path?: string }).path
+    if (!path) return
+    // Authoritative check: main-process lstat verifies the path is a real
+    // directory (rejects files, symlinks, missing paths). Previously the
+    // renderer-only heuristic (file.type / file.name.includes('.')) rejected
+    // legit folders named v1.0 and accepted dotless files like LICENSE.
+    const isDir = await window.api.isDirectory(path).catch(() => false)
+    if (!isDir) {
+      toast(`Drop a project folder (got: ${file.name || path})`, "warn")
+      return
+    }
+    if (projectPath && dirtyFiles.length > 0) {
+      setSwitchConfirm({ action: "open", path })
+      return
+    }
+    await checkRojoAndOpen(path)
+  }
+
 
   return (
-    <div className="flex flex-col h-screen overflow-hidden" style={{ background: "var(--bg-base)", color: "var(--text-primary)" }}>
+    <div
+      className="flex flex-col h-screen overflow-hidden relative"
+      style={{ background: "var(--bg-base)", color: "var(--text-primary)" }}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
+      {dropOver && (
+        <div
+          className="absolute inset-0 z-40 flex items-center justify-center pointer-events-none"
+          style={{
+            background: "var(--accent-muted)",
+            border: "2px dashed var(--accent)",
+            color: "var(--accent)",
+            fontSize: "14px",
+            fontWeight: 500
+          }}
+        >
+          Drop a folder to open as project
+        </div>
+      )}
       <AppTitlebar
         projectPath={projectPath}
         terminalOpen={terminalOpen}
@@ -486,7 +678,12 @@ export default function App(): JSX.Element {
                 ) : projectPath ? (
                   <EditorPane />
                 ) : (
-                  <WelcomeScreen onOpenFolder={handleOpenFolder} onNewProject={handleNewProject} onOpenRecent={handleOpenRecent} />
+                  <WelcomeScreen
+                    onOpenFolder={handleOpenFolder}
+                    onNewProject={handleNewProject}
+                    onOpenRecent={handleOpenRecent}
+                    onOpenSettings={() => setSettingsOpen(true)}
+                  />
                 )}
               </Suspense>
             </ErrorBoundary>
@@ -521,12 +718,12 @@ export default function App(): JSX.Element {
           )}
         </div>
 
-        {/* AI Chat panel + resize handle — overlays editor instead of pushing it */}
+        {/* AI Chat panel + resize handle — inline flex child, PUSHES the editor area
+            (industry standard: VSCode/Cursor/Windsurf). With wordWrap: off in Monaco,
+            editor content stays intact and simply reveals a horizontal scrollbar when
+            the editor narrows. */}
         {projectPath && rightPanelOpen && (
-          <div
-            className="absolute top-0 right-0 bottom-0 flex z-10"
-            style={{ width: `${chatPanelWidth + 3}px` }}
-          >
+          <>
             <div
               onMouseDown={handleChatResizeMouseDown}
               className="flex-shrink-0 transition-colors duration-100"
@@ -540,8 +737,8 @@ export default function App(): JSX.Element {
             />
             <div
               data-tour="chat-panel"
-              className="flex-1 flex flex-col overflow-hidden animate-slide-in-right"
-              style={{ background: "var(--bg-panel)" }}
+              className="flex-shrink-0 flex flex-col overflow-hidden animate-slide-in-right"
+              style={{ width: `${chatPanelWidth}px`, background: "var(--bg-panel)" }}
             >
               <ErrorBoundary>
                 <Suspense fallback={null}>
@@ -549,7 +746,7 @@ export default function App(): JSX.Element {
                 </Suspense>
               </ErrorBoundary>
             </div>
-          </div>
+          </>
         )}
 
         {/* Chat toggle when closed */}
@@ -575,7 +772,33 @@ export default function App(): JSX.Element {
         </Suspense>
       </ErrorBoundary>
       {quickOpenVisible && <QuickOpen onClose={() => setQuickOpenVisible(false)} />}
+      <CommandPalette
+        open={paletteVisible}
+        onClose={() => setPaletteVisible(false)}
+        commands={buildCommands({
+          projectPath,
+          hasProject: Boolean(projectPath),
+          openSettings: () => setSettingsOpen(true),
+          openToolchain: () => setToolchainOpen(true),
+          openFolder: handleOpenFolder,
+          newProject: handleNewProject,
+          closeProject: handleCloseProject,
+          toggleSidebar: () => {
+            const { sidePanelWidth: w, setSidePanelWidth: setW } = useSettingsStore.getState()
+            if (w > 0) { _lastSidePanelWidth.current = w; setW(0); _setSidePanelWidth(0) }
+            else { const r = _lastSidePanelWidth.current || 224; setW(r); _setSidePanelWidth(r) }
+          },
+          toggleChat: () => {
+            const { rightPanelOpen: open, setRightPanelOpen: setOpen } = useSettingsStore.getState()
+            setOpen(!open)
+          },
+          toggleTerminal: () => setTerminalOpen(!useSettingsStore.getState().terminalOpen),
+          openQuickFile: () => setQuickOpenVisible(true),
+          openSearchPanel: () => setActivePanel("search")
+        })}
+      />
       <ToastContainer />
+      <UpdateBanner />
 
       {/* Tutorial overlay */}
       {showTutorial && <TutorialOverlay onDone={() => setShowTutorial(false)} />}

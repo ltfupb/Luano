@@ -5,12 +5,18 @@ interface Props {
   onOpenFolder: () => void
   onNewProject: () => void
   onOpenRecent: (path: string) => void
+  onOpenSettings: () => void
 }
 
-export function WelcomeScreen({ onOpenFolder, onNewProject, onOpenRecent }: Props): JSX.Element {
+export function WelcomeScreen({ onOpenFolder, onNewProject, onOpenRecent, onOpenSettings }: Props): JSX.Element {
   const t = useT()
   const recentProjects = useSettingsStore((s) => s.recentProjects)
   const removeRecent = useSettingsStore((s) => s.removeRecentProject)
+  const apiKey = useSettingsStore((s) => s.apiKey)
+  const openaiKey = useSettingsStore((s) => s.openaiKey)
+  const geminiKey = useSettingsStore((s) => s.geminiKey)
+  const localEndpoint = useSettingsStore((s) => s.localEndpoint)
+  const aiConfigured = Boolean(apiKey || openaiKey || geminiKey || localEndpoint)
 
   return (
     <div className="flex-1 flex flex-col items-center justify-center animate-fade-in" style={{ gap: "32px" }}>
@@ -94,6 +100,39 @@ export function WelcomeScreen({ onOpenFolder, onNewProject, onOpenRecent }: Prop
           </div>
         )}
       </div>
+
+      {!aiConfigured && (
+        <button
+          onClick={onOpenSettings}
+          className="flex items-center gap-3 rounded-lg p-3 transition-all duration-150 text-left"
+          style={{
+            maxWidth: "520px",
+            width: "100%",
+            margin: "0 24px",
+            background: "var(--bg-elevated)",
+            border: "1px solid var(--warning)"
+          }}
+          onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "var(--bg-surface)" }}
+          onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "var(--bg-elevated)" }}
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--warning)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+            <line x1="12" y1="9" x2="12" y2="13" />
+            <line x1="12" y1="17" x2="12.01" y2="17" />
+          </svg>
+          <div className="flex flex-col min-w-0 flex-1">
+            <span className="text-xs font-medium" style={{ color: "var(--text-primary)" }}>
+              Set up AI to enable chat and inline edits
+            </span>
+            <span className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>
+              Add an Anthropic, OpenAI, Gemini, or local LLM key in Settings.
+            </span>
+          </div>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+            <polyline points="9 18 15 12 9 6" />
+          </svg>
+        </button>
+      )}
 
       <div className="rounded-lg p-3" style={{ maxWidth: "520px", width: "100%", margin: "0 24px", background: "var(--bg-elevated)", border: "1px solid var(--border-subtle)" }}>
         <p className="text-xs font-medium mb-1" style={{ color: "var(--accent)" }}>{t("welcomeTipTitle")}</p>

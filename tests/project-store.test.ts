@@ -17,6 +17,8 @@ const INITIAL: Parameters<typeof useProjectStore.setState>[0] = {
   activeFile: null,
   fileContents: {},
   lspPort: null,
+  lspStatus: "stopped",
+  lspStartedAt: null,
   dirtyFiles: []
 }
 

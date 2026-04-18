@@ -1,6 +1,7 @@
 import { app, safeStorage, dialog } from "electron"
 import { join } from "path"
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "fs"
+import { randomUUID } from "node:crypto"
 import { log } from "./logger"
 
 // Keys that contain secrets and should be encrypted at rest.
@@ -73,8 +74,11 @@ class SimpleStore {
         return decrypted as unknown as T
       }
     }
-    // Legacy unencrypted object (e.g. license stored before this fix) — re-encrypt immediately
-    if (ENCRYPTED_KEYS.has(key) && raw != null) {
+    // Legacy unencrypted object (e.g. license stored before this fix) — re-encrypt immediately.
+    // Only trigger for non-string values; a plain string that's already encrypted
+    // would have been handled by the branch above (decrypt+return), so reaching
+    // here with a string means it was somehow stored unencrypted as a string.
+    if (ENCRYPTED_KEYS.has(key) && raw != null && typeof raw !== "string") {
       this.set(key, raw)
     }
     return raw as T | undefined
@@ -97,3 +101,17 @@ class SimpleStore {
 }
 
 export const store = new SimpleStore()
+
+/**
+ * Returns a stable anonymous ID for this install. Generated once and persisted.
+ * Used as Sentry `user.id` so the dashboard reports unique-user counts without
+ * collecting PII. Same ID is shared between main and renderer.
+ */
+export function getAnonymousId(): string {
+  let id = store.get<string>("anonymousId")
+  if (!id || typeof id !== "string") {
+    id = randomUUID()
+    store.set("anonymousId", id)
+  }
+  return id
+}

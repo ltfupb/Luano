@@ -4,6 +4,9 @@ import { getFileName } from "../lib/utils"
 
 export type AppTheme = "dark" | "light" | "tokyo-night"
 
+/** Extended thinking / reasoning effort, mirroring Claude Code's `/effort` levels. */
+export type ThinkingEffort = "low" | "medium" | "high" | "xhigh" | "max"
+
 export interface RecentProject {
   path: string
   name: string
@@ -32,6 +35,9 @@ interface SettingsStore {
   terminalHeight: number
   terminalOpen: boolean
   rightPanelOpen: boolean
+  /** true after the very first app launch — used to auto-detect system theme once. */
+  hasInitialized: boolean
+  thinkingEffort: ThinkingEffort
   setLanguage: (lang: string) => void
   setTheme: (theme: AppTheme) => void
   setApiKey: (key: string) => void
@@ -51,6 +57,8 @@ interface SettingsStore {
   setTerminalHeight: (h: number) => void
   setTerminalOpen: (open: boolean) => void
   setRightPanelOpen: (open: boolean) => void
+  setHasInitialized: (v: boolean) => void
+  setThinkingEffort: (e: ThinkingEffort) => void
   addRecentProject: (path: string) => void
   removeRecentProject: (path: string) => void
 }
@@ -74,10 +82,12 @@ export const useSettingsStore = create<SettingsStore>()(
       uiScale: 100,
       recentProjects: [],
       sidePanelWidth: 224,
-      chatPanelWidth: 320,
+      chatPanelWidth: 360,
       terminalHeight: 220,
       terminalOpen: false,
       rightPanelOpen: true,
+      hasInitialized: false,
+      thinkingEffort: "medium" as ThinkingEffort,
       setLanguage: (language) => set({ language }),
       setTheme: (theme) => set({ theme }),
       setApiKey: (apiKey) => set({ apiKey }),
@@ -97,6 +107,8 @@ export const useSettingsStore = create<SettingsStore>()(
       setTerminalHeight: (terminalHeight) => set({ terminalHeight }),
       setTerminalOpen: (terminalOpen) => set({ terminalOpen }),
       setRightPanelOpen: (rightPanelOpen) => set({ rightPanelOpen }),
+      setHasInitialized: (hasInitialized) => set({ hasInitialized }),
+      setThinkingEffort: (thinkingEffort) => set({ thinkingEffort }),
       addRecentProject: (path) => {
         const name = getFileName(path)
         const existing = get().recentProjects.filter((p) => p.path !== path)
@@ -129,7 +141,9 @@ export const useSettingsStore = create<SettingsStore>()(
         chatPanelWidth: state.chatPanelWidth,
         terminalHeight: state.terminalHeight,
         terminalOpen: state.terminalOpen,
-        rightPanelOpen: state.rightPanelOpen
+        rightPanelOpen: state.rightPanelOpen,
+        hasInitialized: state.hasInitialized,
+        thinkingEffort: state.thinkingEffort
       })
     }
   )

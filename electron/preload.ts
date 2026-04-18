@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer, webFrame } from "electron"
 import { electronAPI } from "@electron-toolkit/preload"
+import { randomUUID } from "node:crypto"
 
 export interface ToolEvent {
   tool: string
@@ -22,7 +23,8 @@ const ALLOWED_CHANNELS = [
   "updater:",
   "sidecar:",
   "lint:",
-  "toolchain:"
+  "toolchain:",
+  "menu:"
 ]
 
 const api = {
@@ -82,6 +84,10 @@ const api = {
   aiGetProviderModel: () => ipcRenderer.invoke("ai:get-provider-model"),
   aiSetAdvisor: (enabled: boolean) => ipcRenderer.invoke("ai:set-advisor", enabled),
   aiGetAdvisor: () => ipcRenderer.invoke("ai:get-advisor"),
+  aiSetThinkingEffort: (effort: string) => ipcRenderer.invoke("ai:set-thinking-effort", effort),
+  aiGetThinkingEffort: () => ipcRenderer.invoke("ai:get-thinking-effort"),
+  isDirectory: (p: string): Promise<boolean> => ipcRenderer.invoke("file:is-directory", p),
+  menuSetProjectState: (hasProject: boolean) => ipcRenderer.invoke("menu:set-project-state", hasProject),
   aiGetTokenUsage: () => ipcRenderer.invoke("ai:token-usage"),
   aiResetTokenUsage: () => ipcRenderer.invoke("ai:reset-token-usage"),
   onTokenUsage: (cb: (usage: { input: number; output: number; cacheRead: number }) => void): (() => void) => {
@@ -107,22 +113,23 @@ const api = {
     messages: unknown[],
     context: unknown,
     onChunk: (chunk: string | null) => void,
-    onAdvisor?: (active: boolean) => void
+    onAdvisor?: (active: boolean) => void,
+    onThinking?: (active: boolean) => void
   ): Promise<void> => {
-    const channel = `ai:stream:${Date.now()}`
+    const channel = `ai:stream:${randomUUID()}`
     ipcRenderer.on(channel, (_, chunk) => onChunk(chunk as string | null))
     if (onAdvisor) {
       ipcRenderer.on(`${channel}:advisor`, (_, active) => onAdvisor(active as boolean))
     }
+    if (onThinking) {
+      ipcRenderer.on(`${channel}:thinking`, (_, active) => onThinking(active as boolean))
+    }
     return ipcRenderer.invoke("ai:chat-stream", messages, context, channel).finally(() => {
       ipcRenderer.removeAllListeners(channel)
       ipcRenderer.removeAllListeners(`${channel}:advisor`)
+      ipcRenderer.removeAllListeners(`${channel}:thinking`)
     }) as Promise<void>
   },
-
-  // ── Plan Chat ────────────────────────────────────────────────────────────
-  aiPlanChat: (messages: unknown[], context: unknown): Promise<string[]> =>
-    ipcRenderer.invoke("ai:plan-chat", messages, context),
 
   // ── Inline Edit (Cmd+K) ───────────────────────────────────────────────────
   inlineEdit: (
@@ -140,9 +147,12 @@ const api = {
     onChunk: (chunk: string | null) => void,
     onTool: (event: ToolEvent) => void,
     onRound?: (info: { round: number; max: number }) => void,
-    onAdvisor?: (active: boolean) => void
+    onAdvisor?: (active: boolean) => void,
+    onThinking?: (active: boolean) => void,
+    onApprovalRequest?: (req: { id: string; tool: string; input: Record<string, unknown> }) => void,
+    onAskUserRequest?: (req: { id: string; questions: unknown[] }) => void
   ): Promise<{ modifiedFiles: string[] }> => {
-    const channel = `ai:agent:${Date.now()}`
+    const channel = `ai:agent:${randomUUID()}`
     ipcRenderer.on(channel, (_, chunk) => onChunk(chunk as string | null))
     ipcRenderer.on(`${channel}:tool`, (_, event) => onTool(event as ToolEvent))
     if (onRound) {
@@ -151,6 +161,15 @@ const api = {
     if (onAdvisor) {
       ipcRenderer.on(`${channel}:advisor`, (_, active) => onAdvisor(active as boolean))
     }
+    if (onThinking) {
+      ipcRenderer.on(`${channel}:thinking`, (_, active) => onThinking(active as boolean))
+    }
+    if (onApprovalRequest) {
+      ipcRenderer.on(`${channel}:approve-tool`, (_, req) => onApprovalRequest(req as { id: string; tool: string; input: Record<string, unknown> }))
+    }
+    if (onAskUserRequest) {
+      ipcRenderer.on(`${channel}:ask-user`, (_, req) => onAskUserRequest(req as { id: string; questions: unknown[] }))
+    }
     return ipcRenderer
       .invoke("ai:agent-chat", messages, context, channel)
       .finally(() => {
@@ -158,11 +177,22 @@ const api = {
         ipcRenderer.removeAllListeners(`${channel}:tool`)
         ipcRenderer.removeAllListeners(`${channel}:round`)
         ipcRenderer.removeAllListeners(`${channel}:advisor`)
+        ipcRenderer.removeAllListeners(`${channel}:thinking`)
+        ipcRenderer.removeAllListeners(`${channel}:approve-tool`)
+        ipcRenderer.removeAllListeners(`${channel}:ask-user`)
       }) as Promise<{ modifiedFiles: string[] }>
   },
 
   // ── Agent Abort ───────────────────────────────────────────────────────────
   aiAbort: (): void => { ipcRenderer.send("ai:abort") },
+
+  // ── Tool Approval (destructive ops) ──────────────────────────────────────
+  sendToolApproval: (id: string, approved: boolean): void =>
+    ipcRenderer.send("ai:tool-approval", { id, approved }),
+
+  // ── Ask User (interactive question UI) ───────────────────────────────────
+  sendAskUserResponse: (id: string, answers: Record<string, string>): void =>
+    ipcRenderer.send("ai:ask-user-response", { id, answers }),
 
   // ── Agent Revert (checkpoint rollback) ──────────────────────────────────
   aiRevert: (): Promise<{ success: boolean; reverted?: string[] }> =>
@@ -330,7 +360,27 @@ const api = {
   },
 
   // ── UI Scale ──────────────────────────────────────────────────────────────
-  setZoomFactor: (factor: number) => webFrame.setZoomFactor(factor)
+  setZoomFactor: (factor: number) => webFrame.setZoomFactor(factor),
+
+  // ── Sentry context (sync, called once at renderer boot) ──────────────────
+  sentryGetContext: (): {
+    anonymousId: string
+    version: string
+    environment: string
+    telemetryEnabled: boolean
+  } | null => {
+    try {
+      return ipcRenderer.sendSync("sentry:context-sync") as {
+        anonymousId: string
+        version: string
+        environment: string
+        telemetryEnabled: boolean
+      }
+    } catch {
+      // Main process has Sentry disabled (no DSN) — handler isn't registered.
+      return null
+    }
+  }
 }
 
 if (process.contextIsolated) {

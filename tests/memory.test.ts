@@ -151,6 +151,7 @@ describe("loadInstructions", () => {
 
   it("reads LUANO.md from project root", () => {
     const fp = join(TEST_DIR, "LUANO.md")
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { writeFileSync } = require("fs")
     writeFileSync(fp, "# Project Rules\n- Use strict mode", "utf-8")
     const result = loadInstructions(TEST_DIR)

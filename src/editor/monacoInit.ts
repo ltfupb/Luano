@@ -12,6 +12,7 @@ import { loader } from "@monaco-editor/react"
 import * as monaco from "monaco-editor/esm/vs/editor/edcore.main"
 import editorWorker from "monaco-editor/esm/vs/editor/editor.worker?worker"
 import jsonWorker from "monaco-editor/esm/vs/language/json/json.worker?worker"
+import fallbackWorker from "./fallback.worker?worker"
 
 // Language contributions — only what Luano uses
 import "monaco-editor/esm/vs/basic-languages/lua/lua.contribution"
@@ -23,7 +24,12 @@ import "monaco-editor/esm/vs/basic-languages/markdown/markdown.contribution"
 ;(self as unknown as { MonacoEnvironment: unknown }).MonacoEnvironment = {
   getWorker(_: string, label: string) {
     if (label === "json") return new jsonWorker()
-    return new editorWorker()
+    // editorWorkerService is Monaco's internal worker (diff, word wrap, etc.)
+    if (label === "editorWorkerService") return new editorWorker()
+    // Unknown labels (e.g. from @codingame/monaco-vscode-* via monaco-languageclient)
+    // get a fallback worker that handles loadForeignModule gracefully instead of
+    // rejecting with "Unexpected usage" (ESM limitation of the base editorWorker).
+    return new fallbackWorker()
   }
 }
 

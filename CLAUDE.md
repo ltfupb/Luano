@@ -87,7 +87,15 @@ npx eslint "src/**/*.{ts,tsx}" "electron/**/*.ts" --max-warnings 20
 
 세 명령어 모두 통과해야 CI가 통과한다. **반드시 push 전에 실행할 것.**
 
-### 6. package-lock.json 동기화 — 반드시 `npm install`로 생성
+### 6. 새 AI 모델 릴리즈 시 `FRONTIER_MODELS` 업데이트
+
+새 프론티어 모델 (Claude Opus/Sonnet 5.x, GPT-5/6, Gemini 3 Pro 등)이 `MODELS` 리스트에 추가되면 `electron/ai/provider.ts`의 `FRONTIER_MODELS` Set에도 한 줄 추가해야 한다.
+
+추가 안 하면 새 모델이 "standard" tier로 분류돼 extended Luau 치트시트가 붙고 (불필요한 ~40줄 토큰), `MAX_ROUNDS`가 75로 올라감 (무해하지만 의도 다름).
+
+실패 모드 benign — 깨지진 않지만 프론티어 모델한테 불필요한 scaffolding 붙음.
+
+### 7. package-lock.json 동기화 — 반드시 `npm install`로 생성
 
 CI는 `npm ci`를 사용하므로 `package.json`과 `package-lock.json`이 어긋나면 빌드가 실패한다.
 
@@ -109,11 +117,25 @@ npm install --package-lock-only
 
 **주의:** Electron이 실행 중이면 `node_modules`가 잠겨서 `npm install`이 실패한다. 반드시 앱을 종료한 후 실행할 것.
 
+### 8. externalize vs `!**/node_modules/xxx/**` 일관성 (과거 3번 터진 버그)
+
+`electron.vite.config.ts`의 `mainExternals`에 모듈을 추가할 때, `package.json`의 `build.files`에 같은 모듈의 `!**/node_modules/xxx/**` 제외 패턴이 **절대 남아있으면 안 된다.**
+
+**왜:** externalize = 번들에 포함 안 함, 런타임에 `require()`로 node_modules에서 로드. 그런데 builder가 node_modules를 제외하면 → 런타임에 파일이 없음 → `Cannot find module 'xxx'` → 앱 자체 실행 불가.
+
+**규칙:**
+- `mainExternals`에 추가 → `build.files`의 exclude에서 **반드시 제거**
+- `build.files`에서 exclude 추가 → `mainExternals`에서 **반드시 제거** (번들링)
+- 둘 다 존재하면 빌드는 성공, 설치한 앱은 죽음
+
+**과거 사례:** `@electron-toolkit/utils` (3번), `ws` (1번). 커밋 `5fcd0ce` / `8dd3fbc` / `e89dc43` / `696223d`는 한쪽만 고쳐서 다시 터짐.
+
 ---
 
 ## 릴리즈 히스토리
 
-- **v0.8.2** — Install Size Reduction, Build Bundling and Test Coverage Expansion
+- **v0.8.3** — AI Overhaul, UX Polish and Privacy-First Crash Reporting
+- **v0.8.2** — Studio MCP Integration, AI Quality Improvements and Install Size Reduction
 - **v0.8.1** — Claude Advisor Tool, Agent Tools Expansion and Signal Package
 - **v0.8.0** — Studio Bridge Token Persistence, Markdown Chat and Roblox Class Icons
 - **v0.7.10** — Monaco Multi-language, Cold-start Speedup and Component Refactor

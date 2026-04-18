@@ -26,6 +26,12 @@ export class LspManager {
   private async spawnProcess(projectPath: string): Promise<void> {
     const typeDefsPath = getResourcePath("type-defs", "globalTypes.d.luau")
 
+    // Broadcast "starting" phase so the StatusBar can show a pulsing dot +
+    // elapsed time while the luau-lsp process boots.
+    BrowserWindow.getAllWindows().forEach((win) =>
+      win.webContents.send("sidecar:lsp-status", { status: "starting", port: this.port })
+    )
+
     let proc: ChildProcess | null = null
     try {
       // --sourcemap is an `analyze` subcommand flag, not an `lsp` flag.
@@ -67,6 +73,13 @@ export class LspManager {
       await this.bridge.start()
       log.info(`[lsp] spawned PID=${proc.pid}`)
 
+      // Announce "running" so the StatusBar transitions out of the pulsing
+      // "starting" state. Fire regardless of retry count — the renderer
+      // tracks both phase (status) and reconnection hook (lsp-ready).
+      BrowserWindow.getAllWindows().forEach((win) =>
+        win.webContents.send("sidecar:lsp-status", { status: "running", port: this.port })
+      )
+
       // After a crash recovery, tell the renderer to re-attach its
       // MonacoLanguageClient. The initial start is already handled by the
       // openProject IPC return value, so only fire on retries.
@@ -83,9 +96,10 @@ export class LspManager {
       }
       this.proc = null
       this.bridge = null
-      BrowserWindow.getAllWindows().forEach((win) =>
+      BrowserWindow.getAllWindows().forEach((win) => {
+        win.webContents.send("sidecar:lsp-status", { status: "error", port: null })
         win.webContents.send("sidecar:error", { tool: "luau-lsp", message: String(err) })
-      )
+      })
       throw err
     }
   }
@@ -102,15 +116,21 @@ export class LspManager {
 
     if (!shouldRetry) {
       log.warn(`[lsp] giving up after exit code=${code} retries=${this.retryCount}`)
-      BrowserWindow.getAllWindows().forEach((win) =>
+      BrowserWindow.getAllWindows().forEach((win) => {
+        win.webContents.send("sidecar:lsp-status", { status: "error", port: null })
         win.webContents.send("sidecar:error", { tool: "luau-lsp", message: `luau-lsp exited (code ${code}) after ${this.retryCount} retries` })
-      )
+      })
       return
     }
 
     this.retryCount++
     const delay = Math.min(BASE_DELAY_MS * Math.pow(1.5, this.retryCount - 1), MAX_DELAY_MS)
     log.info(`[lsp] auto-retry ${this.retryCount}/${MAX_AUTO_RETRIES} in ${delay}ms`)
+    // Pre-announce "starting" so the renderer shows the pulsing dot
+    // during the backoff window, not just when the spawn actually fires.
+    BrowserWindow.getAllWindows().forEach((win) =>
+      win.webContents.send("sidecar:lsp-status", { status: "starting", port: this.port })
+    )
     setTimeout(() => {
       if (this.projectPath === path) {
         this.spawnProcess(path).catch((e) => log.error("[lsp] retry failed:", e))
@@ -130,6 +150,10 @@ export class LspManager {
     if (proc && !proc.killed) {
       try { proc.kill() } catch { /* ignore */ }
     }
+
+    BrowserWindow.getAllWindows().forEach((win) =>
+      win.webContents.send("sidecar:lsp-status", { status: "stopped", port: null })
+    )
   }
 
   getPort(): number {

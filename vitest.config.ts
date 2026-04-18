@@ -6,6 +6,7 @@ export default defineConfig({
     environment: "node",
     environmentMatchGlobs: [
       ["tests/*store*.test.ts", "jsdom"],
+      ["tests/**/*.test.tsx", "jsdom"],
       ["tests/smoke/**", "node"]
     ],
     include: ["tests/**/*.test.ts", "tests/**/*.test.tsx"],
@@ -18,10 +19,10 @@ export default defineConfig({
         "**/types.ts"
       ],
       thresholds: {
-        lines: 12,
-        functions: 32,
-        branches: 55,
-        statements: 12
+        lines: 40,
+        functions: 65,
+        branches: 75,
+        statements: 40
       }
     }
   }

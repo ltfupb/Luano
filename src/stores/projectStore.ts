@@ -9,6 +9,8 @@ export interface FileEntry {
   children?: FileEntry[]
 }
 
+export type LspStatus = "stopped" | "starting" | "running" | "error"
+
 interface ProjectStore {
   projectPath: string | null
   fileTree: FileEntry[]
@@ -16,6 +18,8 @@ interface ProjectStore {
   activeFile: string | null
   fileContents: Record<string, string>
   lspPort: number | null
+  lspStatus: LspStatus
+  lspStartedAt: number | null
   dirtyFiles: string[]
 
   setProject: (path: string, tree: FileEntry[], lspPort: number) => void
@@ -27,6 +31,7 @@ interface ProjectStore {
   setFileTree: (tree: FileEntry[]) => void
   markClean: (path: string) => void
   reorderFiles: (from: number, to: number) => void
+  setLspStatus: (status: LspStatus) => void
 }
 
 export const useProjectStore = create<ProjectStore>()(
@@ -38,10 +43,18 @@ export const useProjectStore = create<ProjectStore>()(
       activeFile: null,
       fileContents: {},
       lspPort: null,
+      lspStatus: "stopped",
+      lspStartedAt: null,
       dirtyFiles: [],
 
       setProject: (path, tree, lspPort) =>
-        set({ projectPath: path, fileTree: tree, lspPort }),
+        set({
+          projectPath: path,
+          fileTree: tree,
+          lspPort,
+          lspStatus: "running",
+          lspStartedAt: null
+        }),
 
       closeProject: () =>
         set({
@@ -51,6 +64,8 @@ export const useProjectStore = create<ProjectStore>()(
           activeFile: null,
           fileContents: {},
           lspPort: null,
+          lspStatus: "stopped",
+          lspStartedAt: null,
           dirtyFiles: []
         }),
 
@@ -93,6 +108,18 @@ export const useProjectStore = create<ProjectStore>()(
         const [moved] = files.splice(from, 1)
         files.splice(to, 0, moved)
         set({ openFiles: files })
+      },
+
+      setLspStatus: (status) => {
+        const prev = get().lspStatus
+        if (prev === status) return
+        // Start the elapsed timer only when transitioning INTO "starting".
+        // Clearing it on any non-starting transition keeps the StatusBar clock
+        // from lingering after the process actually comes up.
+        const lspStartedAt = status === "starting"
+          ? (prev === "starting" ? get().lspStartedAt : Date.now())
+          : null
+        set({ lspStatus: status, lspStartedAt })
       }
     }),
     {

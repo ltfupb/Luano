@@ -131,35 +131,37 @@ export const generateMigration = ds?.generateMigration ?? (() => "")
 // ── MCP Client ──────────────────────────────────────────────────────────────
 
 const mcp = tryRequire<{
-  getConsoleOutput: () => any
-  isStudioConnected: () => any
+  mcpGetConsole: (maxLines?: number) => Promise<string | null>
+  isMcpConnected: () => Promise<boolean>
 }>("../mcp/client")
 
-export const getConsoleOutput = mcp?.getConsoleOutput ?? (async () => null)
-export const isStudioConnected = mcp?.isStudioConnected ?? (() => false)
+export const getConsoleOutput = mcp?.mcpGetConsole ?? (async () => null)
+export const isStudioConnected = mcp?.isMcpConnected ?? (() => Promise.resolve(false))
 
 // ── Bridge Server ───────────────────────────────────────────────────────────
 
 const bridge = tryRequire<{
   startBridgeServer: (port?: number) => void
+  stopBridgeServer: () => void
   setBridgeWindow: (win: any) => void
   getBridgeTree: () => any
   getBridgeLogs: () => any
   isBridgeConnected: () => boolean
   clearBridgeLogs: () => void
   queueScript: (code: string) => string
-  getCommandResult: (id: string) => any
+  consumeCommandResult: (id: string) => any
   getBridgeToken: () => string
 }>("../bridge/server")
 
 export const startBridgeServer = bridge?.startBridgeServer ?? (() => {})
+export const stopBridgeServer = bridge?.stopBridgeServer ?? (() => {})
 export const setBridgeWindow = bridge?.setBridgeWindow ?? (() => {})
 export const getBridgeTree = bridge?.getBridgeTree ?? (() => null)
 export const getBridgeLogs = bridge?.getBridgeLogs ?? (() => [])
 export const isBridgeConnected = bridge?.isBridgeConnected ?? (() => false)
 export const clearBridgeLogs = bridge?.clearBridgeLogs ?? (() => {})
 export const queueScript = bridge?.queueScript ?? (() => "")
-export const getCommandResult = bridge?.getCommandResult ?? (() => null)
+export const consumeCommandResult = bridge?.consumeCommandResult ?? (() => null)
 export const getBridgeToken = bridge?.getBridgeToken ?? (() => "")
 
 // ── Agent (chat + inline edit + checkpoint) ────────────────────────────────

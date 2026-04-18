@@ -5,7 +5,7 @@ import { is } from "@electron-toolkit/utils"
 import { hasFeature } from "../pro"
 import {
   getBridgeToken, getBridgeTree, getBridgeLogs, isBridgeConnected,
-  clearBridgeLogs, queueScript, getCommandResult,
+  clearBridgeLogs, queueScript, consumeCommandResult,
   getConsoleOutput, isStudioConnected
 } from "../pro/modules"
 import { log } from "../logger"
@@ -98,7 +98,7 @@ export function registerBridgeHandlers(): void {
   })
   ipcMain.handle("bridge:get-command-result", (_, id: string) => {
     if (!hasFeature("studio-bridge")) return PRO_REQUIRED("studio-bridge")
-    return getCommandResult(id)
+    return consumeCommandResult(id)
   })
 
   // ── Plugin Install ─────────────────────────────────────────────────────────

@@ -7,6 +7,7 @@
 
 import { join } from "path"
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "fs"
+import { randomUUID } from "crypto"
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
@@ -68,7 +69,7 @@ export function addMemory(
   const store = loadStore(projectPath)
   const now = new Date().toISOString()
   const memory: Memory = {
-    id: `mem_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    id: `mem_${randomUUID()}`,
     type,
     content,
     createdAt: now,

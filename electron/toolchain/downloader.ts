@@ -31,40 +31,55 @@ function getPlatformKey(): "win" | "mac" | "linux" {
 /** Follow redirects and download a file with timeout and retry */
 function downloadFile(url: string, destPath: string, attempt = 0): Promise<void> {
   return new Promise((resolve, reject) => {
-    const follow = (currentUrl: string, depth = 0): void => {
-      if (depth > 5) { reject(new Error("Too many redirects")); return }
+    let currentReq: ReturnType<typeof httpsGet> | null = null
+    let settled = false
+    const settle = (fn: () => void) => { if (!settled) { settled = true; fn() } }
 
-      const req = httpsGet(currentUrl, (res) => {
+    const follow = (currentUrl: string, depth = 0): void => {
+      if (depth > 5) { settle(() => reject(new Error("Too many redirects"))); return }
+
+      // Destroy previous request before creating new one (redirect path).
+      // Remove its error listener first so a late socket-level error from the
+      // destroyed request can't retrigger the retry chain.
+      if (currentReq) {
+        currentReq.removeAllListeners("error")
+        currentReq.destroy()
+      }
+
+      currentReq = httpsGet(currentUrl, (res) => {
         if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+          res.resume() // drain body to free socket
           follow(res.headers.location, depth + 1)
           return
         }
         if (res.statusCode !== 200) {
-          reject(new Error(`HTTP ${res.statusCode} downloading ${currentUrl}`))
+          res.resume()
+          settle(() => reject(new Error(`HTTP ${res.statusCode} downloading ${currentUrl}`)))
           return
         }
         clearTimeout(timer)
         const ws = createWriteStream(destPath)
-        pipeline(res, ws).then(resolve).catch(reject)
+        pipeline(res, ws).then(() => settle(resolve)).catch((e) => settle(() => reject(e)))
       })
 
-      req.on("error", (err) => {
+      currentReq.on("error", (err) => {
         clearTimeout(timer)
         if (attempt < MAX_RETRIES) {
           log.info(`Download failed (attempt ${attempt + 1}), retrying: ${err.message}`)
-          downloadFile(url, destPath, attempt + 1).then(resolve).catch(reject)
+          downloadFile(url, destPath, attempt + 1).then(() => settle(resolve)).catch((e) => settle(() => reject(e)))
         } else {
-          reject(err)
+          settle(() => reject(err))
         }
       })
     }
 
     const timer = setTimeout(() => {
+      if (currentReq) currentReq.destroy()  // free the hanging socket
       if (attempt < MAX_RETRIES) {
         log.info(`Download timed out (attempt ${attempt + 1}), retrying...`)
-        downloadFile(url, destPath, attempt + 1).then(resolve).catch(reject)
+        downloadFile(url, destPath, attempt + 1).then(() => settle(resolve)).catch((e) => settle(() => reject(e)))
       } else {
-        reject(new Error(`Download timed out after ${DOWNLOAD_TIMEOUT_MS}ms`))
+        settle(() => reject(new Error(`Download timed out after ${DOWNLOAD_TIMEOUT_MS}ms`)))
       }
     }, DOWNLOAD_TIMEOUT_MS)
 

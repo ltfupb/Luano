@@ -1,3 +1,6 @@
+interface AskUserOption { label: string; description?: string; preview?: string }
+interface AskUserQuestion { question: string; header: string; options: AskUserOption[]; multiSelect?: boolean }
+
 interface AiApi {
   // Keys
   aiSetKey: (key: string) => Promise<{ success: boolean }>
@@ -30,6 +33,13 @@ interface AiApi {
   aiSetAdvisor: (enabled: boolean) => Promise<{ success: boolean }>
   aiGetAdvisor: () => Promise<boolean>
 
+  // Thinking effort (low | medium | high | xhigh | max)
+  aiSetThinkingEffort: (effort: string) => Promise<{ success: boolean }>
+  aiGetThinkingEffort: () => Promise<"low" | "medium" | "high" | "xhigh" | "max">
+
+  // Native menu — tell main to rebuild with hasProject state
+  menuSetProjectState: (hasProject: boolean) => Promise<{ success: boolean }>
+
   // Agent Todos
   onTodosUpdated: (cb: (todos: Array<{ content: string; status: string }>) => void) => () => void
 
@@ -47,11 +57,9 @@ interface AiApi {
     messages: unknown[],
     context: unknown,
     onChunk: (chunk: string | null) => void,
-    onAdvisor?: (active: boolean) => void
+    onAdvisor?: (active: boolean) => void,
+    onThinking?: (active: boolean) => void
   ) => Promise<void>
-
-  // Plan Chat
-  aiPlanChat: (messages: unknown[], context: unknown) => Promise<string[]>
 
   // Inline Edit
   inlineEdit: (
@@ -73,11 +81,21 @@ interface AiApi {
       success: boolean
     }) => void,
     onRound?: (info: { round: number; max: number }) => void,
-    onAdvisor?: (active: boolean) => void
+    onAdvisor?: (active: boolean) => void,
+    onThinking?: (active: boolean) => void,
+    onApprovalRequest?: (req: { id: string; tool: string; input: Record<string, unknown> }) => void,
+    onAskUserRequest?: (req: { id: string; questions: AskUserQuestion[] }) => void
   ) => Promise<{ modifiedFiles: string[] }>
+
 
   // Agent Abort / Revert
   aiAbort: () => void
+
+  // Tool Approval (destructive ops)
+  sendToolApproval: (id: string, approved: boolean) => void
+
+  // Ask User (interactive question UI)
+  sendAskUserResponse: (id: string, answers: Record<string, string>) => void
   aiRevert: () => Promise<{ success: boolean; reverted?: string[] }>
   onCheckpointAvailable: (cb: (info: { fileCount: number; files: string[] }) => void) => () => void
 

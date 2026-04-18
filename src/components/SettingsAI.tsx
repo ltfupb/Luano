@@ -143,7 +143,8 @@ export function SettingsAI({ models, setModels }: {
     apiKey, setApiKey, openaiKey, setOpenAIKey, geminiKey, setGeminiKey,
     localEndpoint, setLocalEndpoint, localModel, setLocalModel,
     provider, setProvider, model, setModel,
-    advisorEnabled, setAdvisorEnabled
+    advisorEnabled, setAdvisorEnabled,
+    thinkingEffort, setThinkingEffort
   } = useSettingsStore()
   const t = useT()
   const [localModelsLoading, setLocalModelsLoading] = useState(false)
@@ -225,6 +226,40 @@ export function SettingsAI({ models, setModels }: {
               </option>
             ))}
           </select>
+        </div>
+      )}
+
+      {/* Thinking Effort — only where the model supports it */}
+      {((provider === "anthropic" && (model.includes("opus") || model.includes("sonnet")))
+        || (provider === "openai" && /^o[1-9]/.test(model))) && (
+        <div className="flex flex-col gap-1.5">
+          <div className="flex items-center justify-between">
+            <SectionLabel>Thinking Effort</SectionLabel>
+            <select
+              value={thinkingEffort}
+              onChange={async (e) => {
+                const v = e.target.value as "low" | "medium" | "high" | "xhigh" | "max"
+                setThinkingEffort(v)
+                await window.api.aiSetThinkingEffort(v)
+              }}
+              className="px-2 py-1 rounded-md outline-none"
+              style={{
+                background: "var(--bg-base)",
+                border: "1px solid var(--border-subtle)",
+                color: "var(--text-primary)",
+                fontSize: "12px"
+              }}
+            >
+              <option value="low">Low</option>
+              <option value="medium">Medium</option>
+              <option value="high">High</option>
+              <option value="xhigh">Extra High</option>
+              <option value="max">Max</option>
+            </select>
+          </div>
+          <span style={{ fontSize: "10px", color: "var(--text-muted)" }}>
+            Extended thinking budget. Higher = deeper reasoning, slower + more tokens. Matches Claude Code.
+          </span>
         </div>
       )}
 

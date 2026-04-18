@@ -197,7 +197,7 @@ export async function deactivateLicense(): Promise<{ success: boolean; error?: s
 
     const data = await res.json() as { deactivated?: boolean; error?: string }
 
-    if (!res.ok && !data.deactivated) {
+    if (!res.ok || !data.deactivated) {
       return { success: false, error: data.error ?? "Deactivation failed" }
     }
 

@@ -143,9 +143,26 @@ export function migrateProjectForArgon(projectPath: string): boolean {
   }
 }
 
+/**
+ * Idempotent: writes selene.toml with `std = "roblox"` only if it doesn't
+ * exist. Without this, Selene defaults to the Lua stdlib and flags every
+ * `game:GetService()` / `script` / `Instance` reference as an error, which
+ * makes the AI agent "fix" valid Roblox code during its verify phase.
+ *
+ * Must run on every project-open, not just initProject — existing Rojo
+ * projects without selene.toml were the common case that hit this bug.
+ */
+export function ensureLintConfig(dirPath: string, resourcesDir: string): void {
+  const seleneFile = join(dirPath, "selene.toml")
+  if (existsSync(seleneFile)) return
+  try {
+    const templateToml = readFileSync(join(resourcesDir, "templates/empty/selene.toml"), "utf-8")
+    writeFileSync(seleneFile, templateToml, "utf-8")
+  } catch { /* don't block project open on a missing template */ }
+}
+
 export function initProject(dirPath: string, resourcesDir: string): void {
   const projectFile = join(dirPath, "default.project.json")
-  const seleneFile = join(dirPath, "selene.toml")
   const srcDir = join(dirPath, "src")
 
   if (!existsSync(projectFile)) {
@@ -154,10 +171,7 @@ export function initProject(dirPath: string, resourcesDir: string): void {
     writeFileSync(projectFile, templateJson.replace('"MyGame"', JSON.stringify(projectName)), "utf-8")
   }
 
-  if (!existsSync(seleneFile)) {
-    const templateToml = readFileSync(join(resourcesDir, "templates/empty/selene.toml"), "utf-8")
-    writeFileSync(seleneFile, templateToml, "utf-8")
-  }
+  ensureLintConfig(dirPath, resourcesDir)
 
   for (const sub of ["server", "shared", "client"]) {
     const subDir = join(srcDir, sub)

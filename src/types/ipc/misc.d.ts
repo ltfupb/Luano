@@ -8,4 +8,10 @@ interface MiscApi {
   on: (channel: string, callback: (...args: unknown[]) => void) => () => void
   off: (channel: string) => void
   setZoomFactor: (factor: number) => void
+  sentryGetContext: () => {
+    anonymousId: string
+    version: string
+    environment: string
+    telemetryEnabled: boolean
+  } | null
 }

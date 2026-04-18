@@ -1,4 +1,5 @@
 import { ipcMain, WebContents } from "electron"
+import { randomUUID } from "crypto"
 import * as pty from "node-pty"
 
 interface PtyEntry {
@@ -44,7 +45,7 @@ function spawnPty(id: string, sender: WebContents, cwd?: string): void {
 export function registerTerminalHandlers(): void {
   ipcMain.handle("terminal:create", (event, cwd?: string) => {
     try {
-      const id = `term-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
+      const id = `term-${randomUUID()}`
       spawnPty(id, event.sender, cwd)
       return { id }
     } catch (err) {

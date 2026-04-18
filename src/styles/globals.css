@@ -209,6 +209,16 @@ button:active {
 .animate-glow-pulse   { animation: glowPulse 2.4s ease-in-out infinite; }
 .animate-blink        { animation: blink 1.1s step-end infinite; }
 
+/* Status dot pulse — used by StatusBar to signal "starting" phase of
+   sync (Rojo/Argon) and LSP. Opacity-based so it doesn't shift layout. */
+@keyframes statusPulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.45; transform: scale(0.78); }
+}
+.status-pulse {
+  animation: statusPulse 1.2s ease-in-out infinite;
+}
+
 /* ── Session list item interactions ─────────────────────────── */
 .session-item {
   transition: background 120ms ease, transform 120ms ease, box-shadow 120ms ease;

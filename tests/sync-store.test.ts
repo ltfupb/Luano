@@ -15,7 +15,8 @@ const INITIAL: Parameters<typeof useSyncStore.setState>[0] = {
   status: "stopped",
   port: null,
   toolName: "Argon",
-  error: null
+  error: null,
+  startedAt: null
 }
 
 beforeEach(() => {

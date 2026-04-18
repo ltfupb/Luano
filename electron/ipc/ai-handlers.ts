@@ -1,7 +1,7 @@
 import { ipcMain, BrowserWindow } from "electron"
 import { readFileSync } from "fs"
 import {
-  chat, chatStream, planChat, abortAgent,
+  chat, chatStream, abortAgent,
   setApiKey, getApiKey,
   setOpenAIKey, getOpenAIKey,
   setGeminiKey, getGeminiKey,
@@ -11,6 +11,7 @@ import {
   fetchLocalModels,
   setProvider, setModel, getProviderAndModel,
   setAdvisorEnabled, getAdvisorEnabled,
+  setThinkingEffort, getThinkingEffort,
   MODELS, getTokenUsage, resetTokenUsage
 } from "../ai/provider"
 import { hasFeature } from "../pro"
@@ -32,7 +33,7 @@ import {
 import {
   type AIContext,
   aiGeneratedFiles, PRO_REQUIRED,
-  buildFullSystemPrompt, buildRAGContext
+  buildFullSystemPrompt
 } from "./shared"
 
 export function registerAIHandlers(): void {
@@ -96,6 +97,23 @@ export function registerAIHandlers(): void {
     return { success: true }
   })
   ipcMain.handle("ai:get-advisor", () => getAdvisorEnabled())
+  ipcMain.handle("ai:set-thinking-effort", (_, effort: string) => {
+    const valid = new Set(["low", "medium", "high", "xhigh", "max"])
+    if (!valid.has(effort)) return { success: false }
+    setThinkingEffort(effort as "low" | "medium" | "high" | "xhigh" | "max")
+    return { success: true }
+  })
+  ipcMain.handle("ai:get-thinking-effort", () => getThinkingEffort())
+
+  // Menu rebuild — called by renderer when a project opens/closes so items
+  // like "Close Project" / "Quick Open" toggle enabled state correctly.
+  ipcMain.handle("menu:set-project-state", async (_, hasProject: boolean) => {
+    const { installMenu } = await import("../menu")
+    const { BrowserWindow } = await import("electron")
+    const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0] ?? null
+    installMenu(win, hasProject === true)
+    return { success: true }
+  })
   ipcMain.handle("ai:token-usage", () => getTokenUsage())
   ipcMain.handle("ai:reset-token-usage", () => {
     resetTokenUsage()
@@ -118,19 +136,10 @@ export function registerAIHandlers(): void {
     "ai:chat-stream",
     async (_, messages: unknown[], contextData: unknown, streamChannel: string) => {
       const ctx = contextData as AIContext
-      const { lastUserMsg, docsContext } = await buildRAGContext(messages)
-      await chatStream(messages as never, buildFullSystemPrompt(ctx, { docsContext }), streamChannel)
-      recordQuery({ userQuery: lastUserMsg, apisReferenced: [], ragHit: !!docsContext })
+      await chatStream(messages as never, buildFullSystemPrompt(ctx), streamChannel)
       return { success: true }
     }
   )
-
-  // ── Plan Chat ─────────────────────────────────────────────────────────────
-  ipcMain.handle("ai:plan-chat", async (_, messages: unknown[], contextData: unknown) => {
-    const ctx = contextData as AIContext
-    const { docsContext } = await buildRAGContext(messages)
-    return planChat(messages as never, buildFullSystemPrompt(ctx, { docsContext }))
-  })
 
   // ── Inline Edit (Cmd+K) [Pro] ──────────────────────────────────────────────
   ipcMain.handle(
@@ -162,7 +171,7 @@ export function registerAIHandlers(): void {
       if (!hasFeature("agent")) return PRO_REQUIRED("agent")
       const ctx = contextData as AIContext
 
-      const { lastUserMsg, docsContext } = await buildRAGContext(messages)
+      const lastUserMsg = ((messages as Array<{role:string;content:string}>).findLast(m => m.role === "user")?.content ?? "")
 
       let bridgeContext: string | undefined
       if (isBridgeConnected()) {
@@ -184,9 +193,9 @@ export function registerAIHandlers(): void {
         bridgeContext = lines.join("\n")
       }
 
-      const fullPrompt = buildFullSystemPrompt(ctx, { docsContext, bridgeContext, includeProgress: true })
+      const fullPrompt = buildFullSystemPrompt(ctx, { bridgeContext, includeProgress: true })
       const result = await agentChat(messages as never, fullPrompt, streamChannel, ctx.projectPath)
-      recordQuery({ userQuery: lastUserMsg, apisReferenced: [], ragHit: !!docsContext })
+      recordQuery({ userQuery: lastUserMsg, apisReferenced: [], ragHit: false })
 
       for (const fp of result.modifiedFiles) {
         try {

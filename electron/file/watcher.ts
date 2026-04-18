@@ -40,9 +40,19 @@ export function watchProject(projectPath: string): void {
   })
 
   watcher.on("unlink", (filePath) => {
+    // Clear any pending debounce for the deleted file
+    const pending = debounceTimers.get(filePath)
+    if (pending) {
+      clearTimeout(pending)
+      debounceTimers.delete(filePath)
+    }
     BrowserWindow.getAllWindows().forEach((win) => {
       win.webContents.send("file:deleted", filePath)
     })
+  })
+
+  watcher.on("error", (err) => {
+    console.warn("[Watcher] FSWatcher error:", err)
   })
 }
 

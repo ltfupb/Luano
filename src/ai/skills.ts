@@ -136,6 +136,31 @@ For each issue found, report:
 - **Fix**: a concrete code snippet showing the correct pattern
 
 If a file is clean, skip it. End with a summary: X critical, Y high, Z medium issues found.`
+  },
+  {
+    command: "/wag",
+    label: "Game Wiki",
+    description: "Generate or update the game design wiki (WAG)",
+    prompt: `Manage the game design wiki (WAG) for this project.
+
+STEP 1: Check if wag/ exists by running list_files on the project root.
+
+IF wag/ does NOT exist:
+  Ask the user to describe their game concept, then generate the wiki:
+  - Create entity files in wag/ with appropriate subdirectories
+  - YAML frontmatter: type, tags, created (today's date)
+  - Link related entities with [[wikilinks]] (path relative to wag/, no .md extension)
+  - Bidirectional links WITH meaning — not bare lists:
+    GOOD: "Dropped by [[monsters/slime]] (5%)"  BAD: "- [[monsters/slime]]"
+  - 20-60 lines per entity. Categories come from the game concept, not assumptions.
+  - Run wag_update at the end to build INDEX.md
+
+IF wag/ DOES exist:
+  1. Read wag/INDEX.md to understand existing entities
+  2. Ask the user what's missing or needs to be added
+  3. Create only the new entities they describe
+  4. Link new entities to existing ones with meaningful bidirectional links
+  5. Run wag_update at the end`
   }
 ]
 

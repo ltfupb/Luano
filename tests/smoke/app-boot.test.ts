@@ -52,7 +52,6 @@ vi.mock("../../electron/logger", () => ({
 vi.mock("../../electron/ai/provider", () => ({
   chat: vi.fn(),
   chatStream: vi.fn(),
-  planChat: vi.fn(),
   abortAgent: vi.fn(),
   setApiKey: vi.fn(),
   getApiKey: vi.fn(),
@@ -109,7 +108,7 @@ vi.mock("../../electron/pro/modules", () => ({
   getBridgeToken: vi.fn().mockReturnValue(null),
   clearBridgeLogs: vi.fn(),
   queueScript: vi.fn(),
-  getCommandResult: vi.fn(),
+  consumeCommandResult: vi.fn(),
   getConsoleOutput: vi.fn(),
   isStudioConnected: vi.fn().mockReturnValue(false),
   analyzeTopology: vi.fn(),

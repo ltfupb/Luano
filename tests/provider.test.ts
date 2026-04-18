@@ -16,7 +16,11 @@ import {
   setLocalKey, getLocalKey, setLocalModel, getLocalModel,
   trackUsage, getTokenUsage, resetTokenUsage,
   abortAgent, _setActiveAbortController,
-  getAdvisorEnabled
+  getAdvisorEnabled,
+  getAdvisorModel, setAdvisorModel,
+  getNetworkTimeoutMs, setNetworkTimeoutMs,
+  MIN_NETWORK_TIMEOUT_MS, DEFAULT_NETWORK_TIMEOUT_MS,
+  getModelTier
 } from "../electron/ai/provider"
 
 describe("toCachedSystem", () => {
@@ -248,5 +252,94 @@ describe("isAdvisorAvailable", () => {
     setModel("gpt-4o")
     setAdvisorEnabled(true)
     expect(isAdvisorAvailable()).toBe(false)
+  })
+})
+
+describe("getAdvisorModel / setAdvisorModel", () => {
+  it("persists opus-4-7 as an opt-in override", () => {
+    setAdvisorModel("claude-opus-4-7")
+    expect(getAdvisorModel()).toBe("claude-opus-4-7")
+  })
+
+  it("persists sonnet-4-6 as a valid override", () => {
+    setAdvisorModel("claude-sonnet-4-6")
+    expect(getAdvisorModel()).toBe("claude-sonnet-4-6")
+  })
+
+  it("persists opus-4-6 and treats it as the safe default", () => {
+    setAdvisorModel("claude-opus-4-6")
+    expect(getAdvisorModel()).toBe("claude-opus-4-6")
+  })
+})
+
+describe("getNetworkTimeoutMs / setNetworkTimeoutMs", () => {
+  it("uses DEFAULT when no valid value is stored", () => {
+    // Set an invalid value then observe it falls back
+    setNetworkTimeoutMs(MIN_NETWORK_TIMEOUT_MS - 1)
+    expect(getNetworkTimeoutMs()).toBe(DEFAULT_NETWORK_TIMEOUT_MS)
+  })
+
+  it("accepts values >= MIN_NETWORK_TIMEOUT_MS", () => {
+    setNetworkTimeoutMs(60_000)
+    expect(getNetworkTimeoutMs()).toBe(60_000)
+  })
+
+  it("falls back to default for values below the minimum floor", () => {
+    setNetworkTimeoutMs(29_999)
+    expect(getNetworkTimeoutMs()).toBe(DEFAULT_NETWORK_TIMEOUT_MS)
+  })
+
+  it("DEFAULT_NETWORK_TIMEOUT_MS is above 60s (old value) — ensures Opus 4.7 gets headroom", () => {
+    expect(DEFAULT_NETWORK_TIMEOUT_MS).toBeGreaterThan(60_000)
+  })
+})
+
+describe("getModelTier", () => {
+  it("classifies Opus 4.7 as frontier", () => {
+    setProvider("anthropic")
+    setModel("claude-opus-4-7")
+    expect(getModelTier()).toBe("frontier")
+  })
+
+  it("classifies Sonnet 4.6 as frontier", () => {
+    setProvider("anthropic")
+    setModel("claude-sonnet-4-6")
+    expect(getModelTier()).toBe("frontier")
+  })
+
+  it("classifies Haiku 4.5 as standard (smaller model)", () => {
+    setProvider("anthropic")
+    setModel("claude-haiku-4-5-20251001")
+    expect(getModelTier()).toBe("standard")
+  })
+
+  it("classifies gpt-4o as frontier", () => {
+    setProvider("openai")
+    setModel("gpt-4o")
+    expect(getModelTier()).toBe("frontier")
+  })
+
+  it("classifies gpt-4o-mini as standard", () => {
+    setProvider("openai")
+    setModel("gpt-4o-mini")
+    expect(getModelTier()).toBe("standard")
+  })
+
+  it("classifies gemini-2.5-pro as frontier", () => {
+    setProvider("gemini")
+    setModel("gemini-2.5-pro")
+    expect(getModelTier()).toBe("frontier")
+  })
+
+  it("classifies gemini-2.5-flash as standard", () => {
+    setProvider("gemini")
+    setModel("gemini-2.5-flash")
+    expect(getModelTier()).toBe("standard")
+  })
+
+  it("classifies any local model as standard regardless of name", () => {
+    setProvider("local")
+    setModel("llama3-70b")
+    expect(getModelTier()).toBe("standard")
   })
 })
