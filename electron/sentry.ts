@@ -1,10 +1,14 @@
 /**
  * electron/sentry.ts — Crash reporting (main process)
  *
- * Opt-IN telemetry: Sentry only initializes when the user has explicitly
- * enabled `telemetryEnabled` in settings. This matches the semantics of
- * `electron/telemetry/collector.ts` (Pro telemetry) and what ARCHITECTURE.md
- * documents — consent must be affirmative, not assumed.
+ * Gated by its OWN store key `crashReports` — kept separate from the AI
+ * sqlite telemetry (`telemetryEnabled` in collector.ts) so a user can opt
+ * into crash reports without sharing AI training data, or vice versa.
+ *
+ * Consent is affirmative: a first-run prompt asks before anything is sent.
+ * `crashReports` defaults to undefined; `initSentry` only fires when it is
+ * explicitly true, and a runtime re-check inside beforeSend honours opt-out
+ * mid-session.
  */
 
 import * as Sentry from "@sentry/electron/main"
@@ -15,31 +19,52 @@ import { store, getAnonymousId } from "./store"
 declare const __SENTRY_DSN__: string
 const SENTRY_DSN = __SENTRY_DSN__
 
-function isTelemetryOptedIn(): boolean {
-  return store.get("telemetryEnabled") === true
+function isCrashReportsEnabled(): boolean {
+  return store.get("crashReports") === true
+}
+
+/**
+ * One-time migration for users who consented to the old single
+ * `telemetryEnabled` toggle (which controlled both AI sqlite + Sentry).
+ * Their prior consent is forwarded to `crashReports`. New installs see the
+ * first-run prompt; old opt-out users stay opted out (undefined → false path).
+ */
+function migrateFromLegacyToggle(): void {
+  if (store.get("crashReports") !== undefined) return
+  if (store.get("telemetryEnabled") === true) {
+    store.set("crashReports", true)
+    store.set("crashReportsPrompted", true)
+    log.info("[sentry] migrated legacy telemetryEnabled=true to crashReports=true")
+  }
 }
 
 export function initSentry(): void {
   // Register the renderer-sync bridge first, unconditionally. Renderer calls
   // this via sendSync at boot; registering here — before any DSN or opt-in
   // gate — means the call always resolves fast instead of blocking. The
-  // payload carries `telemetryEnabled: false` when disabled so the renderer
-  // naturally short-circuits without any extra branching on its side.
+  // payload carries `crashReportsEnabled: false` when disabled so the
+  // renderer naturally short-circuits without any extra branching.
   ipcMain.on("sentry:context-sync", (e) => {
     e.returnValue = {
       anonymousId: getAnonymousId(),
       version: app.getVersion(),
       environment: app.isPackaged ? "production" : "development",
-      telemetryEnabled: SENTRY_DSN ? isTelemetryOptedIn() : false
+      crashReportsEnabled: SENTRY_DSN ? isCrashReportsEnabled() : false
     }
   })
 
   if (!SENTRY_DSN) return  // No DSN in public builds — Sentry disabled entirely
 
+  // Run the legacy-toggle migration AFTER the DSN check so public builds
+  // never write Sentry-specific consent into the store. If a user upgrades
+  // from a public mirror build to a DSN-bearing build later, they'll see
+  // the first-run prompt on next launch instead of being pre-opted-in.
+  migrateFromLegacyToggle()
+
   // Opt-IN gate: do not init SDK at all if user hasn't consented. Avoids
   // starting sessions, registering crash handlers that phone home, etc.
-  if (!isTelemetryOptedIn()) {
-    log.info("[sentry] telemetry not opted in — SDK not initialized")
+  if (!isCrashReportsEnabled()) {
+    log.info("[sentry] crashReports not opted in — SDK not initialized")
     return
   }
 
@@ -52,6 +77,11 @@ export function initSentry(): void {
     release: `luano@${app.getVersion()}`,
     environment: app.isPackaged ? "production" : "development",
     sampleRate: 1.0,
+    // Sessions = app launch → close (or 30 min idle). Drives "Crash-free
+    // Users %" + Releases adoption rate. @sentry/electron v7 ships session
+    // tracking ON by default via its bundled integrations (no explicit
+    // option to set), so this comment serves as the contract: if a future
+    // SDK version disables it by default we need to wire it back up.
     // Active-user count on the Sentry dashboard comes from user.id. Anonymous
     // UUID generated once per install — no PII, no cross-install linkage.
     initialScope: {
@@ -70,14 +100,18 @@ export function initSentry(): void {
     // Runtime re-check: user can toggle opt-out during a session. Main-process
     // events are dropped immediately; renderer stops on next app launch.
     beforeSend(event) {
-      if (!isTelemetryOptedIn()) return null
+      if (!isCrashReportsEnabled()) return null
       return event
     },
     beforeBreadcrumb(breadcrumb) {
-      if (!isTelemetryOptedIn()) return null
+      if (!isCrashReportsEnabled()) return null
       return breadcrumb
     }
   })
+
+  // First event of the session — proves the pipeline works and gives the
+  // dashboard a "Users affected" count even when nothing crashes.
+  Sentry.captureMessage("app:launched", "info")
 
   log.info("[sentry] init complete (opted in)")
 }

@@ -3,6 +3,7 @@ import { useSettingsStore } from "../stores/settingsStore"
 import { useProjectStore } from "../stores/projectStore"
 import { useT } from "../i18n/useT"
 import { SettingsAI, type ProviderModels } from "./SettingsAI"
+import { OpenSourceLicenses } from "./OpenSourceLicenses"
 
 interface SettingsPanelProps {
   onClose: () => void
@@ -160,6 +161,7 @@ export function SettingsPanel({ onClose }: SettingsPanelProps): JSX.Element {
   const [customSkills, setCustomSkills] = useState<CustomSkill[]>([])
   const [editingSkill, setEditingSkill] = useState<{ index: number; skill: CustomSkill } | null>(null)
   const [telemetryEnabled, setTelemetryEnabled] = useState(false)
+  const [crashReportsEnabled, setCrashReportsEnabled] = useState(false)
   const [proStatus, setProStatus] = useState<{ isPro: boolean } | null>(null)
   const [licenseInfo, setLicenseInfo] = useState<{ isActive: boolean; customerName?: string; customerEmail?: string } | null>(null)
   const [licenseKeyInput, setLicenseKeyInput] = useState("")
@@ -185,6 +187,7 @@ export function SettingsPanel({ onClose }: SettingsPanelProps): JSX.Element {
 
     // Load telemetry and pro status
     window.api.telemetryIsEnabled().then((v: boolean) => setTelemetryEnabled(v)).catch(() => {})
+    window.api.crashReportsIsEnabled().then((v: boolean) => setCrashReportsEnabled(v)).catch(() => {})
     window.api.getProStatus().then((s: { isPro: boolean }) => setProStatus(s)).catch(() => {})
     window.api.licenseInfo().then(setLicenseInfo).catch(() => {})
     // eslint-disable-next-line react-hooks/exhaustive-deps -- init once on mount
@@ -488,28 +491,56 @@ export function SettingsPanel({ onClose }: SettingsPanelProps): JSX.Element {
           {/* Divider */}
           <div style={{ height: "1px", background: "var(--border-subtle)" }} />
 
-          {/* Telemetry */}
-          <div className="flex flex-col gap-2">
+          {/* Telemetry + Crash Reports — separate consents, separate data flows */}
+          <div className="flex flex-col gap-3">
             <SectionLabel>{t("data")}</SectionLabel>
-            <label className="flex items-center gap-2.5 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={telemetryEnabled}
-                onChange={async (e) => {
-                  const v = e.target.checked
-                  setTelemetryEnabled(v)
-                  await window.api.telemetrySetEnabled(v)
-                }}
-                className="accent-[var(--accent)]"
-                style={{ width: 14, height: 14 }}
-              />
-              <span style={{ fontSize: "11px", color: "var(--text-secondary)" }}>
-                {t("telemetryDesc")}
+
+            {/* Crash Reports → Sentry (external) */}
+            <div className="flex flex-col gap-1">
+              <label className="flex items-center gap-2.5 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={crashReportsEnabled}
+                  onChange={async (e) => {
+                    const v = e.target.checked
+                    setCrashReportsEnabled(v)
+                    await window.api.crashReportsSetEnabled(v)
+                    await window.api.crashReportsMarkPrompted()
+                  }}
+                  className="accent-[var(--accent)]"
+                  style={{ width: 14, height: 14 }}
+                />
+                <span style={{ fontSize: "11px", color: "var(--text-secondary)" }}>
+                  {t("crashReportsLabel")}
+                </span>
+              </label>
+              <span style={{ fontSize: "10px", color: "var(--text-muted)", lineHeight: 1.4, marginLeft: 22 }}>
+                {t("crashReportsNote")}
               </span>
-            </label>
-            <span style={{ fontSize: "10px", color: "var(--text-muted)", lineHeight: 1.4 }}>
-              {t("telemetryNote")}
-            </span>
+            </div>
+
+            {/* AI sqlite (local only) */}
+            <div className="flex flex-col gap-1">
+              <label className="flex items-center gap-2.5 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={telemetryEnabled}
+                  onChange={async (e) => {
+                    const v = e.target.checked
+                    setTelemetryEnabled(v)
+                    await window.api.telemetrySetEnabled(v)
+                  }}
+                  className="accent-[var(--accent)]"
+                  style={{ width: 14, height: 14 }}
+                />
+                <span style={{ fontSize: "11px", color: "var(--text-secondary)" }}>
+                  {t("telemetryDesc")}
+                </span>
+              </label>
+              <span style={{ fontSize: "10px", color: "var(--text-muted)", lineHeight: 1.4, marginLeft: 22 }}>
+                {t("telemetryNote")}
+              </span>
+            </div>
           </div>
 
           {/* Divider */}
@@ -608,6 +639,12 @@ export function SettingsPanel({ onClose }: SettingsPanelProps): JSX.Element {
               </div>
             )}
           </div>
+
+          {/* Divider */}
+          <div style={{ height: "1px", background: "var(--border-subtle)" }} />
+
+          {/* Open source licenses (CC BY 4.0 attribution for Roblox docs + bundled OSS) */}
+          <OpenSourceLicenses />
         </div>
 
         {/* Footer */}

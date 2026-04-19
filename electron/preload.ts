@@ -1,6 +1,11 @@
 import { contextBridge, ipcRenderer, webFrame } from "electron"
 import { electronAPI } from "@electron-toolkit/preload"
-import { randomUUID } from "node:crypto"
+
+// Preload runs in sandbox mode, so `node:crypto` isn't in the allowed
+// module list. The Web Crypto API (`crypto.randomUUID`) ships in every
+// Chromium-based renderer context Electron uses and is a drop-in
+// replacement for the unique IPC channel IDs we need here.
+const randomUUID = (): string => crypto.randomUUID()
 
 export interface ToolEvent {
   tool: string
@@ -265,10 +270,22 @@ const api = {
   skillsSave: (projectPath: string, skills: unknown[]): Promise<{ success: boolean }> =>
     ipcRenderer.invoke("skills:save", projectPath, skills),
 
-  // ── Telemetry ──────────────────────────────────────────────────────────────
+  // ── Telemetry (AI sqlite, local only) ─────────────────────────────────────
   telemetryIsEnabled: () => ipcRenderer.invoke("telemetry:is-enabled"),
   telemetrySetEnabled: (enabled: boolean) => ipcRenderer.invoke("telemetry:set-enabled", enabled),
   telemetryStats: () => ipcRenderer.invoke("telemetry:stats"),
+
+  // ── Crash Reports (Sentry, separate consent) ──────────────────────────────
+  crashReportsIsEnabled: (): Promise<boolean> => ipcRenderer.invoke("crash-reports:is-enabled"),
+  crashReportsSetEnabled: (enabled: boolean): Promise<{ success: boolean }> =>
+    ipcRenderer.invoke("crash-reports:set-enabled", enabled),
+  crashReportsIsPrompted: (): Promise<boolean> => ipcRenderer.invoke("crash-reports:is-prompted"),
+  crashReportsMarkPrompted: (): Promise<{ success: boolean }> =>
+    ipcRenderer.invoke("crash-reports:mark-prompted"),
+
+  // ── Third-Party Licenses ──────────────────────────────────────────────────
+  licensesOpen: (): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke("licenses:open"),
 
   // ── Error Explainer ───────────────────────────────────────────────────────
   explainError: (errorText: string, context: unknown): Promise<string> =>
@@ -367,14 +384,14 @@ const api = {
     anonymousId: string
     version: string
     environment: string
-    telemetryEnabled: boolean
+    crashReportsEnabled: boolean
   } | null => {
     try {
       return ipcRenderer.sendSync("sentry:context-sync") as {
         anonymousId: string
         version: string
         environment: string
-        telemetryEnabled: boolean
+        crashReportsEnabled: boolean
       }
     } catch {
       // Main process has Sentry disabled (no DSN) — handler isn't registered.

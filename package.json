@@ -1,6 +1,6 @@
 {
   "name": "luano",
-  "version": "0.8.3",
+  "version": "0.8.4",
   "description": "The all-in-one AI-powered code editor for Roblox developers",
   "homepage": "https://github.com/ltfupb/luano",
   "repository": {
@@ -18,6 +18,8 @@
     "package:win": "electron-vite build && electron-builder --win --x64",
     "package:mac": "electron-vite build && electron-builder --mac",
     "package:linux": "electron-vite build && electron-builder --linux",
+    "trim-api": "node scripts/trim-api-dump.js",
+    "licenses": "node scripts/generate-third-party-licenses.js",
     "lint": "eslint \"src/**/*.{ts,tsx}\" \"electron/**/*.ts\"",
     "typecheck": "tsc -p tsconfig.web.json --noEmit && tsc -p tsconfig.node.json --noEmit",
     "test": "vitest run",
@@ -144,6 +146,10 @@
       {
         "from": "resources/studio-plugin",
         "to": "studio-plugin"
+      },
+      {
+        "from": "resources/THIRD_PARTY_LICENSES.txt",
+        "to": "THIRD_PARTY_LICENSES.txt"
       }
     ],
     "win": {

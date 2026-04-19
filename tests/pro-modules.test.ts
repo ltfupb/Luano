@@ -34,11 +34,6 @@ import * as m from "../electron/pro/modules"
 // ── Export shape tests ─────────────────────────────────────────────────────────
 
 describe("pro/modules — all exports are callable", () => {
-  it("isInternalKey is a function returning boolean", () => {
-    expect(typeof m.isInternalKey).toBe("function")
-    expect(typeof m.isInternalKey("someKey")).toBe("boolean")
-  })
-
   it("buildGlobalSummary is an async function returning { globalSummary }", async () => {
     const result = await m.buildGlobalSummary("/project")
     expect(result).toHaveProperty("globalSummary")

@@ -1,6 +1,7 @@
-import { ipcMain, dialog, app } from "electron"
+import { ipcMain, dialog, app, shell } from "electron"
 import { join } from "path"
-import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync, lstatSync } from "fs"
+import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync, lstatSync, statSync } from "fs"
+import { resolve as pathResolve } from "path"
 import { is } from "@electron-toolkit/utils"
 import { syncManager, lspManager } from "../main"
 import { readDir, readFile, writeFile, createFile, createFolder, renameEntry, deleteEntry, moveEntry, initProject, ensureLintConfig } from "../file/project"
@@ -18,6 +19,7 @@ import {
   type DataStoreSchema
 } from "../pro/modules"
 import { aiGeneratedFiles, PRO_REQUIRED, collectLuauFiles, setCurrentProject, getCurrentProject } from "./shared"
+import { store } from "../store"
 import { isPro } from "../pro"
 import { activateLicense, deactivateLicense, getLicenseInfo, validateLicense as revalidateLicense } from "../pro/license"
 import { getToolchainConfig, getActiveTool, setProjectTool, setGlobalDefault, isMinimumToolchainReady, hasProjectConfig, initProjectConfig } from "../toolchain/config"
@@ -188,8 +190,30 @@ export function registerProjectHandlers(): void {
   })
 
   // ── File Search ─────────────────────────────────────────────────────────────
+  // Bounded by time, file size, and result count so a malformed query on a
+  // large repo (or a compromised renderer pointing at a huge tree) can't
+  // freeze the main process. Also scoped to the currently-open project so
+  // renderer input can't walk arbitrary filesystem paths.
   ipcMain.handle("file:search", (_, projectPath: string, query: string) => {
     if (!query.trim()) return []
+    const current = getCurrentProject()
+    // path.resolve normalizes slashes, `..`, and (on Windows) drive-letter
+    // casing so `C:/proj`, `C:\proj`, and `C:\Proj\..\Proj` all compare
+    // equal to the currently-open project. Without this, a renderer that
+    // normalizes paths differently from shared.ts silently gets empty
+    // results, and path-traversal-style strings aren't caught either.
+    if (!current) return []
+    try {
+      if (pathResolve(projectPath) !== pathResolve(current)) return []
+    } catch {
+      return []
+    }
+
+    const MAX_FILE_BYTES = 2 * 1024 * 1024  // skip > 2MB files (logs, minified bundles)
+    const TIMEOUT_MS = 5_000
+    const MAX_RESULTS = 500
+    const startedAt = Date.now()
+
     const results: Array<{ file: string; line: number; text: string }> = []
     const lowerQuery = query.toLowerCase()
 
@@ -197,22 +221,28 @@ export function registerProjectHandlers(): void {
     const SKIP_DIRS = new Set(["node_modules", ".git", "Packages", "DevPackages"])
 
     const walk = (dir: string): void => {
+      if (results.length >= MAX_RESULTS) return
+      if (Date.now() - startedAt > TIMEOUT_MS) return
       if (!existsSync(dir)) return
       let entries
       try { entries = readdirSync(dir, { withFileTypes: true }) } catch { return }
 
       for (const entry of entries) {
+        if (results.length >= MAX_RESULTS) return
+        if (Date.now() - startedAt > TIMEOUT_MS) return
         if (entry.name.startsWith(".") || SKIP_DIRS.has(entry.name)) continue
         const fullPath = join(dir, entry.name)
         if (entry.isDirectory()) {
           walk(fullPath)
         } else if (SEARCH_EXTS.test(entry.name)) {
           try {
+            const st = statSync(fullPath)
+            if (st.size > MAX_FILE_BYTES) continue
             const lines = readFileSync(fullPath, "utf-8").split("\n")
             for (let i = 0; i < lines.length; i++) {
               if (lines[i].toLowerCase().includes(lowerQuery)) {
                 results.push({ file: fullPath, line: i + 1, text: lines[i].trim() })
-                if (results.length >= 500) return
+                if (results.length >= MAX_RESULTS) return
               }
             }
           } catch { /* skip unreadable */ }
@@ -289,13 +319,46 @@ export function registerProjectHandlers(): void {
     return { success: true }
   })
 
-  // ── Telemetry ──────────────────────────────────────────────────────────────
+  // ── Telemetry (AI sqlite, local only) ─────────────────────────────────────
   ipcMain.handle("telemetry:is-enabled", () => telemetryEnabled())
-  ipcMain.handle("telemetry:set-enabled", (_, enabled: boolean) => {
-    setTelemetry(enabled)
+  ipcMain.handle("telemetry:set-enabled", (_, enabled: unknown) => {
+    setTelemetry(enabled === true)
     return { success: true }
   })
   ipcMain.handle("telemetry:stats", () => telemetryStats())
+
+  // ── Crash Reports (Sentry, separate consent) ──────────────────────────────
+  // `crashReports` is a distinct store key from `telemetryEnabled` so users
+  // can opt into crash reports without sharing AI training data, and vice
+  // versa. Sentry SDK is only initialised if `crashReports === true` at app
+  // launch, so toggling ON here takes effect on next launch (told via a
+  // restart hint in the renderer dialog). Toggling OFF takes effect
+  // immediately — `beforeSend` re-checks the store every event.
+  ipcMain.handle("crash-reports:is-enabled", () => store.get("crashReports") === true)
+  ipcMain.handle("crash-reports:set-enabled", (_, enabled: unknown) => {
+    // Coerce so a buggy/compromised renderer can't poison the store with
+    // strings, objects, etc. Only true ever enables; everything else is off.
+    store.set("crashReports", enabled === true)
+    return { success: true }
+  })
+  ipcMain.handle("crash-reports:is-prompted", () => store.get("crashReportsPrompted") === true)
+  ipcMain.handle("crash-reports:mark-prompted", () => {
+    store.set("crashReportsPrompted", true)
+    return { success: true }
+  })
+
+  // ── Third-Party Licenses ──────────────────────────────────────────────────
+  // Hands the bundled THIRD_PARTY_LICENSES.txt to the user's default text
+  // viewer. File lives under process.resourcesPath in packaged builds and
+  // under the repo's resources/ folder in dev so either environment works.
+  ipcMain.handle("licenses:open", async () => {
+    const prodPath = join(process.resourcesPath ?? app.getAppPath(), "THIRD_PARTY_LICENSES.txt")
+    const devPath = join(app.getAppPath(), "resources", "THIRD_PARTY_LICENSES.txt")
+    const target = existsSync(prodPath) ? prodPath : existsSync(devPath) ? devPath : null
+    if (!target) return { success: false, error: "licenses file not found" }
+    const err = await shell.openPath(target)
+    return err ? { success: false, error: err } : { success: true }
+  })
 
   // ── Batch Operations ─────────────────────────────────────────────────────
   ipcMain.handle("batch:format-all", async (_, projectPath: string) => {

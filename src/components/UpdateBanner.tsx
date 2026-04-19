@@ -1,5 +1,7 @@
 import { useState, useEffect } from "react"
 import { useIpcEvent } from "../hooks/useIpc"
+import { ConfirmDialog } from "./ConfirmDialog"
+import { useT } from "../i18n/useT"
 
 type UpdateStatus = "idle" | "checking" | "available" | "downloading" | "downloaded" | "error"
 interface UpdateState {
@@ -9,8 +11,15 @@ interface UpdateState {
 }
 
 export function UpdateBanner(): JSX.Element | null {
+  const t = useT()
   const [update, setUpdate] = useState<UpdateState>({ status: "idle" })
   const [dismissed, setDismissed] = useState(false)
+  // Second confirmation before actually quitting the app to install. Without
+  // this, clicking the green "Restart" button in the banner was a one-click
+  // quit — risky if the user is mid-edit. The banner's X dismiss still
+  // handles the "not now" case, so this dialog just needs a clear Install
+  // Now + Cancel. No "Later" wording — that's the X button's job.
+  const [confirmInstall, setConfirmInstall] = useState(false)
 
   useIpcEvent("updater:status", (data) => {
     const next = data as UpdateState
@@ -38,7 +47,7 @@ export function UpdateBanner(): JSX.Element | null {
     if (update.status === "available") {
       await window.api.updaterDownload()
     } else if (isDownloaded) {
-      await window.api.updaterInstall()
+      setConfirmInstall(true)
     }
   }
 
@@ -137,6 +146,20 @@ export function UpdateBanner(): JSX.Element | null {
         <span style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
           {update.progress ?? 0}% downloaded
         </span>
+      )}
+
+      {confirmInstall && (
+        <ConfirmDialog
+          title={t("updateConfirmTitle").replace("{version}", update.version ?? "")}
+          body=""
+          confirmLabel={t("updateConfirmAccept")}
+          cancelLabel={t("updateConfirmCancel")}
+          onConfirm={() => {
+            setConfirmInstall(false)
+            void window.api.updaterInstall()
+          }}
+          onCancel={() => setConfirmInstall(false)}
+        />
       )}
     </div>
   )

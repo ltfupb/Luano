@@ -135,7 +135,12 @@ function createWindow(): void {
       preload: join(__dirname, "../preload/index.js"),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: false
+      // sandbox:true restricts the preload's Node.js surface to a curated
+      // subset. `randomUUID` was the only `node:crypto` consumer in the
+      // preload and it now comes from Web Crypto, so flipping this on is
+      // a pure defense-in-depth gain: if an XSS ever reaches the preload,
+      // it can't reach into `fs`, `child_process`, etc.
+      sandbox: true
     }
   }
   if (typeof state.x === "number" && typeof state.y === "number") {

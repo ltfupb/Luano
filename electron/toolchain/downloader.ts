@@ -8,7 +8,7 @@ import { join } from "path"
 import { createWriteStream, mkdirSync, existsSync, chmodSync, readdirSync, copyFileSync, rmSync, statSync } from "fs"
 import { get as httpsGet } from "https"
 import { pipeline } from "stream/promises"
-import { execSync } from "child_process"
+import { execFileSync } from "child_process"
 import { tmpdir } from "os"
 import { getUserBinDir, isBinaryAvailable } from "../sidecar"
 import { TOOL_REGISTRY } from "./registry"
@@ -87,13 +87,16 @@ function downloadFile(url: string, destPath: string, attempt = 0): Promise<void>
   })
 }
 
-/** Extract a zip file to a directory */
+/** Extract a zip file to a directory.
+ *  Uses execFileSync with an argv array so paths containing spaces, non-ASCII
+ *  characters (Korean usernames, OneDrive paths), or quote characters can't
+ *  break shell interpretation. */
 function extractZip(zipPath: string, destDir: string): void {
   mkdirSync(destDir, { recursive: true })
   if (process.platform === "win32") {
-    execSync(`tar -xf "${zipPath}" -C "${destDir}"`, { stdio: "pipe" })
+    execFileSync("tar", ["-xf", zipPath, "-C", destDir], { stdio: "pipe" })
   } else {
-    execSync(`unzip -o "${zipPath}" -d "${destDir}"`, { stdio: "pipe" })
+    execFileSync("unzip", ["-o", zipPath, "-d", destDir], { stdio: "pipe" })
   }
 }
 
@@ -101,7 +104,7 @@ function extractZip(zipPath: string, destDir: string): void {
 function clearQuarantine(binPath: string): void {
   if (process.platform !== "darwin") return
   try {
-    execSync(`xattr -d com.apple.quarantine "${binPath}"`, { stdio: "pipe" })
+    execFileSync("xattr", ["-d", "com.apple.quarantine", binPath], { stdio: "pipe" })
   } catch {
     // Attribute may not exist — not an error
   }

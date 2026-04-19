@@ -1,6 +1,6 @@
 import { app, safeStorage, dialog } from "electron"
 import { join } from "path"
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from "fs"
+import { existsSync, readFileSync, writeFileSync, mkdirSync, renameSync, openSync, closeSync, fsyncSync, unlinkSync } from "fs"
 import { randomUUID } from "node:crypto"
 import { log } from "./logger"
 
@@ -12,11 +12,14 @@ const ENCRYPTED_KEYS = new Set(["apiKey", "openaiKey", "geminiKey", "license"])
 class SimpleStore {
   private data: Record<string, unknown> = {}
   private filePath: string
+  private tmpPath: string
+  private encryptionWarned = false
 
   constructor(name = "config") {
     const userDataPath = app.getPath("userData")
     mkdirSync(userDataPath, { recursive: true })
     this.filePath = join(userDataPath, `${name}.json`)
+    this.tmpPath = `${this.filePath}.tmp`
     this.load()
   }
 
@@ -31,14 +34,45 @@ class SimpleStore {
     }
   }
 
+  /**
+   * Atomic write: tmp file + fsync + rename. If the process crashes mid-write,
+   * the main config file is either the previous version (rename didn't happen)
+   * or the new version (rename completed), never a half-written blob. On
+   * Windows, rename over an existing file is atomic via ReplaceFile.
+   */
   private save(): void {
     try {
-      writeFileSync(this.filePath, JSON.stringify(this.data, null, 2), "utf-8")
+      const payload = JSON.stringify(this.data, null, 2)
+      writeFileSync(this.tmpPath, payload, "utf-8")
+      // Force the tmp file's bytes to disk before the rename — otherwise a
+      // power loss between write and rename can leave an empty tmp file that
+      // wins the rename and loses settings.
+      const fd = openSync(this.tmpPath, "r+")
+      try { fsyncSync(fd) } finally { closeSync(fd) }
+      renameSync(this.tmpPath, this.filePath)
     } catch (err) {
       log.error("Failed to save config", err)
+      // Clean up orphaned tmp file so the next save doesn't fail trying to
+      // open the same name with a dirty handle.
+      try { if (existsSync(this.tmpPath)) unlinkSync(this.tmpPath) } catch { /* noop */ }
       dialog.showErrorBox(
         "Settings Save Failed",
         `Could not save settings to ${this.filePath}. Changes may be lost on restart.`
+      )
+    }
+  }
+
+  /** Warn once if the OS keychain isn't available. Common on headless Linux
+   *  without a keyring; unusual (worth investigating) on macOS/Windows. Stored
+   *  secrets silently fall back to plaintext in that case. */
+  private warnIfEncryptionMissing(): void {
+    if (this.encryptionWarned) return
+    if (!safeStorage.isEncryptionAvailable()) {
+      this.encryptionWarned = true
+      log.warn(
+        "[store] OS keychain unavailable — API keys and license info will be " +
+        "stored in plaintext in config.json. Expected on headless Linux " +
+        "without a keyring; unusual on macOS/Windows (investigate)."
       )
     }
   }
@@ -48,12 +82,16 @@ class SimpleStore {
     if (safeStorage.isEncryptionAvailable()) {
       return safeStorage.encryptString(value).toString("base64")
     }
+    this.warnIfEncryptionMissing()
     return value // fallback: plaintext if OS keychain unavailable
   }
 
   /** Decrypt a string. Handles both encrypted (base64) and legacy plaintext values */
   private decrypt(stored: string): string {
-    if (!safeStorage.isEncryptionAvailable()) return stored
+    if (!safeStorage.isEncryptionAvailable()) {
+      this.warnIfEncryptionMissing()
+      return stored
+    }
     try {
       const buf = Buffer.from(stored, "base64")
       return safeStorage.decryptString(buf)

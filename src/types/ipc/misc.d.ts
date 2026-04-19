@@ -12,6 +12,6 @@ interface MiscApi {
     anonymousId: string
     version: string
     environment: string
-    telemetryEnabled: boolean
+    crashReportsEnabled: boolean
   } | null
 }

@@ -13,15 +13,6 @@ function tryRequire<T>(id: string): T | null {
   try { return require(join(__dirname, id)) } catch { return null }
 }
 
-// ── Internal Keys (Pro-only, gitignored) ───────────────────────────────────
-
-const keys = tryRequire<{
-  INTERNAL_KEYS: Set<string>
-}>("./internal-keys")
-
-export const isInternalKey = (key: string): boolean =>
-  keys?.INTERNAL_KEYS?.has(key) ?? false
-
 // ── AI Context ──────────────────────────────────────────────────────────────
 
 const ctx = tryRequire<{

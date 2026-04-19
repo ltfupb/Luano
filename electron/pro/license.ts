@@ -8,8 +8,6 @@
 import { hostname } from "os"
 import { store } from "../store"
 
-import { isInternalKey } from "./modules"
-
 const LS_API = "https://api.lemonsqueezy.com/v1/licenses"
 const LUANO_PRODUCT_ID = 937627
 
@@ -69,20 +67,6 @@ export async function activateLicense(key: string): Promise<{
   customerName?: string
   customerEmail?: string
 }> {
-  // Internal dev key — skip API, activate permanently
-  if (isInternalKey(key)) {
-    storeLicense({
-      key,
-      instanceId: "internal",
-      valid: true,
-      customerName: "Developer",
-      customerEmail: "",
-      activatedAt: new Date().toISOString(),
-      lastValidatedAt: new Date().toISOString()
-    })
-    return { success: true, customerName: "Developer" }
-  }
-
   try {
     const res = await fetch(`${LS_API}/activate`, {
       method: "POST",
@@ -133,12 +117,6 @@ export async function validateLicense(): Promise<boolean> {
   const license = getStoredLicense()
   if (!license) return false
 
-  // Internal dev key — always valid, no API call
-  if (license.instanceId === "internal") {
-    storeLicense({ ...license, valid: true, lastValidatedAt: new Date().toISOString() })
-    return true
-  }
-
   try {
     const res = await fetch(`${LS_API}/validate`, {
       method: "POST",
@@ -178,12 +156,6 @@ export async function validateLicense(): Promise<boolean> {
 export async function deactivateLicense(): Promise<{ success: boolean; error?: string }> {
   const license = getStoredLicense()
   if (!license) return { success: true }
-
-  // Internal dev key — just clear locally, no API call
-  if (license.instanceId === "internal") {
-    clearLicense()
-    return { success: true }
-  }
 
   try {
     const res = await fetch(`${LS_API}/deactivate`, {

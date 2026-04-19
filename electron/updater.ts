@@ -76,7 +76,11 @@ export function setupUpdater(): void {
   })
 
   ipcMain.handle("updater:install", () => {
-    autoUpdater.quitAndInstall(false, true)
+    // isSilent=true: pass /S to NSIS so the setup wizard doesn't show on
+    // update installs. Without this, every update flashes the full
+    // "choose directory" wizard even though the user already chose one at
+    // first install. isForceRunAfter=true relaunches the app post-install.
+    autoUpdater.quitAndInstall(true, true)
     return { success: true }
   })
 

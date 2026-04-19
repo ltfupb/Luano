@@ -109,6 +109,17 @@ export default function App(): JSX.Element {
     setHasInitialized(true)
   }, [])
 
+  // First-run crash-reports prompt. Until the user gives an explicit answer,
+  // Sentry stays dormant — without this prompt nobody opts in and the
+  // dashboard stays empty (which is exactly what happened in pre-v0.8.4
+  // builds where the toggle lived only in Settings).
+  const [showCrashPrompt, setShowCrashPrompt] = useState(false)
+  useEffect(() => {
+    void window.api.crashReportsIsPrompted().then((prompted) => {
+      if (!prompted) setShowCrashPrompt(true)
+    })
+  }, [])
+
   // Sync thinking effort → main process on boot and whenever user changes it.
   const thinkingEffort = useSettingsStore((s) => s.thinkingEffort)
   useEffect(() => {
@@ -802,6 +813,27 @@ export default function App(): JSX.Element {
 
       {/* Tutorial overlay */}
       {showTutorial && <TutorialOverlay onDone={() => setShowTutorial(false)} />}
+
+      {/* First-run crash-reports prompt — must come before TutorialOverlay
+          dismissal handlers so it sits visually on top while answering. */}
+      {showCrashPrompt && (
+        <ConfirmDialog
+          title={t("crashReportsPromptTitle")}
+          body={t("crashReportsPromptBody")}
+          confirmLabel={t("crashReportsPromptAccept")}
+          cancelLabel={t("crashReportsPromptDecline")}
+          onConfirm={async () => {
+            await window.api.crashReportsSetEnabled(true)
+            await window.api.crashReportsMarkPrompted()
+            setShowCrashPrompt(false)
+          }}
+          onCancel={async () => {
+            await window.api.crashReportsSetEnabled(false)
+            await window.api.crashReportsMarkPrompted()
+            setShowCrashPrompt(false)
+          }}
+        />
+      )}
 
       {switchConfirm && (
         <ConfirmDialog

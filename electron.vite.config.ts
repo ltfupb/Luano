@@ -116,6 +116,32 @@ export default defineConfig({
       rollupOptions: {
         input: {
           index: resolve(__dirname, "src/index.html")
+        },
+        output: {
+          // Monaco (~6-8 MB when tree-shaken) was duplicated across the
+          // EditorPane lazy chunk and the monacoInit chunk because
+          // `@monaco-editor/react`'s dynamic loader API hides the import
+          // from the static module graph. Force Monaco + the VSCode/LSP
+          // glue + the markdown pipeline into dedicated shared chunks so
+          // each is bundled exactly once and can be cached independently
+          // across updates.
+          manualChunks(id: string): string | undefined {
+            const nm = id.replace(/\\/g, "/")
+            if (nm.includes("/node_modules/monaco-editor/")) return "monaco"
+            if (nm.includes("/node_modules/@codingame/")) return "monaco-vscode"
+            if (nm.includes("/node_modules/monaco-languageclient/")) return "monaco-vscode"
+            if (nm.includes("/node_modules/vscode-languageclient/")) return "monaco-vscode"
+            if (nm.includes("/node_modules/vscode-jsonrpc/")) return "monaco-vscode"
+            if (nm.includes("/node_modules/vscode-languageserver-")) return "monaco-vscode"
+            if (nm.includes("/node_modules/react-markdown/")) return "markdown"
+            if (nm.includes("/node_modules/remark-")) return "markdown"
+            if (nm.includes("/node_modules/rehype-")) return "markdown"
+            if (nm.includes("/node_modules/micromark")) return "markdown"
+            if (nm.includes("/node_modules/mdast-")) return "markdown"
+            if (nm.includes("/node_modules/hast-")) return "markdown"
+            if (nm.includes("/node_modules/unist-")) return "markdown"
+            return undefined
+          }
         }
       }
     },

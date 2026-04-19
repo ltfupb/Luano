@@ -2,8 +2,8 @@
  * src/sentry.ts — Crash reporting (renderer process)
  *
  * Opt-IN: only initializes when the main process reports
- * `telemetryEnabled === true`. Matches main's gating semantics so that
- * turning telemetry off in Settings prevents renderer errors from ever
+ * `crashReportsEnabled === true`. Mirrors main's gating semantics so that
+ * turning the toggle off in Settings prevents renderer errors from ever
  * reaching Sentry.
  */
 
@@ -22,7 +22,7 @@ export function initSentryRenderer(): void {
   // Opt-IN gate: skip init entirely if user hasn't consented. No network
   // traffic, no session start, no breadcrumbs. User can enable in settings
   // and restart to begin collection.
-  if (!ctx || !ctx.telemetryEnabled) return
+  if (!ctx || !ctx.crashReportsEnabled) return
 
   Sentry.init({
     dsn: SENTRY_DSN,
