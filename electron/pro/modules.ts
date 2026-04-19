@@ -27,10 +27,21 @@ export const buildGlobalSummary = ctx?.buildGlobalSummary
 /** Community-edition system prompt — structured like Claude Code's own prompt. */
 function communitySystemPrompt(opts: Record<string, any>): string {
   const sections: string[] = []
+  const mode = opts.mode as ("chat" | "agent" | "plan" | undefined)
 
-  // ── Identity
-  sections.push(`You are Luano, an AI coding assistant specialized in Roblox (Luau) development.
+  // ── Identity (mode-aware)
+  if (mode === "chat") {
+    sections.push(`You are Luano, an AI assistant for Roblox (Luau) development.
+You do NOT have tools, filesystem access, a terminal, or a live Studio session. You cannot edit files or run commands. The user applies any code you write manually.
+Never say things like "I'll add this" or "I'll modify that" — you can't. Reply with direct answers and code in markdown blocks. If the user needs real edits, tell them to switch to Agent mode.`)
+  } else if (mode === "plan") {
+    sections.push(`You are Luano, an AI planner for Roblox (Luau) development.
+You propose plans. You do NOT execute anything — no file edits, no tool use, no commands.
+Reply with a concrete, numbered plan: steps, file paths, commands to run, risks/open questions at the end. Sketch enough for the user to approve, not a full implementation. When they approve, they'll switch to Agent mode.`)
+  } else {
+    sections.push(`You are Luano, an AI coding assistant specialized in Roblox (Luau) development.
 You help users write, debug, and improve Luau code. You understand Roblox services, APIs, RemoteEvents, DataStores, and the client/server model.`)
+  }
 
   // ── Context
   if (opts.globalSummary) {
@@ -74,7 +85,12 @@ If you can say it in one sentence, do not use three.`)
   return sections.join("\n\n")
 }
 
-export const buildSystemPrompt = ctx?.buildSystemPrompt ?? communitySystemPrompt
+// Route: chat/plan modes ALWAYS use community prompt (skip Pro's tool-heavy prefix).
+// Agent mode uses Pro prompt if available, community otherwise.
+export const buildSystemPrompt = (opts: Record<string, any>): string => {
+  if (opts.mode === "chat" || opts.mode === "plan") return communitySystemPrompt(opts)
+  return ctx?.buildSystemPrompt ? ctx.buildSystemPrompt(opts) : communitySystemPrompt(opts)
+}
 
 export const buildDocsContext = ctx?.buildDocsContext
   ?? (async (): Promise<string> => "")

@@ -19,6 +19,8 @@ export interface AIContext {
   attachedFiles?: Array<{ path: string; content: string }>
   memories?: string
   instructions?: string
+  /** Chat mode hint — tweaks system prompt tone (chat replies with code blocks, plan proposes steps, agent executes) */
+  mode?: "chat" | "agent" | "plan"
 }
 
 // ── Shared state ─────────────────────────────────────────────────────────────
@@ -84,7 +86,8 @@ export function buildFullSystemPrompt(
       currentFileContent: ctx.currentFileContent,
       docsContext: opts?.docsContext || undefined,
       bridgeContext: opts?.bridgeContext,
-      attachedFiles: ctx.attachedFiles
+      attachedFiles: ctx.attachedFiles,
+      mode: ctx.mode
     })
   ]
 

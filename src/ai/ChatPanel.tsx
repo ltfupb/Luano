@@ -70,6 +70,14 @@ function IconPlan(): JSX.Element {
   )
 }
 
+function IconChat(): JSX.Element {
+  return (
+    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+    </svg>
+  )
+}
+
 function IconHistory(): JSX.Element {
   return (
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -134,7 +142,7 @@ interface AttachedFile {
 export function ChatPanel({ onClose }: ChatPanelProps): JSX.Element {
   const {
     messages, isStreaming, addMessage, updateMessage, setStreaming,
-    globalSummary, planMode, autoAccept, setPlanMode, setAutoAccept,
+    globalSummary, mode, autoAccept, setMode, setAutoAccept,
     pendingReview, setPendingReview,
     sessionHandoff, startNewSession, compressedContext, compressOldMessages,
     getProjectSessions, switchSession, deleteSession, saveProjectChat,
@@ -289,7 +297,8 @@ export function ChatPanel({ onClose }: ChatPanelProps): JSX.Element {
       : sessionHandoff || undefined,
     attachedFiles: attachedFiles.length > 0
       ? attachedFiles.map((f) => ({ path: f.path, content: f.content }))
-      : undefined
+      : undefined,
+    mode
   })
 
   // Skills autocomplete
@@ -473,7 +482,9 @@ export function ChatPanel({ onClose }: ChatPanelProps): JSX.Element {
     addMessage({ role: "user", content: userMsg })
     const apiMessages = buildApiMessages(userMsg)
 
-    if (planMode) {
+    if (mode === "chat") {
+      await doSendChat(apiMessages)
+    } else if (mode === "plan") {
       await doSendChat(apiMessages)
     } else if (proFeatures.agent === false) {
       // Agent mode requires Pro — fall back to basic chat with a notice
@@ -485,7 +496,7 @@ export function ChatPanel({ onClose }: ChatPanelProps): JSX.Element {
     } else {
       await executeAgent(apiMessages)
     }
-  }, [input, isStreaming, planMode, proFeatures, addMessage, buildApiMessages, doSendChat, executeAgent, clearMessages])
+  }, [input, isStreaming, mode, proFeatures, addMessage, buildApiMessages, doSendChat, executeAgent, clearMessages])
 
   const handleKeyDown = (e: KeyboardEvent) => {
     // Skills autocomplete navigation
@@ -512,9 +523,10 @@ export function ChatPanel({ onClose }: ChatPanelProps): JSX.Element {
     }
     if (e.key === "Tab" && e.shiftKey) {
       e.preventDefault()
-      if (planMode) { setPlanMode(false); setAutoAccept(false) }
-      else if (autoAccept) { setPlanMode(true); setAutoAccept(false) }
-      else { setPlanMode(false); setAutoAccept(true) }
+      // Cycle Chat → Agent → Plan → Chat
+      if (mode === "chat") setMode("agent")
+      else if (mode === "agent") setMode("plan")
+      else setMode("chat")
       return
     }
     if (e.key === "Enter" && !e.shiftKey) {
@@ -1002,8 +1014,10 @@ export function ChatPanel({ onClose }: ChatPanelProps): JSX.Element {
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder={
-              planMode
+              mode === "plan"
                 ? "Describe what to build \u2014 AI analyzes without modifying..."
+                : mode === "chat"
+                ? "Ask a question \u2014 AI replies with code you apply manually..."
                 : "Ask anything or request code edits..."
             }
             rows={2}
@@ -1023,18 +1037,18 @@ export function ChatPanel({ onClose }: ChatPanelProps): JSX.Element {
             style={{ background: "var(--bg-elevated)", borderTop: "1px solid var(--border-subtle)" }}
           >
             <div className="flex items-center gap-1.5">
-              {/* Mode dropdown (Agent / Plan / Auto) */}
+              {/* Mode dropdown (Chat / Agent / Plan) */}
               <div className="relative" data-dropdown>
                 <button
                   onClick={() => { setShowModeDropdown((v) => !v); setShowModelDropdown(false); closeSessions() }}
                   className="flex items-center gap-1 px-1.5 py-0.5 rounded transition-all duration-100"
                   style={{
                     fontSize: "10px",
-                    color: planMode ? "var(--info)" : autoAccept ? "var(--success)" : "var(--text-secondary)",
+                    color: mode === "plan" ? "var(--info)" : mode === "chat" ? "var(--text-secondary)" : "var(--success)",
                     border: "1px solid var(--border-subtle)"
                   }}
                 >
-                  {planMode ? <><IconPlan /> Plan</> : autoAccept ? <><IconLightning /> Agent (Auto)</> : <><IconSend /> Agent</>}
+                  {mode === "plan" ? <><IconPlan /> Plan</> : mode === "chat" ? <><IconChat /> Chat</> : <><IconSend /> Agent</>}
                   <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="6 15 12 9 18 15" /></svg>
                 </button>
                 {showModeDropdown && (
@@ -1043,16 +1057,14 @@ export function ChatPanel({ onClose }: ChatPanelProps): JSX.Element {
                     style={{ background: "var(--bg-panel)", border: "1px solid var(--border)", minWidth: "150px" }}
                   >
                     {([
-                      { key: "agent", label: "Agent", icon: <IconSend />, active: !planMode && !autoAccept },
-                      { key: "auto", label: "Agent (Auto Accept)", icon: <IconLightning />, active: !planMode && autoAccept },
-                      { key: "plan", label: "Plan", icon: <IconPlan />, active: planMode }
+                      { key: "chat", label: "Chat", icon: <IconChat />, active: mode === "chat" },
+                      { key: "agent", label: "Agent", icon: <IconSend />, active: mode === "agent", pro: proFeatures.agent === false },
+                      { key: "plan", label: "Plan", icon: <IconPlan />, active: mode === "plan" }
                     ] as const).map((opt) => (
                       <button
                         key={opt.key}
                         onClick={() => {
-                          if (opt.key === "agent") { setPlanMode(false); setAutoAccept(false) }
-                          else if (opt.key === "auto") { setPlanMode(false); setAutoAccept(true) }
-                          else { setPlanMode(true); setAutoAccept(false) }
+                          setMode(opt.key)
                           setShowModeDropdown(false)
                         }}
                         className="w-full flex items-center gap-2 px-3 py-1.5 text-left transition-colors duration-75"
@@ -1066,12 +1078,33 @@ export function ChatPanel({ onClose }: ChatPanelProps): JSX.Element {
                         onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "transparent"}
                       >
                         {opt.icon}
-                        {opt.label}
+                        <span className="flex-1">{opt.label}</span>
+                        {"pro" in opt && opt.pro && (
+                          <span style={{ fontSize: "9px", color: "var(--accent)", fontWeight: 600, letterSpacing: "0.5px" }}>PRO</span>
+                        )}
                       </button>
                     ))}
                   </div>
                 )}
               </div>
+
+              {/* Auto-accept toggle (only meaningful in Agent mode) */}
+              {mode === "agent" && (
+                <button
+                  onClick={() => setAutoAccept(!autoAccept)}
+                  title={autoAccept ? "Auto-accept: ON (tool calls run without approval)" : "Auto-accept: OFF (approve each tool call)"}
+                  className="flex items-center gap-1 px-1.5 py-0.5 rounded transition-all duration-100"
+                  style={{
+                    fontSize: "10px",
+                    color: autoAccept ? "var(--success)" : "var(--text-secondary)",
+                    border: "1px solid var(--border-subtle)",
+                    opacity: autoAccept ? 1 : 0.7
+                  }}
+                >
+                  <IconLightning />
+                  {autoAccept ? "Auto" : "Manual"}
+                </button>
+              )}
 
               {/* Model dropdown */}
               <div className="relative" data-dropdown>

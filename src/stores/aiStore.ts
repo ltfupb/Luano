@@ -1,6 +1,8 @@
 import { create } from "zustand"
 import { persist, createJSONStorage } from "zustand/middleware"
 
+export type ChatMode = "chat" | "agent" | "plan"
+
 export interface ChatMessage {
   id: string
   role: "user" | "assistant" | "tool"
@@ -26,7 +28,7 @@ interface AIStore {
   messages: ChatMessage[]
   isStreaming: boolean
   globalSummary: string
-  planMode: boolean
+  mode: ChatMode
   autoAccept: boolean
   pendingReview: PendingReview | null
   sessions: Record<string, SessionEntry[]>
@@ -39,7 +41,7 @@ interface AIStore {
   setStreaming: (v: boolean) => void
   setGlobalSummary: (s: string) => void
   clearMessages: () => void
-  setPlanMode: (v: boolean) => void
+  setMode: (m: ChatMode) => void
   setAutoAccept: (v: boolean) => void
   setPendingReview: (v: PendingReview | null) => void
   saveProjectChat: (projectPath: string) => void
@@ -66,7 +68,7 @@ export const useAIStore = create<AIStore>()(
       messages: [],
       isStreaming: false,
       globalSummary: "",
-      planMode: false,
+      mode: "agent",
       autoAccept: false,
       pendingReview: null,
       sessions: {},
@@ -90,7 +92,7 @@ export const useAIStore = create<AIStore>()(
       setStreaming: (v) => set({ isStreaming: v }),
       setGlobalSummary: (s) => set({ globalSummary: s }),
       clearMessages: () => set({ messages: [] }),
-      setPlanMode: (v) => set({ planMode: v }),
+      setMode: (m) => set({ mode: m }),
       setAutoAccept: (v) => set({ autoAccept: v }),
       setPendingReview: (v) => set({ pendingReview: v }),
 

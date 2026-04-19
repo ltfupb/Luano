@@ -132,7 +132,7 @@ luano/
 │   │   └── TutorialOverlay.tsx
 │   ├── stores/
 │   │   ├── projectStore.ts      # 파일 트리, 열린 파일, 내용
-│   │   ├── aiStore.ts           # 채팅 메시지, 스트리밍 상태, planMode, chatHistory persist
+│   │   ├── aiStore.ts           # 채팅 메시지, 스트리밍 상태, mode(chat/agent/plan), chatHistory persist
 │   │   ├── syncStore.ts         # Sync(Rojo/Argon) 상태 + 포트 + 도구명
 │   │   └── settingsStore.ts     # 사용자 설정
 │   ├── sync/

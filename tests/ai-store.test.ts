@@ -14,7 +14,7 @@ const INITIAL: Parameters<typeof useAIStore.setState>[0] = {
   messages: [],
   isStreaming: false,
   globalSummary: "",
-  planMode: false,
+  mode: "agent",
   autoAccept: false,
   pendingReview: null,
   sessions: {},
@@ -96,9 +96,13 @@ describe("simple setters", () => {
     expect(useAIStore.getState().messages).toHaveLength(0)
   })
 
-  it("setPlanMode", () => {
-    useAIStore.getState().setPlanMode(true)
-    expect(useAIStore.getState().planMode).toBe(true)
+  it("setMode cycles through chat/agent/plan", () => {
+    useAIStore.getState().setMode("plan")
+    expect(useAIStore.getState().mode).toBe("plan")
+    useAIStore.getState().setMode("chat")
+    expect(useAIStore.getState().mode).toBe("chat")
+    useAIStore.getState().setMode("agent")
+    expect(useAIStore.getState().mode).toBe("agent")
   })
 
   it("setAutoAccept", () => {
