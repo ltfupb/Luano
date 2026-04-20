@@ -174,13 +174,31 @@ export default function App(): JSX.Element {
   const storeSetSidePanelWidth = useSettingsStore((s) => s.setSidePanelWidth)
   const storeSetChatPanelWidth = useSettingsStore((s) => s.setChatPanelWidth)
 
-  const setTerminalHeight = _setTerminalHeight
-  const setSidePanelWidth = _setSidePanelWidth
-  const setChatPanelWidth = _setChatPanelWidth
-
-  useEffect(() => { storeSetTerminalHeight(terminalHeight) }, [terminalHeight, storeSetTerminalHeight])
-  useEffect(() => { storeSetSidePanelWidth(sidePanelWidth) }, [sidePanelWidth, storeSetSidePanelWidth])
-  useEffect(() => { storeSetChatPanelWidth(chatPanelWidth) }, [chatPanelWidth, storeSetChatPanelWidth])
+  // Setters update local state (for layout props on this file) AND the store
+  // synchronously, so components that subscribe to the store (e.g. EditorPane's
+  // pinned buttons reading `chatPanelWidth`) reposition in sync with the drag
+  // instead of lagging by one render cycle.
+  const setTerminalHeight: React.Dispatch<React.SetStateAction<number>> = useCallback((update) => {
+    _setTerminalHeight((prev) => {
+      const next = typeof update === "function" ? update(prev) : update
+      storeSetTerminalHeight(next)
+      return next
+    })
+  }, [storeSetTerminalHeight])
+  const setSidePanelWidth: React.Dispatch<React.SetStateAction<number>> = useCallback((update) => {
+    _setSidePanelWidth((prev) => {
+      const next = typeof update === "function" ? update(prev) : update
+      storeSetSidePanelWidth(next)
+      return next
+    })
+  }, [storeSetSidePanelWidth])
+  const setChatPanelWidth: React.Dispatch<React.SetStateAction<number>> = useCallback((update) => {
+    _setChatPanelWidth((prev) => {
+      const next = typeof update === "function" ? update(prev) : update
+      storeSetChatPanelWidth(next)
+      return next
+    })
+  }, [storeSetChatPanelWidth])
 
   // Panel resize hooks
   const handleResizeMouseDown = usePanelResize("y", TERMINAL_MIN, TERMINAL_MAX, setTerminalHeight, true)
@@ -325,7 +343,7 @@ export default function App(): JSX.Element {
     if (sessionRestoredRef.current) return
     sessionRestoredRef.current = true
 
-    const { projectPath: savedPath, openFiles: savedOpenFiles } = useProjectStore.getState()
+    const { projectPath: savedPath, openFiles: savedOpenFiles, activeFile: savedActiveFile } = useProjectStore.getState()
     if (!savedPath) return
 
     openPath(savedPath).then(async (ok) => {
@@ -333,12 +351,17 @@ export default function App(): JSX.Element {
         closeProject()
         return
       }
-      // Reload previously open files
+      // Reload previously open files. `openFile` sets activeFile on every call,
+      // which would leave the LAST file active instead of the one the user had
+      // focus on when they closed. Restore the original activeFile afterwards.
       for (const filePath of savedOpenFiles) {
         try {
           const content = await window.api.readFile(filePath)
           openFile(filePath, content ?? "")
         } catch { /* Skip if file was deleted */ }
+      }
+      if (savedActiveFile && useProjectStore.getState().openFiles.includes(savedActiveFile)) {
+        useProjectStore.getState().setActiveFile(savedActiveFile)
       }
       // Restore chat history for this project
       loadProjectChat(savedPath)

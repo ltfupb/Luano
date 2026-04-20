@@ -24,12 +24,17 @@ const mkEvent = (overrides: Partial<ChatMessage>): ChatMessage => ({
 } as ChatMessage)
 
 describe("ToolCallGroup", () => {
-  it("renders one row per tool event, flat (no collapsed group header)", () => {
+  it("collapses multi-tool groups behind a summary header, expands on click", () => {
     const events = [mkEvent({ toolName: "read_file" }), mkEvent({ toolName: "edit_file" })]
     render(<ToolCallGroup events={events} />)
+    // Collapsed: summary "2 tools used" is visible; individual rows are hidden.
+    const header = screen.getByText("2 tools used")
+    expect(header).toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: /^Read$/ })).not.toBeInTheDocument()
+    // Expand the group and the individual tool rows appear.
+    fireEvent.click(header)
     expect(screen.getByText("Read")).toBeInTheDocument()
     expect(screen.getByText("Edit")).toBeInTheDocument()
-    expect(screen.queryByText(/Used 2 tools/)).not.toBeInTheDocument()
   })
 
   it("starts with successful rows collapsed (no output body visible)", () => {
@@ -43,9 +48,11 @@ describe("ToolCallGroup", () => {
     expect(screen.getByText("hello world output")).toBeInTheDocument()
   })
 
-  it("auto-expands failed tools on mount", () => {
+  it("does not auto-expand failed tools — user clicks to reveal the error body", () => {
     const events = [mkEvent({ toolName: "edit_file", toolSuccess: false, content: "ERROR: text not found" })]
     render(<ToolCallGroup events={events} />)
+    expect(screen.queryByText("ERROR: text not found")).not.toBeInTheDocument()
+    fireEvent.click(screen.getByText("Edit"))
     expect(screen.getByText("ERROR: text not found")).toBeInTheDocument()
   })
 

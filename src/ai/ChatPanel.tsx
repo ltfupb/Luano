@@ -7,8 +7,10 @@ import { useIpcEvent } from "../hooks/useIpc"
 import { BUILT_IN_SKILLS, mergeSkills, findSkills, expandSkill, Skill } from "./skills"
 import { getFileName } from "../lib/utils"
 import { AskUserCard } from "./AskUserCard"
+import { EditPreviewCard } from "./EditPreviewCard"
 import { ToolCallGroup } from "./ToolCallGroup"
-import { MessageBubble } from "./MessageBubble"
+import { MessageBubble, MessageFooter } from "./MessageBubble"
+import { toast } from "../components/Toast"
 
 interface ToolEvent {
   tool: string
@@ -141,9 +143,8 @@ interface AttachedFile {
 
 export function ChatPanel({ onClose }: ChatPanelProps): JSX.Element {
   const {
-    messages, isStreaming, addMessage, updateMessage, setStreaming,
+    messages, isStreaming, addMessage, updateMessage, setThinkingSeconds, setMessageTokens, setStreaming,
     globalSummary, mode, autoAccept, setMode, setAutoAccept,
-    pendingReview, setPendingReview,
     sessionHandoff, startNewSession, compressedContext, compressOldMessages,
     getProjectSessions, switchSession, deleteSession, saveProjectChat,
     clearMessages
@@ -157,7 +158,7 @@ export function ChatPanel({ onClose }: ChatPanelProps): JSX.Element {
   const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([])
   const [advisorActive, setAdvisorActive] = useState(false)
   const [thinkingActive, setThinkingActive] = useState(false)
-  const [pendingApproval, setPendingApproval] = useState<{ id: string; tool: string; input: Record<string, unknown> } | null>(null)
+  const [pendingApproval, setPendingApproval] = useState<{ id: string; tool: string; input: Record<string, unknown>; preview?: EditPreviewPayload | null } | null>(null)
   const [pendingAskUser, setPendingAskUser] = useState<{ id: string; questions: AskUserQuestion[] } | null>(null)
   const [agentTodos, setAgentTodos] = useState<Array<{ content: string; status: string }>>([])
   const [showSessions, setShowSessions] = useState(false)
@@ -183,6 +184,11 @@ export function ChatPanel({ onClose }: ChatPanelProps): JSX.Element {
   const availableModels = allModels[provider] ?? []
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  // The textarea `disabled` flag drops focus when streaming starts. Refocus
+  // when streaming ends so the user can immediately type their next message.
+  const wasStreamingRef = useRef(false)
+  // Tracks the in-flight assistant message so the token-usage listener can update its footer live.
+  const streamingCtxRef = useRef<{ id: string; snap: { input: number; output: number; cacheRead: number } } | null>(null)
   const t = useT()
 
   // Load pro status + models
@@ -212,15 +218,25 @@ export function ChatPanel({ onClose }: ChatPanelProps): JSX.Element {
     if (typeof d.connected === "boolean") setBridgeConnected(d.connected)
   })
 
-  // Real-time token usage tracking
+  // Real-time token usage tracking — also updates the active streaming message's footer live.
   useEffect(() => {
     if (typeof window.api.aiGetTokenUsage === "function") {
       window.api.aiGetTokenUsage().then(setTokens).catch(() => {})
     }
     if (typeof window.api.onTokenUsage === "function") {
-      return window.api.onTokenUsage(setTokens)
+      return window.api.onTokenUsage((usage) => {
+        setTokens(usage)
+        const ctx = streamingCtxRef.current
+        if (ctx) {
+          setMessageTokens(ctx.id, {
+            input: Math.max(0, usage.input - ctx.snap.input),
+            output: Math.max(0, usage.output - ctx.snap.output),
+            cache: Math.max(0, usage.cacheRead - ctx.snap.cacheRead)
+          })
+        }
+      })
     }
-  }, [])
+  }, [setMessageTokens])
 
   // Listen for agent todo updates
   useEffect(() => {
@@ -228,10 +244,6 @@ export function ChatPanel({ onClose }: ChatPanelProps): JSX.Element {
       return window.api.onTodosUpdated(setAgentTodos)
     }
   }, [])
-
-  const handleAcceptChanges = useCallback(() => {
-    setPendingReview(null)
-  }, [setPendingReview])
 
   // Close mode/model dropdowns on outside click (sessions overlay handled separately)
   const closeDropdowns = useCallback(() => {
@@ -247,17 +259,6 @@ export function ChatPanel({ onClose }: ChatPanelProps): JSX.Element {
     document.addEventListener("mousedown", handler)
     return () => document.removeEventListener("mousedown", handler)
   }, [showModeDropdown, showModelDropdown, closeDropdowns])
-
-  const handleRejectChanges = useCallback(async () => {
-    if (!pendingReview) return
-    if (typeof window.api.aiRevert !== "function") return
-    const res = await window.api.aiRevert()
-    if (res.success && res.reverted) {
-      const names = res.reverted.map(getFileName).join(", ")
-      addMessage({ role: "assistant", content: `Reverted ${res.reverted.length} file(s): ${names}` })
-    }
-    setPendingReview(null)
-  }, [pendingReview, addMessage, setPendingReview])
 
   // Auto-save session when messages change (debounced)
   useEffect(() => {
@@ -321,6 +322,16 @@ export function ChatPanel({ onClose }: ChatPanelProps): JSX.Element {
     textareaRef.current?.focus()
   }
 
+  // Refocus the textarea on the streaming true→false edge so the user can type
+  // their next message without clicking back in. The textarea loses focus when
+  // it becomes disabled during streaming; nothing auto-restores it.
+  useEffect(() => {
+    if (wasStreamingRef.current && !isStreaming) {
+      textareaRef.current?.focus()
+    }
+    wasStreamingRef.current = isStreaming
+  }, [isStreaming])
+
   const attachCurrentFile = () => {
     if (!activeFile || !fileContents[activeFile]) return
     if (attachedFiles.some((f) => f.path === activeFile)) return
@@ -378,17 +389,34 @@ export function ChatPanel({ onClose }: ChatPanelProps): JSX.Element {
       setAdvisorActive(false)
       setThinkingActive(false)
       setPendingApproval(null); setPendingAskUser(null)
+      const thinkingStart = Date.now()
+      let thinkingCaptured = false
+      const tokenSnapshot = { ...tokens }
+      streamingCtxRef.current = { id: assistantId, snap: tokenSnapshot }
       try {
         let accumulated = ""
-        const result = await window.api.aiAgentChat(
+        // Inject a visual break between text stream segments that are separated
+        // by tool calls — otherwise "...I'll start." + tool + "Done" concatenates
+        // as "...I'll start.Done" with no separator.
+        let justAfterTool = false
+        await window.api.aiAgentChat(
           apiMessages,
           buildContext(),
           (chunk) => {
             if (chunk === null) return
+            if (!thinkingCaptured) {
+              setThinkingSeconds(assistantId, Math.round((Date.now() - thinkingStart) / 1000))
+              thinkingCaptured = true
+            }
+            if (justAfterTool && accumulated.length > 0 && !accumulated.endsWith("\n\n")) {
+              accumulated += accumulated.endsWith("\n") ? "\n" : "\n\n"
+            }
+            justAfterTool = false
             accumulated += chunk
             updateMessage(assistantId, accumulated, true)
           },
           (event: ToolEvent) => {
+            justAfterTool = true
             addMessage({
               role: "tool",
               content: event.output.slice(0, 200),
@@ -399,22 +427,27 @@ export function ChatPanel({ onClose }: ChatPanelProps): JSX.Element {
           undefined,
           (active) => { setAdvisorActive(active) },
           (active) => { setThinkingActive(active) },
-          (req) => { setPendingApproval(req) },
-          (req) => { setPendingAskUser(req) }
+          (req) => { setPendingApproval(req as { id: string; tool: string; input: Record<string, unknown>; preview?: EditPreviewPayload | null }) },
+          (req) => { setPendingAskUser(req) },
+          autoAccept
         )
-        updateMessage(assistantId, accumulated, false)
-        if (result.modifiedFiles.length > 0) {
-          const names = result.modifiedFiles.map(getFileName).join(", ")
-          updateMessage(assistantId, `${accumulated}\n\n Modified: ${names}`, false)
-          if (!autoAccept) {
-            setPendingReview({ files: result.modifiedFiles, messageId: assistantId })
-          }
+        if (!thinkingCaptured) {
+          setThinkingSeconds(assistantId, Math.round((Date.now() - thinkingStart) / 1000))
         }
+        // Delta from session totals — tokens consumed by this specific turn
+        const finalTokens = await window.api.aiGetTokenUsage().catch(() => tokenSnapshot)
+        setMessageTokens(assistantId, {
+          input: Math.max(0, finalTokens.input - tokenSnapshot.input),
+          output: Math.max(0, finalTokens.output - tokenSnapshot.output),
+          cache: Math.max(0, finalTokens.cacheRead - tokenSnapshot.cacheRead)
+        })
+        updateMessage(assistantId, accumulated, false)
       } catch (err) {
         const errMsg = err instanceof Error ? err.message : String(err)
         const cleaned = errMsg.replace(/^Error invoking remote method '[^']+': /, "")
         updateMessage(assistantId, `Error: ${cleaned}`, false)
       } finally {
+        streamingCtxRef.current = null
         setStreaming(false)
         setAdvisorActive(false)
         setThinkingActive(false)
@@ -435,6 +468,10 @@ export function ChatPanel({ onClose }: ChatPanelProps): JSX.Element {
     async (apiMessages: Array<{role: string; content: string}>) => {
       const assistantId = addMessage({ role: "assistant", content: "", streaming: true })
       setStreaming(true)
+      const thinkingStart = Date.now()
+      let thinkingCaptured = false
+      const tokenSnapshot = { ...tokens }
+      streamingCtxRef.current = { id: assistantId, snap: tokenSnapshot }
       try {
         let accumulated = ""
         await window.api.aiChatStream(
@@ -442,18 +479,33 @@ export function ChatPanel({ onClose }: ChatPanelProps): JSX.Element {
           buildContext(),
           (chunk) => {
             if (chunk === null) return
+            if (!thinkingCaptured) {
+              setThinkingSeconds(assistantId, Math.round((Date.now() - thinkingStart) / 1000))
+              thinkingCaptured = true
+            }
             accumulated += chunk
             updateMessage(assistantId, accumulated, true)
           },
           (active) => { setAdvisorActive(active) },
           (active) => { setThinkingActive(active) }
         )
+        if (!thinkingCaptured) {
+          setThinkingSeconds(assistantId, Math.round((Date.now() - thinkingStart) / 1000))
+        }
+        // Snapshot final tokens, compute delta for this turn
+        const finalTokens = await window.api.aiGetTokenUsage().catch(() => tokenSnapshot)
+        setMessageTokens(assistantId, {
+          input: Math.max(0, finalTokens.input - tokenSnapshot.input),
+          output: Math.max(0, finalTokens.output - tokenSnapshot.output),
+          cache: Math.max(0, finalTokens.cacheRead - tokenSnapshot.cacheRead)
+        })
         updateMessage(assistantId, accumulated, false)
       } catch (err) {
         const errMsg = err instanceof Error ? err.message : String(err)
         const cleaned = errMsg.replace(/^Error invoking remote method '[^']+': /, "")
         updateMessage(assistantId, `Error: ${cleaned}`, false)
       } finally {
+        streamingCtxRef.current = null
         setStreaming(false)
         setThinkingActive(false)
         // Auto-compress if context is getting large
@@ -542,7 +594,7 @@ export function ChatPanel({ onClose }: ChatPanelProps): JSX.Element {
     ta.style.height = `${Math.min(ta.scrollHeight, 120)}px`
   }, [input])
 
-  const blocked = isStreaming || !!pendingReview
+  const blocked = isStreaming
   const showStop = isStreaming
 
   return (
@@ -776,7 +828,7 @@ export function ChatPanel({ onClose }: ChatPanelProps): JSX.Element {
       )}
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-3 py-3 flex flex-col gap-3">
+      <div className="flex-1 overflow-y-auto px-3 py-3 flex flex-col gap-3" style={{ scrollbarGutter: "stable" }}>
         {messages.length === 0 && (
           <div className="flex flex-col items-center justify-center h-full gap-3 py-12 animate-fade-in">
             <div
@@ -798,13 +850,33 @@ export function ChatPanel({ onClose }: ChatPanelProps): JSX.Element {
             </div>
           </div>
         )}
-        {groupedMessages.map((item, i) =>
-          Array.isArray(item) ? (
-            <ToolCallGroup key={`tg-${i}`} events={item} />
-          ) : (
-            <MessageBubble key={item.id} message={item} thinkingActive={item.streaming ? thinkingActive : false} />
+        {groupedMessages.map((item, i) => {
+          if (Array.isArray(item)) {
+            // Tool group. If the assistant message immediately before this one
+            // had its footer deferred (because a tool group followed it), render
+            // it here — CC-style footer belongs at the end of the turn, below tools.
+            const prev = groupedMessages[i - 1]
+            const deferredFooter = !Array.isArray(prev) && prev?.role === "assistant" ? prev : null
+            return (
+              <div key={`tg-${i}`}>
+                <ToolCallGroup events={item} />
+                {deferredFooter && <MessageFooter message={deferredFooter} />}
+              </div>
+            )
+          }
+          // Hide this message's footer if the next item is a tool group —
+          // the footer will render after the tool group instead.
+          const next = groupedMessages[i + 1]
+          const hasTrailingTools = Array.isArray(next) && item.role === "assistant"
+          return (
+            <MessageBubble
+              key={item.id}
+              message={item}
+              thinkingActive={item.streaming ? thinkingActive : false}
+              hideFooter={hasTrailingTools}
+            />
           )
-        )}
+        })}
 
         {/* Ask user interactive card */}
         {pendingAskUser && isStreaming && (
@@ -817,104 +889,17 @@ export function ChatPanel({ onClose }: ChatPanelProps): JSX.Element {
           />
         )}
 
-        {/* Tool approval request */}
+        {/* Tool approval request — write tools get diff preview card */}
         {pendingApproval && isStreaming && (
-          <div
-            className="mx-2 mb-2 rounded-xl px-3 py-2.5 animate-fade-in"
-            style={{ background: "var(--bg-elevated)", border: "1px solid rgba(239,68,68,0.35)" }}
-          >
-            <div className="flex items-center gap-2 mb-2">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--error, #ef4444)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
-                <line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" />
-              </svg>
-              <span style={{ fontSize: "12px", color: "var(--text-primary)", fontWeight: 500 }}>
-                AI wants to <span style={{ color: "var(--error, #ef4444)" }}>{pendingApproval.tool.replace(/_/g, " ")}</span>
-              </span>
-            </div>
-            {typeof pendingApproval.input.path === "string" && (
-              <div className="mb-2 font-mono" style={{ fontSize: "11px", color: "var(--text-secondary)" }}>
-                {String(pendingApproval.input.path)}
-              </div>
-            )}
-            <div className="flex gap-1.5">
-              <button
-                onClick={() => { window.api.sendToolApproval(pendingApproval.id, true); setPendingApproval(null); setPendingAskUser(null) }}
-                className="flex-1 py-1 rounded-md font-medium transition-colors duration-150"
-                style={{ fontSize: "11px", background: "rgba(239,68,68,0.12)", color: "var(--error, #ef4444)", border: "1px solid rgba(239,68,68,0.25)" }}
-                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = "rgba(239,68,68,0.22)" }}
-                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = "rgba(239,68,68,0.12)" }}
-              >
-                Allow
-              </button>
-              <button
-                onClick={() => { window.api.sendToolApproval(pendingApproval.id, false); setPendingApproval(null); setPendingAskUser(null) }}
-                className="flex-1 py-1 rounded-md font-medium transition-colors duration-150"
-                style={{ fontSize: "11px", background: "var(--bg-secondary)", color: "var(--text-secondary)", border: "1px solid var(--border-subtle)" }}
-                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = "var(--bg-tertiary, var(--bg-secondary))" }}
-                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = "var(--bg-secondary)" }}
-              >
-                Deny
-              </button>
-            </div>
-          </div>
+          <EditPreviewCard
+            tool={pendingApproval.tool}
+            preview={pendingApproval.preview ?? null}
+            input={pendingApproval.input}
+            onAccept={() => { window.api.sendToolApproval(pendingApproval.id, true); setPendingApproval(null); setPendingAskUser(null) }}
+            onReject={() => { window.api.sendToolApproval(pendingApproval.id, false); setPendingApproval(null); setPendingAskUser(null) }}
+          />
         )}
 
-        {/* Accept / Reject review bar */}
-        {pendingReview && !isStreaming && (
-          <div className="mx-2 mb-2 animate-fade-in">
-            {/* File list */}
-            <div className="flex flex-wrap gap-1 mb-2">
-              {pendingReview.files.map((f) => (
-                <span
-                  key={f}
-                  className="flex items-center gap-1 px-1.5 py-0.5 rounded font-mono"
-                  style={{
-                    fontSize: "11px",
-                    color: "var(--text-secondary)",
-                  }}
-                >
-                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="var(--success)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z" />
-                    <polyline points="13 2 13 9 20 9" />
-                  </svg>
-                  {getFileName(f)}
-                </span>
-              ))}
-            </div>
-            {/* Action buttons */}
-            <div className="flex items-center gap-1.5">
-              <button
-                onClick={handleAcceptChanges}
-                className="flex-1 py-1.5 rounded-md font-medium transition-colors duration-150"
-                style={{
-                  fontSize: "12px",
-                  background: "rgba(16,185,129,0.12)",
-                  color: "var(--success)",
-                  border: "1px solid rgba(16,185,129,0.25)"
-                }}
-                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = "rgba(16,185,129,0.2)" }}
-                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = "rgba(16,185,129,0.12)" }}
-              >
-                {t("acceptChanges")}
-              </button>
-              <button
-                onClick={handleRejectChanges}
-                className="flex-1 py-1.5 rounded-md transition-colors duration-150"
-                style={{
-                  fontSize: "12px",
-                  background: "rgba(239,68,68,0.08)",
-                  color: "var(--danger)",
-                  border: "1px solid rgba(239,68,68,0.2)"
-                }}
-                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = "rgba(239,68,68,0.15)" }}
-                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = "rgba(239,68,68,0.08)" }}
-              >
-                {t("rejectChanges")}
-              </button>
-            </div>
-          </div>
-        )}
 
         <div ref={messagesEndRef} />
       </div>
@@ -1026,7 +1011,7 @@ export function ChatPanel({ onClose }: ChatPanelProps): JSX.Element {
             style={{
               background: "var(--bg-elevated)",
               color: "var(--text-primary)",
-              fontSize: "12px",
+              fontSize: "13px",
               padding: "8px 10px 0px",
               lineHeight: "1.5",
               display: "block"
@@ -1125,9 +1110,19 @@ export function ChatPanel({ onClose }: ChatPanelProps): JSX.Element {
                       <button
                         key={m.id}
                         onClick={async () => {
+                          const midConversation = messages.length > 0 && m.id !== model
                           await window.api.aiSetModel(m.id)
                           setStoreModel(m.id)
                           setShowModelDropdown(false)
+                          // Mid-conversation switches lose the prompt cache — the new model
+                          // rebuilds the prefix from scratch. Flag it so the next turn's cost
+                          // isn't a surprise. Matches Claude Code's /model warning.
+                          if (midConversation) {
+                            toast(
+                              `Model switched to ${m.label}. Prompt cache invalidated — next response re-sends the full conversation (higher input cost until cache rebuilds).`,
+                              "warn"
+                            )
+                          }
                         }}
                         className="w-full text-left px-3 py-1.5 transition-colors duration-75"
                         style={{
@@ -1146,12 +1141,6 @@ export function ChatPanel({ onClose }: ChatPanelProps): JSX.Element {
                 )}
               </div>
 
-              {/* Token usage */}
-              {(tokens.input + tokens.output > 0) && (
-                <span style={{ fontSize: "10px", color: "var(--text-ghost)", fontFamily: "monospace" }}>
-                  {((tokens.input + tokens.output) / 1000).toFixed(1)}k
-                </span>
-              )}
 
               {/* Attach file */}
               <button

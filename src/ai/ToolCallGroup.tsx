@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import { ChatMessage } from "../stores/aiStore"
 import { getFileName } from "../lib/utils"
 
@@ -56,115 +56,184 @@ function getToolTarget(event: ChatMessage): string {
   return pathMatch ? getFileName(pathMatch[1]) : ""
 }
 
+function Chevron({ open }: { open: boolean }): JSX.Element {
+  return (
+    <svg
+      width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+      style={{ transition: "transform 120ms ease", transform: open ? "rotate(90deg)" : "rotate(0deg)" }}
+    >
+      <polyline points="9 18 15 12 9 6" />
+    </svg>
+  )
+}
+
 /**
- * Flat list of consecutive tool-call events — one row per invocation, like
- * Claude Code's CLI output. Failed tools auto-expand their output so errors
- * jump out. Normal tools stay collapsed; click the row to peek at raw output.
- * A subtle left border groups the rows visually without being a container.
+ * Tool-call group — phone-app style accordion.
+ *
+ * - 1 tool: renders as a single row (no wrapping header).
+ * - 2+ tools: collapsed header showing "N tools" + a preview of the tool labels.
+ *   Click to expand. Expanded view shows each tool row with a vertical guide line
+ *   on the left. Each row is independently clickable to reveal its raw output.
  */
 export function ToolCallGroup({ events }: { events: ChatMessage[] }): JSX.Element {
-  const failedIds = events.filter((e) => e.toolSuccess === false).map((e) => e.id)
-  const [expanded, setExpanded] = useState<Set<string>>(() => new Set(failedIds))
+  const multi = events.length > 1
+  // Default: collapsed when multi, always "expanded" when single (nothing to collapse).
+  const [groupOpen, setGroupOpen] = useState(!multi)
+  const [rowsOpen, setRowsOpen] = useState<Set<string>>(() => new Set())
 
-  // Auto-expand any new failures as streaming adds them
-  useEffect(() => {
-    setExpanded((prev) => {
-      const next = new Set(prev)
-      for (const id of failedIds) next.add(id)
-      return next
-    })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [failedIds.join(",")])
-
-  const toggle = (id: string): void =>
-    setExpanded((prev) => {
+  const toggleRow = (id: string): void =>
+    setRowsOpen((prev) => {
       const next = new Set(prev)
       if (next.has(id)) next.delete(id)
       else next.add(id)
       return next
     })
 
+  const failedCount = events.filter((e) => e.toolSuccess === false).length
+
   return (
     <div
-      className="animate-fade-in"
-      style={{
-        borderLeft: "1px solid var(--border-subtle)",
-        paddingLeft: 8,
-        margin: "4px 0",
-        display: "flex",
-        flexDirection: "column",
-        gap: 1
-      }}
+      className="animate-fade-in rounded-md"
+      style={{ overflow: "hidden" }}
     >
-      {events.map((event) => {
-        const toolName = event.toolName ?? "unknown"
-        const meta = TOOL_META[toolName] ?? { label: toolName, icon: "default" }
-        const isBridge = meta.bridge === true
-        const failed = event.toolSuccess === false
-        const target = getToolTarget(event)
-        const isOpen = expanded.has(event.id)
-
-        const tone = failed ? "var(--danger)" : isBridge ? "var(--accent)" : "var(--text-muted)"
-
-        return (
-          <div key={event.id}>
-            <button
-              onClick={() => toggle(event.id)}
-              className="flex items-center gap-2 w-full rounded transition-colors duration-100"
-              style={{ textAlign: "left", padding: "2px 4px", minHeight: 22 }}
-              onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.background = "var(--bg-elevated)")}
-              onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.background = "transparent")}
+      {/* Collapsed summary header — only shown for multi-tool groups */}
+      {multi && (
+        <button
+          onClick={() => setGroupOpen((v) => !v)}
+          className="flex items-center gap-2 w-full transition-colors duration-100 no-press-scale"
+          style={{
+            textAlign: "left",
+            padding: "6px 10px",
+            background: "transparent",
+            borderBottom: groupOpen ? "1px solid var(--border-subtle)" : "none"
+          }}
+          onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.background = "var(--bg-surface)")}
+          onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.background = "transparent")}
+        >
+          <span style={{ color: "var(--text-muted)" }}>
+            <Chevron open={groupOpen} />
+          </span>
+          <span style={{ fontSize: 12, color: "var(--text-primary)" }}>
+            {events.length} tools used
+          </span>
+          {failedCount > 0 && (
+            <span
+              style={{
+                marginLeft: "auto",
+                fontSize: 10,
+                color: "var(--danger)",
+                fontWeight: 500,
+                background: "rgba(239,68,68,0.12)",
+                padding: "1px 6px",
+                borderRadius: 4
+              }}
             >
-              <span className="flex-shrink-0" style={{ color: tone, opacity: failed ? 1 : 0.75 }}>
-                {failed ? (
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <circle cx="12" cy="12" r="10" />
-                    <line x1="15" y1="9" x2="9" y2="15" />
-                    <line x1="9" y1="9" x2="15" y2="15" />
-                  </svg>
-                ) : (
-                  <ToolIcon type={meta.icon} size={12} />
-                )}
-              </span>
-              <span
-                className="truncate"
-                style={{
-                  fontSize: "12px",
-                  color: tone,
-                  fontWeight: failed ? 500 : 400
-                }}
-              >
-                {meta.label}
-                {target && (
-                  <span style={{ color: "var(--text-primary)", marginLeft: 6, opacity: 0.85 }}>
-                    {target}
+              {failedCount} failed
+            </span>
+          )}
+        </button>
+      )}
+
+      {/* Expanded rows — short vertical tick segments BETWEEN icons connect them
+          visually without a full-height guide line. Aligned with the icon center
+          so each row reads like a bullet on a ticked list. */}
+      {groupOpen && (
+        <div
+          style={{
+            padding: multi ? "4px 4px 4px 6px" : "2px 4px",
+            display: "flex",
+            flexDirection: "column",
+            gap: 0
+          }}
+        >
+          {events.map((event, i) => {
+            const toolName = event.toolName ?? "unknown"
+            const meta = TOOL_META[toolName] ?? { label: toolName, icon: "default" }
+            const isBridge = meta.bridge === true
+            const failed = event.toolSuccess === false
+            const target = getToolTarget(event)
+            const isOpen = rowsOpen.has(event.id)
+            const tone = failed ? "var(--danger)" : isBridge ? "var(--accent)" : "var(--text-muted)"
+            const isLast = i === events.length - 1
+
+            return (
+              <div key={event.id}>
+                <button
+                  onClick={() => toggleRow(event.id)}
+                  className="flex items-center gap-2 w-full rounded transition-colors duration-100 no-press-scale"
+                  style={{ textAlign: "left", padding: "2px 6px", minHeight: 22 }}
+                  onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.background = "var(--bg-surface)")}
+                  onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.background = "transparent")}
+                >
+                  <span className="flex-shrink-0" style={{ color: tone, opacity: failed ? 1 : 0.75 }}>
+                    {failed ? (
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <circle cx="12" cy="12" r="10" />
+                        <line x1="15" y1="9" x2="9" y2="15" />
+                        <line x1="9" y1="9" x2="15" y2="15" />
+                      </svg>
+                    ) : (
+                      <ToolIcon type={meta.icon} size={12} />
+                    )}
                   </span>
+                  <span
+                    className="truncate"
+                    style={{
+                      fontSize: "12px",
+                      color: tone,
+                      fontWeight: failed ? 500 : 400
+                    }}
+                  >
+                    {meta.label}
+                    {target && (
+                      <span style={{ color: "var(--text-primary)", marginLeft: 6, opacity: 0.85 }}>
+                        {target}
+                      </span>
+                    )}
+                  </span>
+                </button>
+                {isOpen && (
+                  <div
+                    className="rounded selectable"
+                    style={{
+                      marginLeft: 20,
+                      marginRight: 4,
+                      marginBottom: 4,
+                      fontSize: "11px",
+                      color: "var(--text-muted)",
+                      fontFamily: "'JetBrains Mono', monospace",
+                      lineHeight: "1.6",
+                      wordBreak: "break-all",
+                      whiteSpace: "pre-wrap",
+                      padding: "4px 8px",
+                      background: "var(--bg-base)",
+                      border: "1px solid var(--border-subtle)",
+                      maxHeight: 180,
+                      overflowY: "auto"
+                    }}
+                  >
+                    {event.content || <span style={{ fontStyle: "italic", opacity: 0.5 }}>No output</span>}
+                  </div>
                 )}
-              </span>
-            </button>
-            {isOpen && (
-              <div
-                className="ml-5 mb-1 rounded selectable animate-fade-in"
-                style={{
-                  fontSize: "11px",
-                  color: "var(--text-muted)",
-                  fontFamily: "'JetBrains Mono', monospace",
-                  lineHeight: "1.6",
-                  wordBreak: "break-all",
-                  whiteSpace: "pre-wrap",
-                  padding: "4px 8px",
-                  background: "var(--bg-base)",
-                  border: "1px solid var(--border-subtle)",
-                  maxHeight: 180,
-                  overflowY: "auto"
-                }}
-              >
-                {event.content || <span style={{ fontStyle: "italic", opacity: 0.5 }}>No output</span>}
+                {/* Tick segment between this row and the next — aligned with the
+                    icon center so the rows look connected without a full rail. */}
+                {multi && !isLast && (
+                  <div
+                    aria-hidden
+                    style={{
+                      height: 10,
+                      marginLeft: 12,     // button padding-left (6) + icon half (6)
+                      width: 1,
+                      background: "var(--border)"
+                    }}
+                  />
+                )}
               </div>
-            )}
-          </div>
-        )
-      })}
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }

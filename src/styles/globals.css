@@ -139,6 +139,10 @@ button {
 button:active {
   transform: scale(0.97);
 }
+button.no-press-scale:active {
+  transform: translateY(1px);
+  background: var(--bg-surface) !important;
+}
 
 /* ── Drag region ────────────────────────────────────────────── */
 .drag-region {
@@ -269,6 +273,14 @@ button:active {
   -webkit-text-fill-color: transparent;
   background-clip: text;
   animation: shimmer 1.8s ease-in-out infinite;
+}
+
+/* ── Markdown body — strip trailing margin from the last block so chat
+   message spacing is driven by container flex gap, not paragraph margins.
+   Without this, the last <p>'s margin-bottom stacks on top of the gap and
+   makes "above the tool group" look larger than "below the tool group". */
+.markdown-body > *:last-child {
+  margin-bottom: 0 !important;
 }
 
 /* ── Glass surface ─────────────────────────────────────────────── */

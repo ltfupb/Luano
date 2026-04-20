@@ -1,6 +1,14 @@
 interface AskUserOption { label: string; description?: string; preview?: string }
 interface AskUserQuestion { question: string; header: string; options: AskUserOption[]; multiSelect?: boolean }
 
+interface EditPreviewPayload {
+  path: string
+  oldContent: string
+  newContent: string | null
+  kind: "create" | "edit" | "delete"
+  error?: string
+}
+
 interface AiApi {
   // Keys
   aiSetKey: (key: string) => Promise<{ success: boolean }>
@@ -83,8 +91,9 @@ interface AiApi {
     onRound?: (info: { round: number; max: number }) => void,
     onAdvisor?: (active: boolean) => void,
     onThinking?: (active: boolean) => void,
-    onApprovalRequest?: (req: { id: string; tool: string; input: Record<string, unknown> }) => void,
-    onAskUserRequest?: (req: { id: string; questions: AskUserQuestion[] }) => void
+    onApprovalRequest?: (req: { id: string; tool: string; input: Record<string, unknown>; preview?: EditPreviewPayload | null }) => void,
+    onAskUserRequest?: (req: { id: string; questions: AskUserQuestion[] }) => void,
+    autoAccept?: boolean
   ) => Promise<{ modifiedFiles: string[] }>
 
 

@@ -5,8 +5,9 @@
  * Data lives in .luano/memory.json per project.
  */
 
-import { join } from "path"
+import { join, dirname, relative, sep } from "path"
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "fs"
+import { homedir } from "os"
 import { randomUUID } from "crypto"
 
 // ── Types ───────────────────────────────────────────────────────────────────
@@ -197,18 +198,66 @@ export function buildMemoryContext(projectPath: string): string {
 
 // ── Project Instructions ────────────────────────────────────────────────────
 
-/**
- * Load luano.md from project root — user-defined project instructions for the AI.
- * Same concept as CLAUDE.md in Claude Code.
- */
-export function loadInstructions(projectPath: string): string {
-  const fp = join(projectPath, "LUANO.md")
+const INSTRUCTIONS_FILENAME = "LUANO.md"
+const INSTRUCTIONS_MAX_CHARS = 8000
+
+function readTrimmed(fp: string): string {
   if (!existsSync(fp)) return ""
   try {
-    return readFileSync(fp, "utf-8").trim()
-  } catch {
-    return ""
+    return readFileSync(fp, "utf-8").trim().slice(0, INSTRUCTIONS_MAX_CHARS)
+  } catch { return "" }
+}
+
+/** Walk from start up to (but not past) root, collecting LUANO.md files along the way.
+ *  Returns [nearest, ..., furthest-within-root]. Excludes root itself — that's the project tier.
+ */
+function collectDirectoryInstructions(start: string, root: string): Array<{ path: string; content: string }> {
+  const out: Array<{ path: string; content: string }> = []
+  let cur = start
+  const rootResolved = root.replace(/[/\\]+$/, "")
+  // Guard: start must be inside root. If not, skip directory tier entirely.
+  const rel = relative(rootResolved, cur)
+  if (rel.startsWith("..") || rel.startsWith(sep + "..")) return out
+  while (cur && cur !== rootResolved) {
+    const fp = join(cur, INSTRUCTIONS_FILENAME)
+    const content = readTrimmed(fp)
+    if (content) out.push({ path: fp, content })
+    const parent = dirname(cur)
+    if (parent === cur) break
+    cur = parent
   }
+  return out
+}
+
+/**
+ * Load LUANO.md instructions across a 3-tier hierarchy, matching Claude Code's CLAUDE.md model:
+ *   1. Global      — `~/.luano/LUANO.md` (applies to every project)
+ *   2. Project     — `{projectPath}/LUANO.md`
+ *   3. Directory   — nearest LUANO.md walking up from `currentFile` to `projectPath`, for every
+ *                    subdirectory that has one. Most specific last so it overrides.
+ * Sections are merged with headers so the model can tell them apart.
+ */
+export function loadInstructions(projectPath: string, currentFile?: string): string {
+  const sections: string[] = []
+
+  const global = readTrimmed(join(homedir(), ".luano", INSTRUCTIONS_FILENAME))
+  if (global) sections.push(`# Global instructions (~/.luano/LUANO.md)\n${global}`)
+
+  const project = readTrimmed(join(projectPath, INSTRUCTIONS_FILENAME))
+  if (project) sections.push(`# Project instructions (LUANO.md)\n${project}`)
+
+  if (currentFile) {
+    const startDir = dirname(currentFile)
+    // Reverse: walk returns nearest-first; we want furthest-first so the nearest
+    // appears LAST (most specific wins when the model reconciles conflicts).
+    const dirLayers = collectDirectoryInstructions(startDir, projectPath).reverse()
+    for (const layer of dirLayers) {
+      const relPath = relative(projectPath, layer.path).replace(/\\/g, "/")
+      sections.push(`# Directory instructions (${relPath})\n${layer.content}`)
+    }
+  }
+
+  return sections.join("\n\n")
 }
 
 // ── Auto Memory Detection ───────────────────────────────────────────────────

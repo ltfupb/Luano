@@ -154,8 +154,9 @@ const api = {
     onRound?: (info: { round: number; max: number }) => void,
     onAdvisor?: (active: boolean) => void,
     onThinking?: (active: boolean) => void,
-    onApprovalRequest?: (req: { id: string; tool: string; input: Record<string, unknown> }) => void,
-    onAskUserRequest?: (req: { id: string; questions: unknown[] }) => void
+    onApprovalRequest?: (req: { id: string; tool: string; input: Record<string, unknown>; preview?: unknown }) => void,
+    onAskUserRequest?: (req: { id: string; questions: unknown[] }) => void,
+    autoAccept?: boolean
   ): Promise<{ modifiedFiles: string[] }> => {
     const channel = `ai:agent:${randomUUID()}`
     ipcRenderer.on(channel, (_, chunk) => onChunk(chunk as string | null))
@@ -170,13 +171,13 @@ const api = {
       ipcRenderer.on(`${channel}:thinking`, (_, active) => onThinking(active as boolean))
     }
     if (onApprovalRequest) {
-      ipcRenderer.on(`${channel}:approve-tool`, (_, req) => onApprovalRequest(req as { id: string; tool: string; input: Record<string, unknown> }))
+      ipcRenderer.on(`${channel}:approve-tool`, (_, req) => onApprovalRequest(req as { id: string; tool: string; input: Record<string, unknown>; preview?: unknown }))
     }
     if (onAskUserRequest) {
       ipcRenderer.on(`${channel}:ask-user`, (_, req) => onAskUserRequest(req as { id: string; questions: unknown[] }))
     }
     return ipcRenderer
-      .invoke("ai:agent-chat", messages, context, channel)
+      .invoke("ai:agent-chat", messages, context, channel, autoAccept === true)
       .finally(() => {
         ipcRenderer.removeAllListeners(channel)
         ipcRenderer.removeAllListeners(`${channel}:tool`)

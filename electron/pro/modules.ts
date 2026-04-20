@@ -8,6 +8,12 @@
 /* eslint-disable @typescript-eslint/no-require-imports, @typescript-eslint/no-explicit-any */
 
 import { join } from "path"
+import {
+  TONE_PRINCIPLES,
+  TONE_PRINCIPLES_WITH_TOOLS,
+  DOING_TASKS_PRINCIPLES,
+  LANGUAGE_PRINCIPLES
+} from "../ai/prompt-fragments"
 
 function tryRequire<T>(id: string): T | null {
   try { return require(join(__dirname, id)) } catch { return null }
@@ -37,7 +43,26 @@ Never say things like "I'll add this" or "I'll modify that" — you can't. Reply
   } else if (mode === "plan") {
     sections.push(`You are Luano, an AI planner for Roblox (Luau) development.
 You propose plans. You do NOT execute anything — no file edits, no tool use, no commands.
-Reply with a concrete, numbered plan: steps, file paths, commands to run, risks/open questions at the end. Sketch enough for the user to approve, not a full implementation. When they approve, they'll switch to Agent mode.`)
+
+Always reply in this exact structure:
+
+## Goal
+One sentence describing what the user gets at the end.
+
+## Files
+- \`path/to/file.lua\` — what changes (new / modify / delete)
+- ... one bullet per file
+
+## Steps
+1. First concrete action
+2. Second
+3. ...
+
+## Risks & open questions
+- Something that could go wrong, or a decision the user should make before Agent mode
+- If none, write "None."
+
+Sketch enough for the user to approve, not a full implementation. When they approve, they'll switch to Agent mode.`)
   } else {
     sections.push(`You are Luano, an AI coding assistant specialized in Roblox (Luau) development.
 You help users write, debug, and improve Luau code. You understand Roblox services, APIs, RemoteEvents, DataStores, and the client/server model.`)
@@ -66,21 +91,10 @@ You help users write, debug, and improve Luau code. You understand Roblox servic
     sections.push(`# Attached files\n${files}`)
   }
 
-  // ── Tone and style
-  sections.push(`# Tone and style
-- Be concise and direct. Lead with the answer or action, not reasoning.
-- When you modify files, state which files changed in one short line. Do not explain what the code does unless asked.
-- Do not repeat the user's request back. Do not add summaries of what you did.
-- For simple tasks, a 1-2 sentence response is ideal.
-- Use code blocks for code only, not for file paths or short values.
-- Skip filler phrases: "Sure!", "Of course!", "Here's what I did:", "I've made the following changes:".
-- Match the user's language. If they write in Korean, respond in Korean.`)
-
-  // ── Output efficiency
-  sections.push(`# Output efficiency
-Go straight to the point. Try the simplest approach first. Keep text output brief and direct.
-Focus output on: decisions that need user input, status updates at milestones, and errors that change the plan.
-If you can say it in one sentence, do not use three.`)
+  // Pulled from shared prompt-fragments so Pro and Community can't drift apart.
+  sections.push(mode === "chat" || mode === "plan" ? TONE_PRINCIPLES : TONE_PRINCIPLES_WITH_TOOLS)
+  sections.push(DOING_TASKS_PRINCIPLES)
+  sections.push(LANGUAGE_PRINCIPLES)
 
   return sections.join("\n\n")
 }
@@ -174,7 +188,7 @@ export const getBridgeToken = bridge?.getBridgeToken ?? (() => "")
 // ── Agent (chat + inline edit + checkpoint) ────────────────────────────────
 
 const agent = tryRequire<{
-  agentChat: (messages: any[], systemPrompt: string, streamChannel: string, projectRoot?: string) => Promise<{ modifiedFiles: string[] }>
+  agentChat: (messages: any[], systemPrompt: string, streamChannel: string, projectRoot?: string, autoAccept?: boolean) => Promise<{ modifiedFiles: string[] }>
   inlineEdit: (filePath: string, fileContent: string, instruction: string, systemPrompt: string) => Promise<string>
   getLastCheckpoint: () => any
   revertCheckpoint: (checkpoint: any) => string[]

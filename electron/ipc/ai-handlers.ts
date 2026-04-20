@@ -167,7 +167,7 @@ export function registerAIHandlers(): void {
   // ── Agent Chat (Tool Use) [Pro] ────────────────────────────────────────────
   ipcMain.handle(
     "ai:agent-chat",
-    async (_, messages: unknown[], contextData: unknown, streamChannel: string) => {
+    async (_, messages: unknown[], contextData: unknown, streamChannel: string, autoAccept?: boolean) => {
       if (!hasFeature("agent")) return PRO_REQUIRED("agent")
       const ctx = contextData as AIContext
 
@@ -194,7 +194,7 @@ export function registerAIHandlers(): void {
       }
 
       const fullPrompt = buildFullSystemPrompt(ctx, { bridgeContext, includeProgress: true })
-      const result = await agentChat(messages as never, fullPrompt, streamChannel, ctx.projectPath)
+      const result = await agentChat(messages as never, fullPrompt, streamChannel, ctx.projectPath, autoAccept === true)
       recordQuery({ userQuery: lastUserMsg, apisReferenced: [], ragHit: false })
 
       for (const fp of result.modifiedFiles) {

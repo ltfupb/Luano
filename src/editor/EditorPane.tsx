@@ -168,8 +168,6 @@ export function EditorPane(): JSX.Element {
   const autoSaveDelay = useSettingsStore((s) => s.autoSaveDelay)
   const fontSize = useSettingsStore((s) => s.fontSize)
   const setFontSize = useSettingsStore((s) => s.setFontSize)
-  const rightPanelOpen = useSettingsStore((s) => s.rightPanelOpen)
-  const chatPanelWidth = useSettingsStore((s) => s.chatPanelWidth)
   const monacoTheme = appTheme === "tokyo-night" ? "luano-tokyo-night" : appTheme === "light" ? "luano-light" : "luano-dark"
 
   const [inlineEditOpen, setInlineEditOpen] = useState(false)
@@ -325,6 +323,33 @@ export function EditorPane(): JSX.Element {
       console.warn("[LSP] Reconnect failed:", err)
     )
   }, []))
+
+  // ── Lazy content loading on session restore ─────────────────────────────────
+  // projectStore persists openFiles + activeFile but NOT fileContents (too large
+  // for localStorage). On restart the tabs are back but the content map is empty
+  // until App.tsx's restore loop reads each file. That loop races with this
+  // component's first render, which is why users see tabs with empty editors.
+  // Backstop: any openFile lacking content gets read here, once, per path.
+  useEffect(() => {
+    for (const filePath of openFiles) {
+      if (fileContents[filePath] !== undefined) continue
+      // Fire-and-forget. updateFileContent marks dirty (side effect of the
+      // existing setter), so we call the store directly to set content without
+      // the dirty flag — a post-restore read is NOT a user edit.
+      window.api.readFile(filePath).then((content) => {
+        if (content === null || content === undefined) return
+        useProjectStore.setState((state) => {
+          // Skip if another path got loaded in parallel or file was closed.
+          if (!state.openFiles.includes(filePath)) return state
+          if (state.fileContents[filePath] !== undefined) return state
+          return { fileContents: { ...state.fileContents, [filePath]: content } }
+        })
+      }).catch(() => { /* file deleted between sessions — skip */ })
+    }
+    // Depend on the OPEN-FILE LIST, not fileContents. Triggering this on every
+    // fileContents change would re-scan on every keystroke.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openFiles])
 
   // ── Save helpers ────────────────────────────────────────────────────────────
   const saveFile = useCallback(async (path: string) => {
@@ -619,12 +644,16 @@ export function EditorPane(): JSX.Element {
 
       </div>
 
-      {/* Split + Inline AI Edit buttons — pinned top-right */}
+      {/* Split + Inline AI Edit buttons — pinned top-right.
+          EditorPane's root is the positioning context (`relative`) and the outer
+          flex layout already puts the chat panel beside us, so right: 0 hugs the
+          editor/chat boundary. Older code subtracted `chatPanelWidth` here — that
+          was for a legacy layout where the chat panel overlaid the editor. */}
       {activeFile && (
         <div
           data-tour="inline-edit-btn"
-          className="absolute top-0 flex items-center gap-1 px-2 flex-shrink-0"
-          style={{ height: "34px", right: rightPanelOpen ? `${chatPanelWidth + 3}px` : 0, zIndex: 10, background: "var(--bg-panel)" }}
+          className="absolute top-0 right-0 flex items-center gap-1 px-2 flex-shrink-0"
+          style={{ height: "34px", zIndex: 10, background: "var(--bg-panel)" }}
         >
           {/* Markdown preview toggle (only for .md files) */}
           {isWagFile(activeFile) && (

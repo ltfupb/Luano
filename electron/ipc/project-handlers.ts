@@ -1,6 +1,7 @@
 import { ipcMain, dialog, app, shell } from "electron"
-import { join } from "path"
+import { join, basename, extname } from "path"
 import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync, lstatSync, statSync } from "fs"
+import { homedir } from "os"
 import { resolve as pathResolve } from "path"
 import { is } from "@electron-toolkit/utils"
 import { syncManager, lspManager } from "../main"
@@ -25,6 +26,53 @@ import { activateLicense, deactivateLicense, getLicenseInfo, validateLicense as 
 import { getToolchainConfig, getActiveTool, setProjectTool, setGlobalDefault, isMinimumToolchainReady, hasProjectConfig, initProjectConfig } from "../toolchain/config"
 import { downloadTool, downloadMultiple, getDownloadStatus, removeTool, checkToolUpdates, updateTool, fetchToolMetadata } from "../toolchain/downloader"
 import { TOOL_REGISTRY, CATEGORIES, type ToolCategory } from "../toolchain/registry"
+
+/**
+ * Parse a CC-style skill .md file:
+ *   ---
+ *   name: Refactor
+ *   description: Refactor selected code
+ *   ---
+ *   Prompt body, with {selection} and {file} templating.
+ *
+ * Missing fields fall back to the filename (minus .md) for the command.
+ * Returns null only if the file is completely empty.
+ * Tolerates CRLF line endings — authored on Windows is common.
+ */
+function parseMarkdownSkill(raw: string, filename: string): {
+  command: string
+  label: string
+  description: string
+  prompt: string
+  custom: boolean
+} | null {
+  // Normalize CRLF so the frontmatter regex matches Windows-authored files.
+  const normalized = raw.replace(/\r\n/g, "\n").replace(/\r/g, "\n")
+  const fmMatch = normalized.match(/^---\n([\s\S]*?)\n---\n?([\s\S]*)$/)
+  const base = basename(filename, extname(filename))
+  const meta: Record<string, string> = {}
+  let body = normalized
+  if (fmMatch) {
+    body = fmMatch[2]
+    for (const line of fmMatch[1].split("\n")) {
+      const idx = line.indexOf(":")
+      if (idx <= 0) continue
+      const k = line.slice(0, idx).trim().toLowerCase()
+      const v = line.slice(idx + 1).trim()
+      if (k) meta[k] = v
+    }
+  }
+  body = body.trim()
+  if (!body) return null
+  const name = meta.name || base
+  return {
+    command: "/" + (meta.command || base).replace(/^\//, ""),
+    label: name,
+    description: meta.description || "",
+    prompt: body,
+    custom: true
+  }
+}
 
 export function registerProjectHandlers(): void {
   // ── Pro Status ──────────────────────────────────────────────────────────────
@@ -302,14 +350,44 @@ export function registerProjectHandlers(): void {
   })
 
   // ── Custom Skills (Free) ────────────────────────────────────────────────────
+  // Two formats supported, both merged:
+  //   (1) Legacy JSON: `.luano/skills.json` — array of Skill objects.
+  //   (2) Markdown: `.luano/skills/*.md` (project) AND `~/.luano/skills/*.md` (global)
+  //       Matches Claude Code's format — frontmatter (name, description) + body is the prompt.
   ipcMain.handle("skills:load", (_, projectPath: string) => {
-    const skillsPath = join(projectPath, ".luano", "skills.json")
-    if (!existsSync(skillsPath)) return []
-    try {
-      return JSON.parse(readFileSync(skillsPath, "utf-8"))
-    } catch {
-      return []
+    const skills: Array<Record<string, unknown>> = []
+
+    // (1) Legacy JSON
+    const jsonPath = join(projectPath, ".luano", "skills.json")
+    if (existsSync(jsonPath)) {
+      try {
+        const parsed = JSON.parse(readFileSync(jsonPath, "utf-8"))
+        if (Array.isArray(parsed)) skills.push(...parsed)
+      } catch { /* bad json, skip */ }
     }
+
+    // (2) Markdown, per-project then global. Project skills override global on name conflict.
+    const globalDir = join(homedir(), ".luano", "skills")
+    const projectDir = join(projectPath, ".luano", "skills")
+    const seen = new Set<string>(skills.map((s) => String(s.command ?? "")).filter(Boolean))
+
+    for (const dir of [globalDir, projectDir]) {
+      if (!existsSync(dir)) continue
+      let entries: string[] = []
+      try { entries = readdirSync(dir).filter((f) => f.endsWith(".md")) } catch { continue }
+      for (const fname of entries) {
+        const full = join(dir, fname)
+        let raw: string
+        try { raw = readFileSync(full, "utf-8") } catch { continue }
+        const parsed = parseMarkdownSkill(raw, fname)
+        if (!parsed) continue
+        // Project dir runs after global, so duplicates (same command) override.
+        const existing = skills.findIndex((s) => s.command === parsed.command)
+        if (existing >= 0) skills[existing] = parsed
+        else if (!seen.has(parsed.command)) { skills.push(parsed); seen.add(parsed.command) }
+      }
+    }
+    return skills
   })
 
   ipcMain.handle("skills:save", (_, projectPath: string, skills: unknown[]) => {

@@ -16,7 +16,6 @@ const INITIAL: Parameters<typeof useAIStore.setState>[0] = {
   globalSummary: "",
   mode: "agent",
   autoAccept: false,
-  pendingReview: null,
   sessions: {},
   activeSessionId: null,
   sessionHandoff: "",
@@ -110,13 +109,6 @@ describe("simple setters", () => {
     expect(useAIStore.getState().autoAccept).toBe(true)
   })
 
-  it("setPendingReview", () => {
-    const review = { files: ["/a.lua"], messageId: "m1" }
-    useAIStore.getState().setPendingReview(review)
-    expect(useAIStore.getState().pendingReview).toEqual(review)
-    useAIStore.getState().setPendingReview(null)
-    expect(useAIStore.getState().pendingReview).toBeNull()
-  })
 })
 
 // ── saveProjectChat ───────────────────────────────────────────────────────────

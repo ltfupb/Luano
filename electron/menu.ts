@@ -44,7 +44,10 @@ export function buildMenu(win: BrowserWindow | null, hasProject = false): Menu {
       { label: "Close Project", enabled: hasProject, click: send(win, "menu:close-project") },
       { type: "separator" },
       ...(isMac ? [] : [
-        { label: "Settings…", accelerator: "Ctrl+,", click: send(win, "menu:open-settings") } as MenuItemConstructorOptions,
+        // Korean Windows localizes the OEM_COMMA key as "콤마" in the accelerator
+        // column. `\t` in label lets us render the shortcut verbatim and skip OS
+        // localization. `accelerator` still registers the real shortcut.
+        { label: "Settings…\tCtrl+,", accelerator: "Ctrl+,", click: send(win, "menu:open-settings") } as MenuItemConstructorOptions,
         { type: "separator" as const }
       ]),
       { label: "Toolchain…", click: send(win, "menu:open-toolchain") },
@@ -75,6 +78,10 @@ export function buildMenu(win: BrowserWindow | null, hasProject = false): Menu {
       { label: "Toggle Side Panel", accelerator: "CmdOrCtrl+B", enabled: hasProject, click: send(win, "menu:toggle-sidebar") },
       { label: "Toggle AI Chat", accelerator: "CmdOrCtrl+J", enabled: hasProject, click: send(win, "menu:toggle-chat") },
       { label: "Toggle Terminal", accelerator: "CmdOrCtrl+`", enabled: hasProject, click: send(win, "menu:toggle-terminal") },
+      { type: "separator" },
+      // Electron doesn't auto-bind F11 on Windows/Linux — screen-recorder users
+      // and presentation mode need this. macOS gets Ctrl+Cmd+F via the role.
+      { role: "togglefullscreen", accelerator: process.platform === "darwin" ? "Ctrl+Cmd+F" : "F11" },
       { type: "separator" },
       { role: "reload" },
       { role: "forceReload" },

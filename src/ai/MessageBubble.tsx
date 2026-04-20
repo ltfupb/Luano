@@ -3,7 +3,7 @@ import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import { ChatMessage } from "../stores/aiStore"
 import { CodeBlock } from "./CodeBlock"
-import { ThinkingBubble } from "./ThinkingBubble"
+import { ThinkingBubble, formatDuration, pickVerbPair } from "./ThinkingBubble"
 
 const MARKDOWN_COMPONENTS = {
   code({ inline, className, children, ...props }: {
@@ -112,10 +112,52 @@ const MARKDOWN_COMPONENTS = {
  * - Assistant: FLAT prose, no container, no background — like Claude Code's
  *   CLI output. The surrounding ChatPanel gutter provides breathing room.
  */
+/**
+ * Standalone footer — "✻ {Past} for Xs · ↑1.5k ↓0.3k".
+ * Exported so ChatPanel can relocate it below the tool group when an assistant
+ * turn fired tools (CC-style: footer goes at the very end of the turn).
+ */
+export function MessageFooter({ message }: { message: ChatMessage }): JSX.Element | null {
+  const [, pastTense] = pickVerbPair(message.id)
+  const hasTokens = (message.inputTokens ?? 0) > 0 || (message.outputTokens ?? 0) > 0
+  const hasThinking = message.thinkingSeconds !== undefined && message.thinkingSeconds > 0
+  if (!hasThinking && !hasTokens) return null
+
+  return (
+    <div
+      className="flex items-center gap-2 mt-3"
+      style={{ fontSize: 12, color: "var(--text-muted)", fontFamily: "'JetBrains Mono', monospace" }}
+      title={
+        hasTokens
+          ? `Input: ${(message.inputTokens ?? 0).toLocaleString()} tokens\nOutput: ${(message.outputTokens ?? 0).toLocaleString()} tokens\nCache read: ${(message.cacheTokens ?? 0).toLocaleString()} tokens`
+          : undefined
+      }
+    >
+      {hasThinking && (
+        <>
+          <span aria-hidden style={{ color: "var(--accent)", fontSize: 13 }}>✻</span>
+          <span>{pastTense} for {formatDuration(message.thinkingSeconds ?? 0)}</span>
+        </>
+      )}
+      {hasTokens && (
+        <>
+          {hasThinking && <span style={{ opacity: 0.5 }}>·</span>}
+          <span>↑{((message.inputTokens ?? 0) / 1000).toFixed(1)}k</span>
+          <span>↓{((message.outputTokens ?? 0) / 1000).toFixed(1)}k</span>
+          {(message.cacheTokens ?? 0) > 0 && (
+            <span style={{ opacity: 0.6 }}>({((message.cacheTokens ?? 0) / 1000).toFixed(1)}k cache)</span>
+          )}
+        </>
+      )}
+    </div>
+  )
+}
+
 export const MessageBubble = React.memo(function MessageBubble({
   message,
-  thinkingActive
-}: { message: ChatMessage; thinkingActive?: boolean }): JSX.Element {
+  thinkingActive,
+  hideFooter
+}: { message: ChatMessage; thinkingActive?: boolean; hideFooter?: boolean }): JSX.Element {
   const isUser = message.role === "user"
 
   if (isUser) {
@@ -124,7 +166,7 @@ export const MessageBubble = React.memo(function MessageBubble({
         <div
           className="max-w-full rounded-xl px-3 py-2 selectable"
           style={{
-            fontSize: "12px",
+            fontSize: "13px",
             lineHeight: "1.6",
             whiteSpace: "pre-wrap",
             wordBreak: "break-word",
@@ -141,11 +183,13 @@ export const MessageBubble = React.memo(function MessageBubble({
 
   // Assistant: flat, no container.
   const hasContent = Boolean(message.content)
+  const [gerund] = pickVerbPair(message.id)
+
   return (
     <div
       className="max-w-full w-full selectable markdown-body animate-slide-up"
       style={{
-        fontSize: "12px",
+        fontSize: "13px",
         lineHeight: "1.65",
         wordBreak: "break-word",
         color: "var(--text-primary)",
@@ -163,8 +207,10 @@ export const MessageBubble = React.memo(function MessageBubble({
           )}
         </>
       ) : message.streaming ? (
-        <ThinkingBubble thinkingActive={thinkingActive} />
+        <ThinkingBubble verb={gerund} thinkingActive={thinkingActive} />
       ) : null}
+
+      {!hideFooter && <MessageFooter message={message} />}
     </div>
   )
 })

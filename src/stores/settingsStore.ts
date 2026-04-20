@@ -78,7 +78,7 @@ export const useSettingsStore = create<SettingsStore>()(
       advisorEnabled: false,
       autoSave: true,
       autoSaveDelay: 1000,
-      fontSize: 13,
+      fontSize: 14,
       uiScale: 100,
       recentProjects: [],
       sidePanelWidth: 224,

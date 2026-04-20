@@ -10,6 +10,12 @@ export interface ChatMessage {
   streaming?: boolean
   toolName?: string
   toolSuccess?: boolean
+  /** Seconds spent thinking before this assistant message started streaming. Displayed as "Cogitated for X". */
+  thinkingSeconds?: number
+  /** Token counts for this single turn (computed as delta from session totals when the message ends). */
+  inputTokens?: number
+  outputTokens?: number
+  cacheTokens?: number
 }
 
 export interface SessionEntry {
@@ -19,18 +25,12 @@ export interface SessionEntry {
   preview: string
 }
 
-interface PendingReview {
-  files: string[]
-  messageId: string
-}
-
 interface AIStore {
   messages: ChatMessage[]
   isStreaming: boolean
   globalSummary: string
   mode: ChatMode
   autoAccept: boolean
-  pendingReview: PendingReview | null
   sessions: Record<string, SessionEntry[]>
   activeSessionId: string | null
   sessionHandoff: string
@@ -38,12 +38,13 @@ interface AIStore {
 
   addMessage: (msg: Omit<ChatMessage, "id">) => string
   updateMessage: (id: string, content: string, streaming?: boolean) => void
+  setThinkingSeconds: (id: string, seconds: number) => void
+  setMessageTokens: (id: string, tokens: { input: number; output: number; cache: number }) => void
   setStreaming: (v: boolean) => void
   setGlobalSummary: (s: string) => void
   clearMessages: () => void
   setMode: (m: ChatMode) => void
   setAutoAccept: (v: boolean) => void
-  setPendingReview: (v: PendingReview | null) => void
   saveProjectChat: (projectPath: string) => void
   loadProjectChat: (projectPath: string) => void
   startNewSession: (projectPath?: string) => void
@@ -70,7 +71,6 @@ export const useAIStore = create<AIStore>()(
       globalSummary: "",
       mode: "agent",
       autoAccept: false,
-      pendingReview: null,
       sessions: {},
       activeSessionId: null,
       sessionHandoff: "",
@@ -89,12 +89,25 @@ export const useAIStore = create<AIStore>()(
           )
         }),
 
+      setThinkingSeconds: (id, seconds) =>
+        set({
+          messages: get().messages.map((m) =>
+            m.id === id ? { ...m, thinkingSeconds: seconds } : m
+          )
+        }),
+
+      setMessageTokens: (id, tokens) =>
+        set({
+          messages: get().messages.map((m) =>
+            m.id === id ? { ...m, inputTokens: tokens.input, outputTokens: tokens.output, cacheTokens: tokens.cache } : m
+          )
+        }),
+
       setStreaming: (v) => set({ isStreaming: v }),
       setGlobalSummary: (s) => set({ globalSummary: s }),
       clearMessages: () => set({ messages: [] }),
       setMode: (m) => set({ mode: m }),
       setAutoAccept: (v) => set({ autoAccept: v }),
-      setPendingReview: (v) => set({ pendingReview: v }),
 
       saveProjectChat: (projectPath) => {
         const { messages, sessions, activeSessionId } = get()
