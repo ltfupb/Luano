@@ -29,7 +29,7 @@ function broadcast(s: UpdateState): void {
 }
 
 export function setupUpdater(): void {
-  autoUpdater.autoDownload = false
+  autoUpdater.autoDownload = true
   autoUpdater.autoInstallOnAppQuit = true
 
   autoUpdater.on("checking-for-update", () => {
@@ -86,8 +86,7 @@ export function setupUpdater(): void {
 
   ipcMain.handle("updater:status", () => state)
 
-  // Auto-check on startup (delay 10s to not block launch)
-  setTimeout(() => {
-    autoUpdater.checkForUpdates().catch(() => {})
-  }, 10_000)
+  // Check immediately on startup. UpdateBanner pulls current state on mount,
+  // so missing the early broadcast (before any window exists) is recoverable.
+  autoUpdater.checkForUpdates().catch(() => {})
 }

@@ -23,8 +23,9 @@ export function UpdateBanner(): JSX.Element | null {
 
   useIpcEvent("updater:status", (data) => {
     const next = data as UpdateState
-    // Reset dismissed when a new version becomes available
-    if (next.status === "available") setDismissed(false)
+    // Reset dismissed when a new download finishes so the user always sees
+    // the "restart to apply" prompt for a fresh version.
+    if (next.status === "downloaded") setDismissed(false)
     setUpdate(next)
   })
 
@@ -34,22 +35,9 @@ export function UpdateBanner(): JSX.Element | null {
     }
   }, [])
 
-  const visible =
-    !dismissed &&
-    (update.status === "available" || update.status === "downloading" || update.status === "downloaded")
-
-  if (!visible) return null
-
-  const isDownloaded = update.status === "downloaded"
-  const isDownloading = update.status === "downloading"
-
-  const handleAction = async () => {
-    if (update.status === "available") {
-      await window.api.updaterDownload()
-    } else if (isDownloaded) {
-      setConfirmInstall(true)
-    }
-  }
+  // Banner only appears once the update is fully downloaded and ready to
+  // install. The download itself runs silently in the background.
+  if (dismissed || update.status !== "downloaded") return null
 
   return (
     <div
@@ -58,8 +46,8 @@ export function UpdateBanner(): JSX.Element | null {
         top: "40px",
         right: "16px",
         width: "300px",
-        background: isDownloaded ? "var(--bg-elevated)" : "var(--bg-elevated)",
-        border: `1px solid ${isDownloaded ? "var(--success)" : "var(--info)"}`,
+        background: "var(--bg-elevated)",
+        border: "1px solid var(--success)",
         borderRadius: "8px",
         padding: "12px 14px",
         zIndex: 9999,
@@ -71,82 +59,47 @@ export function UpdateBanner(): JSX.Element | null {
     >
       {/* Header row */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <span style={{
-          fontSize: "13px",
-          fontWeight: 600,
-          color: isDownloaded ? "var(--success)" : "var(--info)"
-        }}>
-          {isDownloaded ? "Restart to update" : isDownloading ? "Downloading update…" : `Update available — v${update.version}`}
+        <span style={{ fontSize: "13px", fontWeight: 600, color: "var(--success)" }}>
+          Restart to apply — v{update.version}
         </span>
-        {!isDownloading && (
-          <button
-            onClick={() => setDismissed(true)}
-            style={{
-              background: "none",
-              border: "none",
-              cursor: "pointer",
-              color: "var(--text-muted)",
-              padding: "0 0 0 8px",
-              lineHeight: 1,
-              fontSize: "16px"
-            }}
-          >
-            ×
-          </button>
-        )}
+        <button
+          onClick={() => setDismissed(true)}
+          style={{
+            background: "none",
+            border: "none",
+            cursor: "pointer",
+            color: "var(--text-muted)",
+            padding: "0 0 0 8px",
+            lineHeight: 1,
+            fontSize: "16px"
+          }}
+        >
+          ×
+        </button>
       </div>
 
-      {/* Progress bar */}
-      {isDownloading && (
-        <div style={{
-          height: "4px",
-          background: "var(--border-subtle)",
-          borderRadius: "2px",
-          overflow: "hidden"
-        }}>
-          <div style={{
-            height: "100%",
-            width: `${update.progress ?? 0}%`,
-            background: "var(--info)",
-            borderRadius: "2px",
-            transition: "width 0.3s ease"
-          }} />
-        </div>
-      )}
-
-      {/* Description + action */}
-      {!isDownloading && (
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px" }}>
-          <span style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
-            {isDownloaded
-              ? "Luano will restart and install the update."
-              : "A new version of Luano is ready to download."}
-          </span>
-          <button
-            onClick={handleAction}
-            style={{
-              flexShrink: 0,
-              fontSize: "12px",
-              fontWeight: 600,
-              padding: "5px 12px",
-              borderRadius: "5px",
-              border: "none",
-              cursor: "pointer",
-              background: isDownloaded ? "var(--success)" : "var(--info)",
-              color: "#fff"
-            }}
-          >
-            {isDownloaded ? "Restart" : "Download"}
-          </button>
-        </div>
-      )}
-
-      {/* Downloading percentage */}
-      {isDownloading && (
+      {/* Restart action */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px" }}>
         <span style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
-          {update.progress ?? 0}% downloaded
+          Luano will restart and install the update.
         </span>
-      )}
+        <button
+          onClick={() => setConfirmInstall(true)}
+          style={{
+            flexShrink: 0,
+            fontSize: "12px",
+            fontWeight: 600,
+            padding: "5px 12px",
+            borderRadius: "5px",
+            border: "none",
+            cursor: "pointer",
+            background: "var(--success)",
+            color: "#fff"
+          }}
+        >
+          Restart
+        </button>
+      </div>
 
       {confirmInstall && (
         <ConfirmDialog

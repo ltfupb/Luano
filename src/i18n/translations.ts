@@ -161,7 +161,7 @@ export const translations = {
     ready: "Ready",
     updateAvailable: "available",
     downloading: "downloading…",
-    restartToUpdate: "Restart to update",
+    restartToUpdate: "Restart to apply",
 
     // Analysis
     analysis: "Analysis",
@@ -353,7 +353,7 @@ export const translations = {
     ready: "준비",
     updateAvailable: "업데이트 가능",
     downloading: "다운로드 중…",
-    restartToUpdate: "재시작하여 업데이트",
+    restartToUpdate: "재시작해서 적용",
 
     // Analysis
     analysis: "분석",
