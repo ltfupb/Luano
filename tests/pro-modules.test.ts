@@ -165,9 +165,8 @@ describe("free buildSystemPrompt", () => {
       currentFile: "/project/big.luau",
       currentFileContent: longContent
     })
-    // Should contain the first 3000 chars of content
-    expect(result).toContain("x".repeat(100))
-    // Should not contain the full 5000-char string
-    expect(result.length).toBeLessThan(longContent.length + 1000)
+    // Contract: file content gets sliced at 3000 chars before injection.
+    expect(result).toContain("x".repeat(3000))
+    expect(result).not.toContain("x".repeat(3001))
   })
 })
