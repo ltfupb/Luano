@@ -2,7 +2,7 @@
  * electron/pro/modules.ts — Centralized Pro module loader
  *
  * All dynamic require() calls for Pro-only backend modules in one place.
- * In Community edition these modules are absent; typed stubs are used instead.
+ * In Free edition these modules are absent; typed stubs are used instead.
  */
 
 /* eslint-disable @typescript-eslint/no-require-imports, @typescript-eslint/no-explicit-any */
@@ -30,8 +30,8 @@ const ctx = tryRequire<{
 export const buildGlobalSummary = ctx?.buildGlobalSummary
   ?? (async (): Promise<{ globalSummary: string }> => ({ globalSummary: "" }))
 
-/** Community-edition system prompt — structured like Claude Code's own prompt. */
-function communitySystemPrompt(opts: Record<string, any>): string {
+/** Free-edition system prompt — structured like Claude Code's own prompt. */
+function freeSystemPrompt(opts: Record<string, any>): string {
   const sections: string[] = []
   const mode = opts.mode as ("chat" | "agent" | "plan" | undefined)
 
@@ -91,7 +91,7 @@ You help users write, debug, and improve Luau code. You understand Roblox servic
     sections.push(`# Attached files\n${files}`)
   }
 
-  // Pulled from shared prompt-fragments so Pro and Community can't drift apart.
+  // Pulled from shared prompt-fragments so Pro and Free can't drift apart.
   sections.push(mode === "chat" || mode === "plan" ? TONE_PRINCIPLES : TONE_PRINCIPLES_WITH_TOOLS)
   sections.push(DOING_TASKS_PRINCIPLES)
   sections.push(LANGUAGE_PRINCIPLES)
@@ -99,11 +99,11 @@ You help users write, debug, and improve Luau code. You understand Roblox servic
   return sections.join("\n\n")
 }
 
-// Route: chat/plan modes ALWAYS use community prompt (skip Pro's tool-heavy prefix).
-// Agent mode uses Pro prompt if available, community otherwise.
+// Route: chat/plan modes ALWAYS use free prompt (skip Pro's tool-heavy prefix).
+// Agent mode uses Pro prompt if available, free otherwise.
 export const buildSystemPrompt = (opts: Record<string, any>): string => {
-  if (opts.mode === "chat" || opts.mode === "plan") return communitySystemPrompt(opts)
-  return ctx?.buildSystemPrompt ? ctx.buildSystemPrompt(opts) : communitySystemPrompt(opts)
+  if (opts.mode === "chat" || opts.mode === "plan") return freeSystemPrompt(opts)
+  return ctx?.buildSystemPrompt ? ctx.buildSystemPrompt(opts) : freeSystemPrompt(opts)
 }
 
 export const buildDocsContext = ctx?.buildDocsContext

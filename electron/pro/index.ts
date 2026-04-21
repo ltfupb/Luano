@@ -2,9 +2,9 @@
  * electron/pro/index.ts — Pro feature interface layer
  *
  * Attempts to load @luano/pro package. If present and licensed, Pro features
- * are available. Otherwise, the app runs in Community (free) mode.
+ * are available. Otherwise, the app runs in Free mode.
  *
- * Community mode includes: editor, LSP, Rojo/Selene/StyLua, basic AI chat (BYOK Q&A).
+ * Free mode includes: editor, LSP, Rojo/Selene/StyLua, basic AI chat (BYOK Q&A).
  * Pro mode adds: Agent loop, inline edit, RAG, Studio bridge, cross-script analysis,
  * performance lint, DataStore schema generator, skills system.
  */

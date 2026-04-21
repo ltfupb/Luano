@@ -2,7 +2,7 @@
  * src/lib/loadPro.tsx — Centralized Pro component loader (renderer)
  *
  * Uses Vite's import.meta.glob to discover optional Pro-only components.
- * In Community edition these files are absent; typed placeholders are used.
+ * In Free edition these files are absent; typed placeholders are used.
  */
 
 import { lazy, Suspense, type ComponentType, type FC } from "react"

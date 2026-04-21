@@ -554,7 +554,7 @@ export function SettingsPanel({ onClose }: SettingsPanelProps): JSX.Element {
               style={{ background: "var(--bg-elevated)", border: "1px solid var(--border-subtle)" }}
             >
               <span style={{ fontSize: "12px", fontWeight: 600, color: proStatus?.isPro ? "var(--success)" : "var(--text-secondary)" }}>
-                {proStatus?.isPro ? t("pro") : t("communityFree")}
+                {proStatus?.isPro ? t("pro") : t("free")}
               </span>
               {licenseInfo?.isActive && licenseInfo.customerEmail && (
                 <span style={{ fontSize: "10px", color: "var(--text-muted)", marginLeft: "auto" }}>

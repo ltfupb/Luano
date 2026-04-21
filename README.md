@@ -41,10 +41,12 @@ Luano is a desktop editor built specifically for Roblox game development. It bun
 **AI Assistant**
 - Chat with AI that understands Roblox architecture, Luau patterns, and your project context
 - Markdown rendering in chat (code blocks, tables, GFM)
-- Three modes: **Chat** (Q&A), **Plan** (step-by-step), **Agent** (autonomous file editing)
-- Agent mode with explore-first workflow and self-verification (lint after every edit)
+- Three modes: **Chat** (Q&A), **Plan** (step-by-step), **Agent** (autonomous file editing) — each with its own auto-accept toggle
+- Pre-edit diff approval (y / n / d for full diff) before any file write
+- Agent mode with explore-first workflow, parallel read tools, and self-verification (lint after every edit)
 - 10 built-in skills: `/explain`, `/fix`, `/optimize`, `/refactor`, `/test`, `/type`, `/doc`, `/security`, `/convert`, `/scaffold`
-- Custom skills with `{selection}` and `{file}` placeholders
+- Custom skills via JSON or Markdown files in `~/.luano/skills/` (global) or `.luano/skills/` (project-scoped)
+- Project instructions: 3-tier `LUANO.md` hierarchy (global / project / directory) auto-injected into every chat
 - File attachments for additional context
 - Session history with per-project persistence and session handoff
 - Prompt caching for token efficiency

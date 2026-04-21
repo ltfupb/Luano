@@ -1,7 +1,7 @@
 /**
  * electron/ai/prompt-fragments.ts — Shared prompt building blocks.
  *
- * Both the Pro agent prompt (context.ts) and the Community prompt (pro/modules.ts)
+ * Both the Pro agent prompt (context.ts) and the Free prompt (pro/modules.ts)
  * compose from these strings. Keep each fragment:
  *   - Principle-first (not an exhaustive blacklist).
  *   - Decoupled from specific tool names so it applies across modes.

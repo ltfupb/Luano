@@ -1,13 +1,13 @@
 /**
- * tests/pro-modules.test.ts — Community-mode contract tests for electron/pro/modules.ts
+ * tests/pro-modules.test.ts — Free-mode contract tests for electron/pro/modules.ts
  *
  * Goal: Verify that all exports are callable and return the expected shape,
- * and that the community system prompt is well-formed. Catches breakage if
+ * and that the free system prompt is well-formed. Catches breakage if
  * someone renames an export, changes its signature, or removes a fallback.
  *
  * Note: In the private repo, Pro modules are loaded. These tests validate the
  * export CONTRACT (types, callability, return shape), not which implementation runs.
- * The community prompt is always tested because it is the fallback function embedded
+ * The free prompt is always tested because it is the fallback function embedded
  * in this file.
  */
 
@@ -113,9 +113,9 @@ describe("pro/modules — all exports are callable", () => {
   })
 })
 
-// ── Community system prompt tests ─────────────────────────────────────────────
+// ── Free system prompt tests ─────────────────────────────────────────────
 
-describe("community buildSystemPrompt", () => {
+describe("free buildSystemPrompt", () => {
   it("includes Luano identity section", () => {
     const result = m.buildSystemPrompt({})
     expect(result).toContain("Luano")
