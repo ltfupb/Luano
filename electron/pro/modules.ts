@@ -58,6 +58,8 @@ You are in Chat mode. You do NOT have tools, filesystem access, a terminal, or a
 
 Answer questions directly. Write code in markdown blocks. Never say "I'll add this" or "I'll modify that" — you can't. If the user needs real edits, tell them to switch to Agent mode.
 
+IMPORTANT: Assist with legitimate Roblox/Luau development. Refuse requests to write cheats, exploits, griefing tools, or content that clearly violates Roblox's Terms of Service — even as "just example code." The model without tools can still generate harmful code.
+
 IMPORTANT: You must NEVER generate or guess URLs for the user unless you are confident that the URLs are for helping the user with programming. You may use URLs provided by the user in their messages or the project's files.`)
   } else if (mode === "plan") {
     // Ported from CC's agent-prompt-plan-mode-enhanced.md.
@@ -103,7 +105,6 @@ Your role is EXCLUSIVELY to explore the codebase and design an implementation pl
 - List the paths of files to be modified and what changes in each (one bullet per file).
 - Reference existing functions to reuse, with file_path:line_number.
 - End with the single verification command (typically running Lint on the edited files after switching to Agent mode).
-- **Hard limit: 40 lines.** If the plan is longer, delete prose — not file paths.
 
 End your response with:
 
