@@ -66,7 +66,7 @@ function makeSessionId(): string {
  * UI falls back to the raw string for old sessions — icons miss, labels drop
  * to "custom_tool" style display. Run on migrate to keep history readable.
  */
-const TOOL_NAME_MIGRATION: Record<string, string> = {
+export const TOOL_NAME_MIGRATION: Record<string, string> = {
   read_file: "Read",
   edit_file: "Edit",
   multi_edit: "MultiEdit",
@@ -93,7 +93,7 @@ const TOOL_NAME_MIGRATION: Record<string, string> = {
   // case-sensitive mapping below handles lowercase `grep` → `Grep`.
 }
 
-function migrateToolName(name: string | undefined): string | undefined {
+export function migrateToolName(name: string | undefined): string | undefined {
   if (!name) return name
   if (name in TOOL_NAME_MIGRATION) return TOOL_NAME_MIGRATION[name]
   if (name === "grep") return "Grep"

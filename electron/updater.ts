@@ -89,4 +89,12 @@ export function setupUpdater(): void {
   // Check immediately on startup. UpdateBanner pulls current state on mount,
   // so missing the early broadcast (before any window exists) is recoverable.
   autoUpdater.checkForUpdates().catch(() => {})
+
+  // Re-check hourly so long-running sessions still pick up new releases.
+  // Skip when a download is already in flight or finished — we don't want
+  // to thrash an active install or redownload the same version.
+  setInterval(() => {
+    if (state.status === "downloading" || state.status === "downloaded") return
+    autoUpdater.checkForUpdates().catch(() => {})
+  }, 60 * 60 * 1000)
 }

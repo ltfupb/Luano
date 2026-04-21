@@ -2,6 +2,7 @@ import { useState, useEffect } from "react"
 import { useSyncStore } from "../stores/syncStore"
 import { useProjectStore } from "../stores/projectStore"
 import { useElapsed } from "../hooks/useElapsed"
+import { useIpcEvent } from "../hooks/useIpc"
 import { getFileName } from "../lib/utils"
 
 const statusDot: Record<string, string> = {
@@ -24,6 +25,17 @@ export function StatusBar(): JSX.Element {
 
   const [memMB, setMemMB] = useState(0)
   const [toolUpdates, setToolUpdates] = useState(0)
+  const [updateError, setUpdateError] = useState<string | null>(null)
+
+  // Surface updater failures as a subtle dot. The UpdateBanner stays quiet
+  // on error by design (only shows "ready to restart"), so without this
+  // indicator a silent network/checksum failure leaves the user wondering
+  // why a promised update never arrives. Clicking the dot re-triggers a check.
+  useIpcEvent("updater:status", (data) => {
+    const s = data as { status: string; error?: string }
+    if (s.status === "error") setUpdateError(s.error ?? "Update check failed")
+    else if (s.status === "checking" || s.status === "downloading" || s.status === "downloaded") setUpdateError(null)
+  })
 
   // Check toolchain updates after startup
   useEffect(() => {
@@ -149,6 +161,27 @@ export function StatusBar(): JSX.Element {
             {lspLabel}
           </span>
         </div>
+      )}
+
+      {/* Updater error — subtle dot with tooltip */}
+      {updateError && (
+        <>
+          <span style={{ color: "var(--border)", userSelect: "none" }}>·</span>
+          <button
+            onClick={() => { setUpdateError(null); void window.api.updaterCheck?.() }}
+            title={`${updateError}\nClick to retry`}
+            className="flex items-center gap-1 transition-colors duration-100"
+            style={{ color: "var(--danger)", background: "none", border: "none", fontSize: "11px", cursor: "pointer" }}
+          >
+            <span
+              style={{
+                width: 6, height: 6, borderRadius: "50%",
+                background: "var(--danger)", display: "inline-block"
+              }}
+            />
+            update failed
+          </button>
+        </>
       )}
 
       {/* Toolchain updates */}
