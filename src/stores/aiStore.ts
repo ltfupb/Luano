@@ -276,7 +276,10 @@ export const useAIStore = create<AIStore>()(
       version: 1,
       migrate: (persistedState, version) => {
         // v0 → v1: rename snake_case tool names to CC-style PascalCase.
-        if (version < 1 && persistedState && typeof persistedState === "object") {
+        // Pre-migration data may arrive with undefined version (zustand on
+        // older storage wrapper); `undefined < 1` is false, so default to 0
+        // to keep the migration defensive against that case.
+        if ((version ?? 0) < 1 && persistedState && typeof persistedState === "object") {
           const s = persistedState as { sessions?: Record<string, SessionEntry[]> }
           if (s.sessions) {
             for (const key of Object.keys(s.sessions)) {
