@@ -44,7 +44,7 @@ function findTool(name: string) {
 }
 
 describe("grep tool schema", () => {
-  const grep = findTool("grep")
+  const grep = findTool("Grep")
 
   it("exists", () => {
     expect(grep).toBeDefined()
@@ -64,7 +64,7 @@ describe("grep tool schema", () => {
 })
 
 describe("multi_edit tool schema", () => {
-  const multiEdit = findTool("multi_edit")
+  const multiEdit = findTool("MultiEdit")
 
   it("exists", () => {
     expect(multiEdit).toBeDefined()
@@ -79,11 +79,11 @@ describe("multi_edit tool schema", () => {
 
 describe("tool list completeness", () => {
   const expectedTools = [
-    "read_file", "edit_file", "multi_edit", "patch_file", "create_file", "delete_file",
-    "list_files", "grep", "search_docs", "lint_file", "format_file",
-    "type_check", "todo_write", "read_instance_tree", "get_runtime_logs",
-    "run_studio_script", "set_property", "insert_model",
-    "wag_read", "wag_search", "wag_update", "ask_user"
+    "Read", "Edit", "MultiEdit", "Patch", "Write", "Delete",
+    "Glob", "Grep", "SearchDocs", "Lint", "Format",
+    "TypeCheck", "TodoWrite", "ReadInstanceTree", "RuntimeLogs",
+    "RunScript", "SetProperty", "InsertModel",
+    "WagRead", "WagSearch", "WagUpdate", "AskUser"
   ]
 
   it("has all 22 client tools", () => {

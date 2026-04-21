@@ -49,7 +49,7 @@ describe("toCachedTools", () => {
 
   it("adds cache_control to last tool only", () => {
     const tools = [
-      { name: "read_file", description: "Read a file" },
+      { name: "Read", description: "Read a file" },
       { name: "write_file", description: "Write a file" },
       { name: "lint", description: "Lint a file" }
     ]

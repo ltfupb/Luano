@@ -18,14 +18,14 @@ const mkEvent = (overrides: Partial<ChatMessage>): ChatMessage => ({
   id: Math.random().toString(36).slice(2),
   role: "tool",
   content: "result text",
-  toolName: "read_file",
+  toolName: "Read",
   toolSuccess: true,
   ...overrides
 } as ChatMessage)
 
 describe("ToolCallGroup", () => {
   it("collapses multi-tool groups behind a summary header, expands on click", () => {
-    const events = [mkEvent({ toolName: "read_file" }), mkEvent({ toolName: "edit_file" })]
+    const events = [mkEvent({ toolName: "Read" }), mkEvent({ toolName: "Edit" })]
     render(<ToolCallGroup events={events} />)
     // Collapsed: summary "2 tools used" is visible; individual rows are hidden.
     const header = screen.getByText("2 tools used")
@@ -43,13 +43,13 @@ describe("ToolCallGroup", () => {
   })
 
   it("reveals raw output when a row is clicked", () => {
-    render(<ToolCallGroup events={[mkEvent({ toolName: "read_file", content: "hello world output" })]} />)
+    render(<ToolCallGroup events={[mkEvent({ toolName: "Read", content: "hello world output" })]} />)
     fireEvent.click(screen.getByText("Read"))
     expect(screen.getByText("hello world output")).toBeInTheDocument()
   })
 
   it("does not auto-expand failed tools — user clicks to reveal the error body", () => {
-    const events = [mkEvent({ toolName: "edit_file", toolSuccess: false, content: "ERROR: text not found" })]
+    const events = [mkEvent({ toolName: "Edit", toolSuccess: false, content: "ERROR: text not found" })]
     render(<ToolCallGroup events={events} />)
     expect(screen.queryByText("ERROR: text not found")).not.toBeInTheDocument()
     fireEvent.click(screen.getByText("Edit"))
@@ -62,13 +62,13 @@ describe("ToolCallGroup", () => {
   })
 
   it("shows empty-output placeholder when content is missing after expand", () => {
-    render(<ToolCallGroup events={[mkEvent({ toolName: "read_file", content: "" })]} />)
+    render(<ToolCallGroup events={[mkEvent({ toolName: "Read", content: "" })]} />)
     fireEvent.click(screen.getByText("Read"))
     expect(screen.getByText("No output")).toBeInTheDocument()
   })
 
   it("toggles output open/close on repeated clicks", () => {
-    render(<ToolCallGroup events={[mkEvent({ toolName: "read_file", content: "stuff" })]} />)
+    render(<ToolCallGroup events={[mkEvent({ toolName: "Read", content: "stuff" })]} />)
     fireEvent.click(screen.getByText("Read"))
     expect(screen.getByText("stuff")).toBeInTheDocument()
     fireEvent.click(screen.getByText("Read"))

@@ -43,7 +43,7 @@ export function EditPreviewCard({ tool, preview, input, onAccept, onReject }: Ed
   const [showFull, setShowFull] = useState(false)
 
   const path = preview?.path ?? String(input.path ?? "")
-  const kind = preview?.kind ?? (tool === "create_file" ? "create" : tool === "delete_file" ? "delete" : "edit")
+  const kind = preview?.kind ?? (tool === "Write" ? "create" : tool === "Delete" ? "delete" : "edit")
   const oldContent = preview?.oldContent ?? ""
   const newContent = preview?.newContent ?? ""
   const hasError = Boolean(preview?.error)

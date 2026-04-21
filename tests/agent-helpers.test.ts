@@ -67,7 +67,7 @@ beforeEach(() => { vi.clearAllMocks() })
 describe("detectStall", () => {
   it("resets counter and returns no-nudge when a write tool is used", () => {
     const state = { executeRoundsWithoutWrite: 5 }
-    const result = detectStall("execute", ["read_file", "create_file"], state)
+    const result = detectStall("execute", ["Read", "Write"], state)
     expect(result).toEqual({ nudge: false })
     expect(state.executeRoundsWithoutWrite).toBe(0)
   })
@@ -75,7 +75,7 @@ describe("detectStall", () => {
   it(`increments counter without nudge for the first ${STALL_THRESHOLD - 1} read-only rounds`, () => {
     const state = { executeRoundsWithoutWrite: 0 }
     for (let i = 0; i < STALL_THRESHOLD - 1; i++) {
-      const result = detectStall("execute", ["read_file"], state)
+      const result = detectStall("execute", ["Read"], state)
       expect(result.nudge).toBe(false)
     }
     expect(state.executeRoundsWithoutWrite).toBe(STALL_THRESHOLD - 1)
@@ -83,7 +83,7 @@ describe("detectStall", () => {
 
   it("nudges on the STALL_THRESHOLD-th consecutive read-only round", () => {
     const state = { executeRoundsWithoutWrite: STALL_THRESHOLD - 1 }
-    const result = detectStall("execute", ["read_file"], state)
+    const result = detectStall("execute", ["Read"], state)
     expect(result.nudge).toBe(true)
     if (result.nudge) expect(result.text).toMatch(/many rounds reading without writing/i)
     expect(state.executeRoundsWithoutWrite).toBe(0) // reset after nudge
@@ -97,7 +97,7 @@ describe("detectStall", () => {
 
   it("works in verify phase same as execute", () => {
     const state = { executeRoundsWithoutWrite: STALL_THRESHOLD - 1 }
-    const result = detectStall("verify", ["read_file"], state)
+    const result = detectStall("verify", ["Read"], state)
     expect(result.nudge).toBe(true)
   })
 })
@@ -143,12 +143,12 @@ describe("estimateTokens (CJK-aware)", () => {
 describe("microCompact", () => {
   it("returns output unchanged when below threshold", () => {
     const small = "hello world"
-    expect(microCompact("read_file", small)).toBe(small)
+    expect(microCompact("Read", small)).toBe(small)
   })
 
   it("head+tail for read_file when total lines <= 90", () => {
     const lines = Array.from({ length: 80 }, (_, i) => `line ${i} ${"x".repeat(50)}`).join("\n")
-    const out = microCompact("read_file", lines)
+    const out = microCompact("Read", lines)
     expect(out).toContain("head + tail")
     expect(out).toContain("line 0")
     expect(out).toContain("line 79")
@@ -160,7 +160,7 @@ describe("microCompact", () => {
 
   it("head+mid+tail for read_file when total lines > 90", () => {
     const lines = Array.from({ length: 200 }, (_, i) => `line ${i} ${"x".repeat(30)}`).join("\n")
-    const out = microCompact("read_file", lines)
+    const out = microCompact("Read", lines)
     expect(out).toContain("head (1-")
     expect(out).toContain("middle")
     expect(out).toContain("tail (last")
@@ -170,7 +170,7 @@ describe("microCompact", () => {
 
   it("caps grep output at 20 lines with narrow-hint", () => {
     const lines = Array.from({ length: 50 }, (_, i) => `match ${i} ${"x".repeat(40)}`).join("\n")
-    const out = microCompact("grep", lines)
+    const out = microCompact("Grep", lines)
     expect(out).toContain("narrow the regex")
     // First 20 kept
     expect(out.split("\n")).toHaveLength(21) // 20 + 1 summary
@@ -178,7 +178,7 @@ describe("microCompact", () => {
 
   it("caps list_files at 30 entries", () => {
     const lines = Array.from({ length: 60 }, (_, i) => `file${i}.lua  ${"x".repeat(30)}`).join("\n")
-    const out = microCompact("list_files", lines)
+    const out = microCompact("Glob", lines)
     expect(out).toContain("more entries")
   })
 })
@@ -192,38 +192,38 @@ describe("appendWagReminder", () => {
   })
 
   it("appends reminder when tool input contains a tunable keyword (damage)", () => {
-    const out = appendWagReminder("File updated", "edit_file", luaPath, projectRoot, { content: "local damage = 10" })
+    const out = appendWagReminder("File updated", "Edit", luaPath, projectRoot, { content: "local damage = 10" })
     expect(out).toContain("[WAG]")
   })
 
   it("does NOT append for pure refactor with no tunable keywords", () => {
-    const out = appendWagReminder("File updated", "edit_file", luaPath, projectRoot, { content: "local function sayHi() return 'hi' end" })
+    const out = appendWagReminder("File updated", "Edit", luaPath, projectRoot, { content: "local function sayHi() return 'hi' end" })
     expect(out).not.toContain("[WAG]")
   })
 
   it("case-insensitive keyword match (HP)", () => {
-    const out = appendWagReminder("ok", "edit_file", luaPath, projectRoot, { new_text: "self.HP = 100" })
+    const out = appendWagReminder("ok", "Edit", luaPath, projectRoot, { new_text: "self.HP = 100" })
     expect(out).toContain("[WAG]")
   })
 
   it("skips when file is in wag/ directory", () => {
-    const out = appendWagReminder("ok", "edit_file", "/tmp/proj/wag/monster.md", projectRoot, { content: "damage: 10" })
+    const out = appendWagReminder("ok", "Edit", "/tmp/proj/wag/monster.md", projectRoot, { content: "damage: 10" })
     expect(out).not.toContain("[WAG]")
   })
 
   it("skips when file is not a .lua/.luau file", () => {
-    const out = appendWagReminder("ok", "edit_file", "/tmp/proj/README.md", projectRoot, { content: "local damage = 10" })
+    const out = appendWagReminder("ok", "Edit", "/tmp/proj/README.md", projectRoot, { content: "local damage = 10" })
     expect(out).not.toContain("[WAG]")
   })
 
   it("skips when wagExists is false (no wag/ dir in project)", () => {
     vi.mocked(wagExists).mockReturnValueOnce(false)
-    const out = appendWagReminder("ok", "edit_file", luaPath, projectRoot, { content: "local damage = 10" })
+    const out = appendWagReminder("ok", "Edit", luaPath, projectRoot, { content: "local damage = 10" })
     expect(out).not.toContain("[WAG]")
   })
 
   it("skips delete_file even if file is .lua", () => {
-    const out = appendWagReminder("ok", "delete_file", luaPath, projectRoot, { content: "hp = 10" })
+    const out = appendWagReminder("ok", "Delete", luaPath, projectRoot, { content: "hp = 10" })
     expect(out).not.toContain("[WAG]")
   })
 
@@ -238,38 +238,38 @@ describe("appendWagReminder", () => {
 describe("getToolsForExecution (STUDIO filter)", () => {
   it("includes Studio tools when studioConnected is true", () => {
     const names = getToolsForExecution({ studioConnected: true }).map((t) => t.name)
-    expect(names).toContain("read_instance_tree")
-    expect(names).toContain("run_studio_script")
+    expect(names).toContain("ReadInstanceTree")
+    expect(names).toContain("RunScript")
   })
 
   it("excludes Studio tools when studioConnected is false", () => {
     const names = getToolsForExecution({ studioConnected: false }).map((t) => t.name)
-    expect(names).not.toContain("read_instance_tree")
-    expect(names).not.toContain("get_runtime_logs")
-    expect(names).not.toContain("run_studio_script")
-    expect(names).not.toContain("set_property")
-    expect(names).not.toContain("insert_model")
+    expect(names).not.toContain("ReadInstanceTree")
+    expect(names).not.toContain("RuntimeLogs")
+    expect(names).not.toContain("RunScript")
+    expect(names).not.toContain("SetProperty")
+    expect(names).not.toContain("InsertModel")
   })
 
   it("keeps non-Studio tools regardless of studioConnected", () => {
     const offNames = getToolsForExecution({ studioConnected: false }).map((t) => t.name)
-    expect(offNames).toContain("read_file")
-    expect(offNames).toContain("create_file")
-    expect(offNames).toContain("edit_file")
+    expect(offNames).toContain("Read")
+    expect(offNames).toContain("Write")
+    expect(offNames).toContain("Edit")
   })
 
   it("excludeExploration removes list_files/grep/read_instance_tree/get_runtime_logs", () => {
     const names = getToolsForExecution({ excludeExploration: true, studioConnected: true }).map((t) => t.name)
-    expect(names).not.toContain("list_files")
-    expect(names).not.toContain("grep")
-    expect(names).not.toContain("read_instance_tree")
-    expect(names).not.toContain("get_runtime_logs")
+    expect(names).not.toContain("Glob")
+    expect(names).not.toContain("Grep")
+    expect(names).not.toContain("ReadInstanceTree")
+    expect(names).not.toContain("RuntimeLogs")
   })
 
   it("defaults include everything when no opts provided", () => {
     const names = getToolsForExecution().map((t) => t.name)
-    expect(names).toContain("read_instance_tree")
-    expect(names).toContain("list_files")
+    expect(names).toContain("ReadInstanceTree")
+    expect(names).toContain("Glob")
   })
 })
 

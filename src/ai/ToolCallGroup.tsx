@@ -3,29 +3,28 @@ import { ChatMessage } from "../stores/aiStore"
 import { getFileName } from "../lib/utils"
 
 const TOOL_META: Record<string, { label: string; icon: string; bridge?: boolean }> = {
-  read_file:            { label: "Read",               icon: "eye" },
-  edit_file:            { label: "Edit",               icon: "pencil" },
-  create_file:          { label: "Create",             icon: "plus" },
-  delete_file:          { label: "Delete",             icon: "trash" },
-  list_files:           { label: "List",               icon: "folder" },
-  grep:                 { label: "Search",             icon: "search" },
-  grep_files:           { label: "Search",             icon: "search" },
-  search_docs:          { label: "Docs",               icon: "book" },
-  lint_file:            { label: "Lint",               icon: "check" },
-  type_check:           { label: "Type check",         icon: "check" },
-  format_file:          { label: "Format",             icon: "check" },
-  multi_edit:           { label: "Multi-edit",         icon: "pencil" },
-  patch_file:           { label: "Patch",              icon: "pencil" },
-  todo_write:           { label: "Todo",               icon: "check" },
-  wag_read:             { label: "WAG read",           icon: "book" },
-  wag_search:           { label: "WAG search",         icon: "search" },
-  wag_update:           { label: "WAG update",         icon: "check" },
-  ask_user:             { label: "Ask user",           icon: "chat" },
-  read_instance_tree:   { label: "Studio tree",        icon: "tree",   bridge: true },
-  get_runtime_logs:     { label: "Studio logs",        icon: "log",    bridge: true },
-  run_studio_script:    { label: "Run in Studio",      icon: "play",   bridge: true },
-  set_property:         { label: "Studio set",         icon: "gear",   bridge: true },
-  insert_model:         { label: "Insert model",       icon: "plus",   bridge: true }
+  Read:             { label: "Read",               icon: "eye" },
+  Edit:             { label: "Edit",               icon: "pencil" },
+  Write:            { label: "Create",             icon: "plus" },
+  Delete:           { label: "Delete",             icon: "trash" },
+  Glob:             { label: "List",               icon: "folder" },
+  Grep:             { label: "Search",             icon: "search" },
+  SearchDocs:       { label: "Docs",               icon: "book" },
+  Lint:             { label: "Lint",               icon: "check" },
+  TypeCheck:        { label: "Type check",         icon: "check" },
+  Format:           { label: "Format",             icon: "check" },
+  MultiEdit:        { label: "Multi-edit",         icon: "pencil" },
+  Patch:            { label: "Patch",              icon: "pencil" },
+  TodoWrite:        { label: "Todo",               icon: "check" },
+  WagRead:          { label: "WAG read",           icon: "book" },
+  WagSearch:        { label: "WAG search",         icon: "search" },
+  WagUpdate:        { label: "WAG update",         icon: "check" },
+  AskUser:          { label: "Ask user",           icon: "chat" },
+  ReadInstanceTree: { label: "Studio tree",        icon: "tree",   bridge: true },
+  RuntimeLogs:      { label: "Studio logs",        icon: "log",    bridge: true },
+  RunScript:        { label: "Run in Studio",      icon: "play",   bridge: true },
+  SetProperty:      { label: "Studio set",         icon: "gear",   bridge: true },
+  InsertModel:      { label: "Insert model",       icon: "plus",   bridge: true }
 }
 
 function ToolIcon({ type, size = 12 }: { type: string; size?: number }): JSX.Element {
@@ -48,7 +47,7 @@ function ToolIcon({ type, size = 12 }: { type: string; size?: number }): JSX.Ele
   }
 }
 
-const FILE_TOOLS = new Set(["read_file", "edit_file", "create_file", "delete_file", "list_files", "grep", "grep_files", "lint_file", "type_check", "format_file", "multi_edit", "patch_file"])
+const FILE_TOOLS = new Set(["Read", "Edit", "Write", "Delete", "Glob", "Grep", "Lint", "TypeCheck", "Format", "MultiEdit", "Patch"])
 
 function getToolTarget(event: ChatMessage): string {
   if (!FILE_TOOLS.has(event.toolName ?? "")) return ""

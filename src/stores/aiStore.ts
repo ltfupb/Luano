@@ -58,6 +58,48 @@ function makeSessionId(): string {
   return `s-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
 }
 
+/**
+ * Tool-name migration for persisted sessions.
+ *
+ * Pre-v0.8.6 sessions stored toolName in snake_case (read_file, edit_file, …).
+ * v0.8.6 renamed to CC-style PascalCase (Read, Edit, …). Without this map the
+ * UI falls back to the raw string for old sessions — icons miss, labels drop
+ * to "custom_tool" style display. Run on migrate to keep history readable.
+ */
+const TOOL_NAME_MIGRATION: Record<string, string> = {
+  read_file: "Read",
+  edit_file: "Edit",
+  multi_edit: "MultiEdit",
+  create_file: "Write",
+  delete_file: "Delete",
+  list_files: "Glob",
+  grep_files: "Grep",
+  lint_file: "Lint",
+  format_file: "Format",
+  type_check: "TypeCheck",
+  patch_file: "Patch",
+  search_docs: "SearchDocs",
+  read_instance_tree: "ReadInstanceTree",
+  get_runtime_logs: "RuntimeLogs",
+  run_studio_script: "RunScript",
+  set_property: "SetProperty",
+  insert_model: "InsertModel",
+  todo_write: "TodoWrite",
+  wag_read: "WagRead",
+  wag_search: "WagSearch",
+  wag_update: "WagUpdate",
+  ask_user: "AskUser"
+  // `grep` intentionally preserved — old name and new name both "grep"/"Grep";
+  // case-sensitive mapping below handles lowercase `grep` → `Grep`.
+}
+
+function migrateToolName(name: string | undefined): string | undefined {
+  if (!name) return name
+  if (name in TOOL_NAME_MIGRATION) return TOOL_NAME_MIGRATION[name]
+  if (name === "grep") return "Grep"
+  return name
+}
+
 function makePreview(messages: ChatMessage[]): string {
   const first = messages.find((m) => m.role === "user")
   return first?.content.slice(0, 80) ?? "Empty session"
@@ -230,7 +272,26 @@ export const useAIStore = create<AIStore>()(
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({
         sessions: state.sessions
-      })
+      }),
+      version: 1,
+      migrate: (persistedState, version) => {
+        // v0 → v1: rename snake_case tool names to CC-style PascalCase.
+        if (version < 1 && persistedState && typeof persistedState === "object") {
+          const s = persistedState as { sessions?: Record<string, SessionEntry[]> }
+          if (s.sessions) {
+            for (const key of Object.keys(s.sessions)) {
+              s.sessions[key] = s.sessions[key].map((entry) => ({
+                ...entry,
+                messages: entry.messages.map((m) => ({
+                  ...m,
+                  toolName: migrateToolName(m.toolName)
+                }))
+              }))
+            }
+          }
+        }
+        return persistedState as AIStore
+      }
     }
   )
 )

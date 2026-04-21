@@ -125,7 +125,7 @@ export function buildMemoryIndex(projectPath: string): string {
     groups[m.type].push(m)
   }
 
-  const lines: string[] = ["[Memories — use search_docs or ask for detail if needed]"]
+  const lines: string[] = ["[Memories — use SearchDocs or ask for detail if needed]"]
 
   for (const [type, label] of [["feedback", "Feedback"], ["user", "User"], ["project", "Project"]] as const) {
     const items = groups[type]

@@ -34,7 +34,7 @@ export function readWagFile(projectPath: string, entityPath: string): string | n
 
 /**
  * List sibling entities in the same category as the given entityPath.
- * Used in wag_read error messages to guide the agent toward valid entities.
+ * Used in WagRead error messages to guide the agent toward valid entities.
  */
 export function listSiblings(projectPath: string, entityPath: string): string[] {
   const parts = entityPath.replace(/\.md$/, "").split("/")
@@ -287,7 +287,7 @@ export function buildWagIndex(projectPath: string): string {
       const content = readFileSync(indexPath, "utf-8").trim()
       // Cap at ~2000 chars to stay within ~500 token budget
       if (content.length > 2000) {
-        return content.slice(0, 1900) + "\n…(index truncated — use wag_search for details)"
+        return content.slice(0, 1900) + "\n…(index truncated — use WagSearch for details)"
       }
       return content
     } catch { /* fall through to directory scan */ }
