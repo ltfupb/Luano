@@ -132,15 +132,10 @@ AI is optional — the editor, LSP, toolchain, and Studio sync all work without 
 
 |  | **Free** | **Pro** |
 | --- | --- | --- |
-| Monaco Editor + Luau LSP | ✅ | ✅ |
-| Rojo, Selene, StyLua bundled | ✅ | ✅ |
-| File explorer, Terminal, Search | ✅ | ✅ |
-| Split editor, Auto-save | ✅ | ✅ |
+| Customizable Toolchain | ✅ | ✅ |
 | Project templates | ✅ | ✅ |
-| 3 Themes (Dark / Light / Tokyo Night) | ✅ | ✅ |
 | AI Chat (BYOK, Q&A) | ✅ | ✅ |
 | AI Agent mode (autonomous coding) | — | ✅ |
-| Inline AI Edit (Cmd+K) | — | ✅ |
 | Roblox Docs RAG | — | ✅ |
 | Studio Live Bridge | — | ✅ |
 | Cross-script analysis | — | ✅ |
