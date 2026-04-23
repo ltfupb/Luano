@@ -188,13 +188,11 @@ export function ChatPanel({ onClose }: ChatPanelProps): JSX.Element {
   const sessionsVisible = showSessions || sessionsClosing
 
   const closeSessions = useCallback(() => {
-    setShowSessions((prev) => {
-      if (!prev) return prev
-      setSessionsClosing(true)
-      setTimeout(() => setSessionsClosing(false), 180)
-      return false
-    })
-  }, [])
+    if (!showSessions) return
+    setSessionsClosing(true)
+    setShowSessions(false)
+    setTimeout(() => setSessionsClosing(false), 180)
+  }, [showSessions])
 
   const [proFeatures, setProFeatures] = useState<Record<string, boolean>>({})
   const [allModels, setAllModels] = useState<Record<string, Array<{ id: string; label: string }>>>({})
