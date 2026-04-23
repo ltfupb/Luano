@@ -26,9 +26,11 @@ const TerminalPane = lazy(() => import("./terminal/TerminalPane").then((m) => ({
 import { ErrorBoundary } from "./components/ErrorBoundary"
 import { ToastContainer, toast } from "./components/Toast"
 import { TutorialOverlay, shouldShowTutorial } from "./components/TutorialOverlay"
+import { ProOnboardingOverlay, shouldShowProOnboarding, markProOnboardingDone } from "./components/ProOnboardingOverlay"
 import { useT } from "./i18n/useT"
 import { usePanelResize } from "./hooks/usePanelResize"
 import { CrossScriptPanel, DataStorePanel, TopologyPanel } from "./lib/loadPro"
+import { initPostHog } from "./analytics"
 
 const TERMINAL_MIN = 80
 const TERMINAL_MAX = 600
@@ -109,6 +111,14 @@ export default function App(): JSX.Element {
     setHasInitialized(true)
   }, [])
 
+  // Pro onboarding suppression: if user is already Pro at startup (reinstall,
+  // cache clear, cross-device sync), don't replay the onboarding retroactively.
+  useEffect(() => {
+    window.api.getProStatus().then((s: { isPro: boolean }) => {
+      if (s.isPro && shouldShowProOnboarding()) markProOnboardingDone()
+    }).catch(() => {})
+  }, [])
+
   // First-run crash-reports prompt. Until the user gives an explicit answer,
   // Sentry stays dormant — without this prompt nobody opts in and the
   // dashboard stays empty (which is exactly what happened in pre-v0.8.4
@@ -166,6 +176,7 @@ export default function App(): JSX.Element {
   const [paletteVisible, setPaletteVisible] = useState(false)
   const [showTopology, setShowTopology] = useState(false)
   const [showTutorial, setShowTutorial] = useState(() => shouldShowTutorial())
+  const [showProOnboarding, setShowProOnboarding] = useState(false)
 
   // Sync layout to store on change. Store writes happen in useEffect AFTER render
   // commits — calling them inside a setState updater is a React 18 render-phase
@@ -801,7 +812,14 @@ export default function App(): JSX.Element {
       <StatusBar />
       <ErrorBoundary>
         <Suspense fallback={null}>
-          {settingsOpen && <SettingsPanel onClose={() => setSettingsOpen(false)} />}
+          {settingsOpen && (
+            <SettingsPanel
+              onClose={() => setSettingsOpen(false)}
+              onProActivated={() => {
+                if (shouldShowProOnboarding()) setShowProOnboarding(true)
+              }}
+            />
+          )}
           {toolchainOpen && <ToolchainPanel onClose={handleToolchainClose} onCancel={handleToolchainCancel} mode={toolchainSetupMode ? "setup" : "normal"} targetProjectPath={toolchainSetupMode ? (setupTargetPath ?? undefined) : undefined} />}
         </Suspense>
       </ErrorBoundary>
@@ -836,6 +854,7 @@ export default function App(): JSX.Element {
 
       {/* Tutorial overlay */}
       {showTutorial && <TutorialOverlay onDone={() => setShowTutorial(false)} />}
+      {showProOnboarding && <ProOnboardingOverlay onDone={() => setShowProOnboarding(false)} />}
 
       {/* First-run crash-reports prompt — must come before TutorialOverlay
           dismissal handlers so it sits visually on top while answering. */}
@@ -848,11 +867,16 @@ export default function App(): JSX.Element {
           onConfirm={async () => {
             await window.api.crashReportsSetEnabled(true)
             await window.api.crashReportsMarkPrompted()
+            await window.api.analyticsUsageSetEnabled(true)
+            // initPostHog may have early-returned at startup before consent was set;
+            // calling it again here starts PostHog and fires app_opened in this session.
+            initPostHog()
             setShowCrashPrompt(false)
           }}
           onCancel={async () => {
             await window.api.crashReportsSetEnabled(false)
             await window.api.crashReportsMarkPrompted()
+            await window.api.analyticsUsageSetEnabled(false)
             setShowCrashPrompt(false)
           }}
         />

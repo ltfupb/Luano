@@ -77,7 +77,8 @@ function Chevron({ open }: { open: boolean }): JSX.Element {
  */
 export function ToolCallGroup({ events }: { events: ChatMessage[] }): JSX.Element {
   const multi = events.length > 1
-  // Default: collapsed when multi, always "expanded" when single (nothing to collapse).
+  // Multi-tool groups collapse behind a summary header by default.
+  // Single tool: always "open" — there's nothing to collapse.
   const [groupOpen, setGroupOpen] = useState(!multi)
   const [rowsOpen, setRowsOpen] = useState<Set<string>>(() => new Set())
 

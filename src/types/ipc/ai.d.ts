@@ -45,6 +45,16 @@ interface AiApi {
   aiSetThinkingEffort: (effort: string) => Promise<{ success: boolean }>
   aiGetThinkingEffort: () => Promise<"low" | "medium" | "high" | "xhigh" | "max">
 
+  // Managed AI — usage from Worker
+  managedFetchUsage: () => Promise<{
+    period_ym: string
+    used: number
+    cap: number
+    remaining: number
+    cache_hit_rate: number
+    resets_at: number
+  } | null>
+
   // Native menu — tell main to rebuild with hasProject state
   menuSetProjectState: (hasProject: boolean) => Promise<{ success: boolean }>
 

@@ -91,6 +91,7 @@ const api = {
   aiGetAdvisor: () => ipcRenderer.invoke("ai:get-advisor"),
   aiSetThinkingEffort: (effort: string) => ipcRenderer.invoke("ai:set-thinking-effort", effort),
   aiGetThinkingEffort: () => ipcRenderer.invoke("ai:get-thinking-effort"),
+  managedFetchUsage: () => ipcRenderer.invoke("managed:fetch-usage"),
   isDirectory: (p: string): Promise<boolean> => ipcRenderer.invoke("file:is-directory", p),
   menuSetProjectState: (hasProject: boolean) => ipcRenderer.invoke("menu:set-project-state", hasProject),
   aiGetTokenUsage: () => ipcRenderer.invoke("ai:token-usage"),
@@ -284,6 +285,11 @@ const api = {
   crashReportsMarkPrompted: (): Promise<{ success: boolean }> =>
     ipcRenderer.invoke("crash-reports:mark-prompted"),
 
+  // ── Usage Analytics (PostHog) — independent of crashReports ─────────────
+  analyticsUsageIsEnabled: (): Promise<boolean> => ipcRenderer.invoke("analytics-usage:is-enabled"),
+  analyticsUsageSetEnabled: (enabled: boolean): Promise<{ success: boolean }> =>
+    ipcRenderer.invoke("analytics-usage:set-enabled", enabled),
+
   // ── Third-Party Licenses ──────────────────────────────────────────────────
   licensesOpen: (): Promise<{ success: boolean; error?: string }> =>
     ipcRenderer.invoke("licenses:open"),
@@ -386,6 +392,7 @@ const api = {
     version: string
     environment: string
     crashReportsEnabled: boolean
+    analyticsEnabled: boolean
   } | null => {
     try {
       return ipcRenderer.sendSync("sentry:context-sync") as {
@@ -393,6 +400,7 @@ const api = {
         version: string
         environment: string
         crashReportsEnabled: boolean
+        analyticsEnabled: boolean
       }
     } catch {
       // Main process has Sentry disabled (no DSN) — handler isn't registered.

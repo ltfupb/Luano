@@ -38,19 +38,23 @@ describe("MessageBubble", () => {
     expect(strong.tagName).toBe("STRONG")
   })
 
-  it("renders streaming cursor block for assistant when streaming with content", () => {
+  it("renders streaming content for assistant without a blinking cursor", () => {
+    // Cursor indicator was removed in v0.9.0 — content streams cleanly.
     const { container } = render(
       <MessageBubble message={mkMsg({ role: "assistant", content: "partial", streaming: true })} />
     )
-    expect(container.querySelector(".animate-blink")).toBeInTheDocument()
+    expect(container.querySelector(".animate-blink")).not.toBeInTheDocument()
   })
 
-  it("shows ThinkingBubble when assistant is streaming with no content yet", () => {
+  it("empty streaming bubble renders silently — persistent turn status lives at the chat root", () => {
+    // After v0.9.0: message bubbles no longer host ThinkingBubble.
+    // The turn-level status line (ChatPanel) covers thinking / streaming
+    // activity for the whole turn, so empty bubbles stay invisible.
     const { container } = render(
       <MessageBubble message={mkMsg({ role: "assistant", content: "", streaming: true })} />
     )
-    // ThinkingBubble renders the cursor initially
-    expect(container.querySelector(".animate-blink")).toBeInTheDocument()
+    expect(container.querySelector(".animate-glow-pulse-text")).not.toBeInTheDocument()
+    expect(container.querySelector(".animate-blink")).not.toBeInTheDocument()
   })
 
   it("right-aligns user messages via justify-end wrapper", () => {

@@ -22,6 +22,7 @@ interface SettingsStore {
   localEndpoint: string
   localModel: string
   provider: string
+  prevByokProvider: string
   model: string
   advisorEnabled: boolean
   autoSave: boolean
@@ -46,6 +47,7 @@ interface SettingsStore {
   setLocalEndpoint: (endpoint: string) => void
   setLocalModel: (model: string) => void
   setProvider: (provider: string) => void
+  setPrevByokProvider: (provider: string) => void
   setModel: (model: string) => void
   setAdvisorEnabled: (enabled: boolean) => void
   setAutoSave: (enabled: boolean) => void
@@ -74,6 +76,7 @@ export const useSettingsStore = create<SettingsStore>()(
       localEndpoint: "http://localhost:11434/v1",
       localModel: "",
       provider: "anthropic",
+      prevByokProvider: "anthropic",
       model: "claude-sonnet-4-6",
       advisorEnabled: false,
       autoSave: true,
@@ -96,6 +99,7 @@ export const useSettingsStore = create<SettingsStore>()(
       setLocalEndpoint: (localEndpoint) => set({ localEndpoint }),
       setLocalModel: (localModel) => set({ localModel }),
       setProvider: (provider) => set({ provider }),
+      setPrevByokProvider: (prevByokProvider) => set({ prevByokProvider }),
       setModel: (model) => set({ model }),
       setAdvisorEnabled: (advisorEnabled) => set({ advisorEnabled }),
       setAutoSave: (autoSave) => set({ autoSave }),
@@ -130,6 +134,7 @@ export const useSettingsStore = create<SettingsStore>()(
         localEndpoint: state.localEndpoint,
         localModel: state.localModel,
         provider: state.provider,
+        prevByokProvider: state.prevByokProvider,
         model: state.model,
         advisorEnabled: state.advisorEnabled,
         autoSave: state.autoSave,

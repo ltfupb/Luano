@@ -20,7 +20,8 @@ import {
   getAdvisorModel, setAdvisorModel,
   getNetworkTimeoutMs, setNetworkTimeoutMs,
   MIN_NETWORK_TIMEOUT_MS, DEFAULT_NETWORK_TIMEOUT_MS,
-  getModelTier
+  getModelTier,
+  MANAGED_BASE_URL, MANAGED_MODEL
 } from "../electron/ai/provider"
 
 describe("toCachedSystem", () => {
@@ -341,5 +342,23 @@ describe("getModelTier", () => {
     setProvider("local")
     setModel("llama3-70b")
     expect(getModelTier()).toBe("standard")
+  })
+})
+
+describe("Managed AI constants", () => {
+  it("MANAGED_BASE_URL is the raw Worker host with no /v1 suffix", () => {
+    // Anthropic SDK appends /v1/messages itself. If MANAGED_BASE_URL gains
+    // a /v1 suffix again, requests double-up to /v1/v1/messages and 404.
+    expect(MANAGED_BASE_URL).toBe("https://api.luano.dev")
+    expect(MANAGED_BASE_URL.endsWith("/v1")).toBe(false)
+  })
+
+  it("MANAGED_MODEL is the production Sonnet id used by Managed", () => {
+    expect(MANAGED_MODEL).toBe("claude-sonnet-4-6")
+  })
+
+  it("MODELS.managed lists exactly one entry and it matches MANAGED_MODEL", () => {
+    expect(MODELS.managed).toHaveLength(1)
+    expect(MODELS.managed[0].id).toBe(MANAGED_MODEL)
   })
 })

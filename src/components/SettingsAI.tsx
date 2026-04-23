@@ -1,9 +1,19 @@
 import { useState, useEffect } from "react"
 import { useSettingsStore } from "../stores/settingsStore"
 import { useT } from "../i18n/useT"
+import { track, Events } from "../analytics"
 
 interface ModelEntry { id: string; label: string }
 export interface ProviderModels { anthropic: ModelEntry[]; openai: ModelEntry[]; gemini: ModelEntry[]; local: ModelEntry[] }
+
+interface ManagedUsage {
+  period_ym: string
+  used: number
+  cap: number
+  remaining: number
+  cache_hit_rate: number
+  resets_at: number
+}
 
 const PROVIDER_LABELS: Record<string, string> = {
   anthropic: "Anthropic", openai: "OpenAI", gemini: "Gemini", local: "Local"
@@ -142,7 +152,7 @@ export function SettingsAI({ models, setModels }: {
   const {
     apiKey, setApiKey, openaiKey, setOpenAIKey, geminiKey, setGeminiKey,
     localEndpoint, setLocalEndpoint, localModel, setLocalModel,
-    provider, setProvider, model, setModel,
+    provider, setProvider, prevByokProvider, setPrevByokProvider, model, setModel,
     advisorEnabled, setAdvisorEnabled,
     thinkingEffort, setThinkingEffort
   } = useSettingsStore()
@@ -150,6 +160,10 @@ export function SettingsAI({ models, setModels }: {
   const [localModelsLoading, setLocalModelsLoading] = useState(false)
   const [localKey, setLocalKeyState] = useState("")
   const [localKeyLoaded, setLocalKeyLoaded] = useState(false)
+  const [managedUsage, setManagedUsage] = useState<ManagedUsage | null>(null)
+  const [managedUsageLoading, setManagedUsageLoading] = useState(false)
+  const [managedUsageFailed, setManagedUsageFailed] = useState(false)
+  const isManaged = provider === "managed"
 
   useEffect(() => {
     if (provider === "local" && !localKeyLoaded) {
@@ -158,13 +172,31 @@ export function SettingsAI({ models, setModels }: {
         setLocalKeyLoaded(true)
       })
     }
-  }, [provider, localKeyLoaded])
+    if (provider === "managed" && !managedUsage && !managedUsageLoading && !managedUsageFailed) {
+      setManagedUsageLoading(true)
+      window.api.managedFetchUsage().then(u => {
+        setManagedUsage(u)
+        setManagedUsageLoading(false)
+        if (!u) setManagedUsageFailed(true)
+      }).catch(() => {
+        setManagedUsageLoading(false)
+        setManagedUsageFailed(true)
+      })
+    }
+  }, [provider, localKeyLoaded, managedUsage, managedUsageLoading, managedUsageFailed])
 
   const handleSetProvider = async (p: string) => {
+    const prev = provider
+    if (p === prev) return
+    if (prev !== "managed" && p === "managed") setPrevByokProvider(prev)
     await window.api.aiSetProvider(p)
     const result = await window.api.aiGetProviderModel()
     setProvider(result.provider)
     setModel(result.model)
+    track(Events.MANAGED_SWITCHED_TO, {
+      from: prev === "managed" ? "managed" : "byok",
+      to: p === "managed" ? "managed" : "byok",
+    })
   }
 
   const handleSetModel = async (m: string) => {
@@ -181,7 +213,94 @@ export function SettingsAI({ models, setModels }: {
 
   return (
     <>
-      {/* Provider Toggle */}
+      {/* Managed / BYOK mode selector */}
+      <div className="flex flex-col gap-2">
+        <SectionLabel>{t("aiMode")}</SectionLabel>
+        <div className="flex gap-2">
+          <button
+            onClick={() => handleSetProvider("managed")}
+            className="flex-1 px-3 py-2 rounded-lg text-xs transition-all duration-150 text-left"
+            style={{
+              background: isManaged ? "var(--accent)" : "var(--bg-elevated)",
+              color: isManaged ? "white" : "var(--text-secondary)",
+              border: `1px solid ${isManaged ? "transparent" : "var(--border)"}`,
+              fontWeight: isManaged ? 500 : 400
+            }}
+          >
+            <div style={{ fontWeight: 500 }}>{t("managedLabel")}</div>
+            <div style={{ fontSize: "10px", opacity: 0.8, marginTop: 1 }}>{t("managedLabelHint")}</div>
+          </button>
+          <button
+            onClick={() => {
+              if (!isManaged) return
+              // If saved prev provider has no credentials, fall back to one that does,
+              // else anthropic so the key input is shown immediately.
+              const hasKey = (p: string) =>
+                (p === "anthropic" && apiKey) ||
+                (p === "openai" && openaiKey) ||
+                (p === "gemini" && geminiKey) ||
+                (p === "local" && localEndpoint && localModel)
+              const target = hasKey(prevByokProvider)
+                ? prevByokProvider
+                : (["anthropic","openai","gemini","local"] as const).find(hasKey) ?? "anthropic"
+              handleSetProvider(target)
+            }}
+            className="flex-1 px-3 py-2 rounded-lg text-xs transition-all duration-150 text-left"
+            style={{
+              background: !isManaged ? "var(--accent)" : "var(--bg-elevated)",
+              color: !isManaged ? "white" : "var(--text-secondary)",
+              border: `1px solid ${!isManaged ? "transparent" : "var(--border)"}`,
+              fontWeight: !isManaged ? 500 : 400
+            }}
+          >
+            <div style={{ fontWeight: 500 }}>{t("byokLabel")}</div>
+            <div style={{ fontSize: "10px", opacity: 0.8, marginTop: 1 }}>{t("byokLabelHint")}</div>
+          </button>
+        </div>
+      </div>
+
+      {/* Managed usage dashboard */}
+      {isManaged && (
+        <div className="flex flex-col gap-2">
+          <SectionLabel>{t("managedUsageTitle")}</SectionLabel>
+          {managedUsageLoading ? (
+            <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>Loading...</span>
+          ) : managedUsage ? (
+            <div className="flex flex-col gap-1.5">
+              {/* Progress bar */}
+              <div className="flex items-center justify-between">
+                <span style={{ fontSize: "11px", color: "var(--text-secondary)" }}>
+                  {(managedUsage.used / 1_000_000).toFixed(2)}M / {(managedUsage.cap / 1_000_000).toFixed(1)}M tokens
+                </span>
+                <span style={{ fontSize: "10px", color: "var(--text-muted)" }}>
+                  {t("managedResetsAt")} {new Date(managedUsage.resets_at * 1000).toLocaleDateString()}
+                </span>
+              </div>
+              <div className="w-full rounded-full overflow-hidden" style={{ height: 4, background: "var(--bg-elevated)" }}>
+                <div
+                  className="h-full rounded-full transition-all"
+                  style={{
+                    width: `${Math.min(100, (managedUsage.used / managedUsage.cap) * 100)}%`,
+                    background: managedUsage.used / managedUsage.cap > 0.95
+                      ? "var(--error)"
+                      : managedUsage.used / managedUsage.cap > 0.8
+                      ? "var(--warning)"
+                      : "var(--accent)"
+                  }}
+                />
+              </div>
+            </div>
+          ) : (
+            <span style={{ fontSize: "10px", color: "var(--text-muted)" }}>{t("managedUsageUnavailable")}</span>
+          )}
+          <span style={{ fontSize: "10px", color: "var(--text-muted)", lineHeight: 1.4 }}>
+            {t("managedModelNote")}
+          </span>
+        </div>
+      )}
+
+      {/* BYOK: Provider Toggle */}
+      {!isManaged && (
       <div className="flex flex-col gap-2">
         <SectionLabel>{t("aiProvider")}</SectionLabel>
         <div className="flex gap-2 flex-wrap">
@@ -202,9 +321,10 @@ export function SettingsAI({ models, setModels }: {
           ))}
         </div>
       </div>
+      )}
 
       {/* Model selector (cloud providers) */}
-      {provider !== "local" && currentModels.length > 0 && (
+      {!isManaged && provider !== "local" && currentModels.length > 0 && (
         <div className="flex flex-col gap-2">
           <SectionLabel>{t("aiModel")}</SectionLabel>
           <select
@@ -230,7 +350,8 @@ export function SettingsAI({ models, setModels }: {
       )}
 
       {/* Thinking Effort — only where the model supports it */}
-      {((provider === "anthropic" && (model.includes("opus") || model.includes("sonnet")))
+      {(isManaged
+        || (provider === "anthropic" && (model.includes("opus") || model.includes("sonnet")))
         || (provider === "openai" && /^o[1-9]/.test(model))) && (
         <div className="flex flex-col gap-1.5">
           <div className="flex items-center justify-between">
@@ -263,8 +384,8 @@ export function SettingsAI({ models, setModels }: {
         </div>
       )}
 
-      {/* Advisor Toggle — Anthropic non-Opus only */}
-      {provider === "anthropic" && !model.includes("opus") && (
+      {/* Advisor Toggle — Anthropic or Managed non-Opus only */}
+      {(isManaged || (provider === "anthropic" && !model.includes("opus"))) && (
         <div className="flex flex-col gap-1.5">
           <div className="flex items-center justify-between">
             <SectionLabel>{t("advisor" as never)}</SectionLabel>
@@ -296,7 +417,7 @@ export function SettingsAI({ models, setModels }: {
       )}
 
       {/* Cloud API Keys */}
-      {KEY_CONFIGS[provider] && (
+      {!isManaged && KEY_CONFIGS[provider] && (
         <KeyField
           label={t(KEY_CONFIGS[provider].translationKey as never)}
           placeholder={KEY_CONFIGS[provider].placeholder}
@@ -310,7 +431,7 @@ export function SettingsAI({ models, setModels }: {
       )}
 
       {/* Local provider config */}
-      {provider === "local" && (
+      {!isManaged && provider === "local" && (
         <div className="flex flex-col gap-3">
           <div className="flex flex-col gap-1.5">
             <SectionLabel>{t("localEndpoint")}</SectionLabel>

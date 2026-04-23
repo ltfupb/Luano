@@ -23,6 +23,15 @@ function isCrashReportsEnabled(): boolean {
   return store.get("crashReports") === true
 }
 
+function isAnalyticsUsageEnabled(): boolean {
+  return store.get("analyticsUsage") === true
+}
+
+function migrateAnalyticsUsage(): void {
+  if (store.get("analyticsUsage") !== undefined) return
+  if (isCrashReportsEnabled()) store.set("analyticsUsage", true)
+}
+
 /**
  * One-time migration for users who consented to the old single
  * `telemetryEnabled` toggle (which controlled both AI sqlite + Sentry).
@@ -44,13 +53,25 @@ export function initSentry(): void {
   // gate — means the call always resolves fast instead of blocking. The
   // payload carries `crashReportsEnabled: false` when disabled so the
   // renderer naturally short-circuits without any extra branching.
+  migrateAnalyticsUsage()
+
   ipcMain.on("sentry:context-sync", (e) => {
     e.returnValue = {
       anonymousId: getAnonymousId(),
       version: app.getVersion(),
       environment: app.isPackaged ? "production" : "development",
-      crashReportsEnabled: SENTRY_DSN ? isCrashReportsEnabled() : false
+      crashReportsEnabled: SENTRY_DSN ? isCrashReportsEnabled() : false,
+      // Decoupled from crashReports — users can opt into usage analytics
+      // independently. Backed by "analyticsUsage" store key.
+      analyticsEnabled: isAnalyticsUsageEnabled()
     }
+  })
+
+  ipcMain.handle("analytics-usage:is-enabled", () => isAnalyticsUsageEnabled())
+  ipcMain.handle("analytics-usage:set-enabled", (_, v: unknown) => {
+    if (typeof v !== "boolean") return { success: false }
+    store.set("analyticsUsage", v)
+    return { success: true }
   })
 
   if (!SENTRY_DSN) return  // No DSN in public builds — Sentry disabled entirely

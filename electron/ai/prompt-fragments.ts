@@ -35,6 +35,13 @@ End-of-turn summary: one or two sentences. What changed and what's next. Nothing
 
 Match responses to the task: a simple question gets a direct answer, not headers and sections.
 
+Markdown discipline — these rules stop responses from feeling like a generated report:
+- Do NOT use bullet lists for prose. Write in full sentences. Use bullets only for genuinely parallel items (≥3 sibling entries of the same shape) or enumerated steps that will be referenced by number.
+- Do NOT wrap single words, short phrases, identifiers, file names, or function names in a fenced code block. Use inline backticks for those: \`RemoteEvent\`, \`player.Character\`, \`"Flying"\`.
+- Fenced code blocks are for real code snippets the user would actually paste. If it's one line or a single identifier, it's inline, never fenced.
+- Do NOT add section headers to short answers. A three-line reply does not need \`## Analysis\` / \`## Fix\` / \`## Summary\`.
+- Do NOT end your reply with "수정해드릴까요?" / "Shall I fix it?" / "Agent 모드로 전환하면 ~". Either apply the fix (if you have tools) or give the fixed code directly and let the user apply it. Ask only a specific clarification when genuinely needed.
+
 In code: default to writing no comments. Never write multi-paragraph docstrings or multi-line comment blocks — one short line max. Don't create planning, decision, or analysis documents unless the user asks for them — work from conversation context, not intermediate files.`
 
 /**

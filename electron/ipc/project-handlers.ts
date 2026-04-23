@@ -91,8 +91,18 @@ export function registerProjectHandlers(): void {
   }))
 
   // ── License ──────────────────────────────────────────────────────────────
-  ipcMain.handle("license:activate", (_, key: string) => activateLicense(key))
-  ipcMain.handle("license:deactivate", () => deactivateLicense())
+  ipcMain.handle("license:activate", async (_, key: string) => {
+    const result = await activateLicense(key)
+    const { invalidateManagedLicenseCache } = await import("../ai/provider")
+    invalidateManagedLicenseCache()
+    return result
+  })
+  ipcMain.handle("license:deactivate", async () => {
+    const result = await deactivateLicense()
+    const { invalidateManagedLicenseCache } = await import("../ai/provider")
+    invalidateManagedLicenseCache()
+    return result
+  })
   ipcMain.handle("license:info", () => getLicenseInfo())
   ipcMain.handle("license:validate", async () => ({ valid: await revalidateLicense() }))
 

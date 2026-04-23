@@ -10,7 +10,9 @@ import { AskUserCard } from "./AskUserCard"
 import { EditPreviewCard } from "./EditPreviewCard"
 import { ToolCallGroup } from "./ToolCallGroup"
 import { MessageBubble, MessageFooter } from "./MessageBubble"
+import { pickVerbPair, formatDuration } from "./ThinkingBubble"
 import { toast } from "../components/Toast"
+import { track, Events } from "../analytics"
 
 interface ToolEvent {
   tool: string
@@ -143,7 +145,7 @@ interface AttachedFile {
 
 export function ChatPanel({ onClose }: ChatPanelProps): JSX.Element {
   const {
-    messages, isStreaming, addMessage, updateMessage, setThinkingSeconds, setMessageTokens, setStreaming,
+    messages, isStreaming, addMessage, updateMessage, removeMessage, setThinkingSeconds, setMessageTokens, setStreaming,
     globalSummary, mode, autoAccept, setMode, setAutoAccept,
     sessionHandoff, startNewSession, compressedContext, compressOldMessages,
     getProjectSessions, switchSession, deleteSession, saveProjectChat,
@@ -157,7 +159,6 @@ export function ChatPanel({ onClose }: ChatPanelProps): JSX.Element {
   const [skillIndex, setSkillIndex] = useState(0)
   const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([])
   const [advisorActive, setAdvisorActive] = useState(false)
-  const [thinkingActive, setThinkingActive] = useState(false)
   const [pendingApproval, setPendingApproval] = useState<{ id: string; tool: string; input: Record<string, unknown>; preview?: EditPreviewPayload | null } | null>(null)
   const [pendingAskUser, setPendingAskUser] = useState<{ id: string; questions: AskUserQuestion[] } | null>(null)
   const [agentTodos, setAgentTodos] = useState<Array<{ content: string; status: string }>>([])
@@ -167,6 +168,22 @@ export function ChatPanel({ onClose }: ChatPanelProps): JSX.Element {
   const [showModelDropdown, setShowModelDropdown] = useState(false)
   const [tokens, setTokens] = useState({ input: 0, output: 0, cacheRead: 0 })
   const { provider, model, setModel: setStoreModel } = useSettingsStore()
+
+  // Turn-level status (CC-style ✶ verb… (elapsed · ↑X ↓Y · thought for Xs)) —
+  // one object, set on Send, cleared when streaming ends. thoughtMs is the
+  // delay from turn start to first text chunk (= pre-emission thinking time).
+  const [turn, setTurn] = useState<{
+    startedAt: number
+    verb: string
+    tokenSnap: { input: number; output: number; cacheRead: number }
+    thoughtMs: number | null
+  } | null>(null)
+  const [tick, setTick] = useState(0)
+  useEffect(() => {
+    if (!isStreaming) { setTurn(null); return }
+    const id = setInterval(() => setTick((n) => n + 1), 500)
+    return () => clearInterval(id)
+  }, [isStreaming])
 
   const sessionsVisible = showSessions || sessionsClosing
   const showSessionsRef = useRef(showSessions)
@@ -269,7 +286,7 @@ export function ChatPanel({ onClose }: ChatPanelProps): JSX.Element {
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
-  }, [messages])
+  }, [messages, pendingApproval, pendingAskUser])
 
   const groupedMessages = useMemo(() => {
     const grouped: (ChatMessage | ChatMessage[])[] = []
@@ -372,7 +389,6 @@ export function ChatPanel({ onClose }: ChatPanelProps): JSX.Element {
     window.api.aiAbort()
     setStreaming(false)
     setAdvisorActive(false)
-    setThinkingActive(false)
     setPendingApproval(null); setPendingAskUser(null)
     // Mark last streaming message as done
     const last = messages[messages.length - 1]
@@ -386,72 +402,109 @@ export function ChatPanel({ onClose }: ChatPanelProps): JSX.Element {
     async (apiMessages: Array<{role: string; content: string}>) => {
       const assistantId = addMessage({ role: "assistant", content: "", streaming: true })
       setStreaming(true)
+      setTurn({
+        startedAt: Date.now(),
+        verb: pickVerbPair(String(Math.random()))[0],
+        tokenSnap: { ...tokens },
+        thoughtMs: null,
+      })
       setAdvisorActive(false)
-      setThinkingActive(false)
-      setPendingApproval(null); setPendingAskUser(null)
+        setPendingApproval(null); setPendingAskUser(null)
       const thinkingStart = Date.now()
       let thinkingCaptured = false
       const tokenSnapshot = { ...tokens }
       streamingCtxRef.current = { id: assistantId, snap: tokenSnapshot }
+      // Track the current assistant bubble. After each tool event we clear
+      // currentId; the NEXT text chunk will lazily open a fresh bubble.
+      // This avoids empty "Thinking…" placeholders when tools chain with
+      // no narration between them.
+      let currentId: string | null = assistantId
+      // Most recent bubble that ACTUALLY received content. Used as the
+      // stats fallback when the agent ends right after a tool — assistantId
+      // may have been removed by the empty-bubble cleanup path, leaving
+      // setMessageTokens with a dead id.
+      let lastLiveId: string = assistantId
+      let accumulated = ""
       try {
-        let accumulated = ""
-        // Inject a visual break between text stream segments that are separated
-        // by tool calls — otherwise "...I'll start." + tool + "Done" concatenates
-        // as "...I'll start.Done" with no separator.
-        let justAfterTool = false
         await window.api.aiAgentChat(
           apiMessages,
           buildContext(),
           (chunk) => {
             if (chunk === null) return
+            // Lazy-create a new bubble if the previous one was closed by a tool
+            if (currentId === null) {
+              currentId = addMessage({ role: "assistant", content: "", streaming: true })
+              accumulated = ""
+            }
             if (!thinkingCaptured) {
-              setThinkingSeconds(assistantId, Math.round((Date.now() - thinkingStart) / 1000))
+              const ms = Date.now() - thinkingStart
+              setThinkingSeconds(currentId, Math.round(ms / 1000))
+              setTurn((t) => t && t.thoughtMs === null ? { ...t, thoughtMs: ms } : t)
               thinkingCaptured = true
             }
-            if (justAfterTool && accumulated.length > 0 && !accumulated.endsWith("\n\n")) {
-              accumulated += accumulated.endsWith("\n") ? "\n" : "\n\n"
-            }
-            justAfterTool = false
             accumulated += chunk
-            updateMessage(assistantId, accumulated, true)
+            updateMessage(currentId, accumulated, true)
+            lastLiveId = currentId
           },
           (event: ToolEvent) => {
-            justAfterTool = true
+            // Finalize the bubble that led into this tool call (if any)
+            if (currentId !== null) {
+              // If no text came in for this bubble, drop it so we don't
+              // render an empty "Thinking…" placeholder
+              if (accumulated.length === 0) {
+                removeMessage(currentId)
+              } else {
+                updateMessage(currentId, accumulated, false)
+                lastLiveId = currentId
+              }
+            }
             addMessage({
               role: "tool",
               content: event.output.slice(0, 200),
               toolName: event.tool,
               toolSuccess: event.success
             })
+            currentId = null
+            accumulated = ""
           },
           undefined,
           (active) => { setAdvisorActive(active) },
-          (active) => { setThinkingActive(active) },
+          undefined,  // onThinking — turn-status covers thinking UI globally
           (req) => { setPendingApproval(req as { id: string; tool: string; input: Record<string, unknown>; preview?: EditPreviewPayload | null }) },
           (req) => { setPendingAskUser(req) },
-          autoAccept
+          // Read latest autoAccept via getState — useCallback closure would
+          // otherwise freeze it at the first-render value (always false).
+          useAIStore.getState().autoAccept
         )
-        if (!thinkingCaptured) {
-          setThinkingSeconds(assistantId, Math.round((Date.now() - thinkingStart) / 1000))
-        }
-        // Delta from session totals — tokens consumed by this specific turn
+        // If the agent ended right after a tool (no trailing text), there's
+        // no live bubble — token stats/final state attach to the initial
+        // assistantId instead. Drop the unused initial bubble if it was
+        // never populated AND we rotated past it.
         const finalTokens = await window.api.aiGetTokenUsage().catch(() => tokenSnapshot)
-        setMessageTokens(assistantId, {
+        // Attach stats to the last bubble that actually got content. Falling
+        // back to assistantId is unsafe — it may have been removed by the
+        // empty-bubble cleanup in the tool callback.
+        const targetId = currentId ?? lastLiveId
+        if (!thinkingCaptured) {
+          setThinkingSeconds(targetId, Math.round((Date.now() - thinkingStart) / 1000))
+        }
+        setMessageTokens(targetId, {
           input: Math.max(0, finalTokens.input - tokenSnapshot.input),
           output: Math.max(0, finalTokens.output - tokenSnapshot.output),
           cache: Math.max(0, finalTokens.cacheRead - tokenSnapshot.cacheRead)
         })
-        updateMessage(assistantId, accumulated, false)
+        if (currentId !== null) {
+          updateMessage(currentId, accumulated, false)
+        }
       } catch (err) {
         const errMsg = err instanceof Error ? err.message : String(err)
         const cleaned = errMsg.replace(/^Error invoking remote method '[^']+': /, "")
-        updateMessage(assistantId, `Error: ${cleaned}`, false)
+        updateMessage(currentId ?? assistantId, `Error: ${cleaned}`, false)
       } finally {
         streamingCtxRef.current = null
         setStreaming(false)
         setAdvisorActive(false)
-        setThinkingActive(false)
-        setPendingApproval(null); setPendingAskUser(null)
+            setPendingApproval(null); setPendingAskUser(null)
         setAgentTodos([])
         // Auto-compress if context is getting large
         compressOldMessages()
@@ -468,6 +521,12 @@ export function ChatPanel({ onClose }: ChatPanelProps): JSX.Element {
     async (apiMessages: Array<{role: string; content: string}>) => {
       const assistantId = addMessage({ role: "assistant", content: "", streaming: true })
       setStreaming(true)
+      setTurn({
+        startedAt: Date.now(),
+        verb: pickVerbPair(String(Math.random()))[0],
+        tokenSnap: { ...tokens },
+        thoughtMs: null,
+      })
       const thinkingStart = Date.now()
       let thinkingCaptured = false
       const tokenSnapshot = { ...tokens }
@@ -480,14 +539,15 @@ export function ChatPanel({ onClose }: ChatPanelProps): JSX.Element {
           (chunk) => {
             if (chunk === null) return
             if (!thinkingCaptured) {
-              setThinkingSeconds(assistantId, Math.round((Date.now() - thinkingStart) / 1000))
+              const ms = Date.now() - thinkingStart
+              setThinkingSeconds(assistantId, Math.round(ms / 1000))
+              setTurn((t) => t && t.thoughtMs === null ? { ...t, thoughtMs: ms } : t)
               thinkingCaptured = true
             }
             accumulated += chunk
             updateMessage(assistantId, accumulated, true)
           },
-          (active) => { setAdvisorActive(active) },
-          (active) => { setThinkingActive(active) }
+          (active) => { setAdvisorActive(active) }
         )
         if (!thinkingCaptured) {
           setThinkingSeconds(assistantId, Math.round((Date.now() - thinkingStart) / 1000))
@@ -507,8 +567,7 @@ export function ChatPanel({ onClose }: ChatPanelProps): JSX.Element {
       } finally {
         streamingCtxRef.current = null
         setStreaming(false)
-        setThinkingActive(false)
-        // Auto-compress if context is getting large
+            // Auto-compress if context is getting large
         compressOldMessages()
         // Auto-detect memories from this exchange
         triggerAutoMemory()
@@ -531,6 +590,7 @@ export function ChatPanel({ onClose }: ChatPanelProps): JSX.Element {
 
     setInput("")
     setAttachedFiles([])
+    track(Events.MESSAGE_SENT, { mode })
     addMessage({ role: "user", content: userMsg })
     const apiMessages = buildApiMessages(userMsg)
 
@@ -583,6 +643,7 @@ export function ChatPanel({ onClose }: ChatPanelProps): JSX.Element {
     }
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault()
+      if (isStreaming) return  // streaming — Send button becomes Stop, ignore Enter
       sendMessage()
     }
   }
@@ -594,7 +655,6 @@ export function ChatPanel({ onClose }: ChatPanelProps): JSX.Element {
     ta.style.height = `${Math.min(ta.scrollHeight, 120)}px`
   }, [input])
 
-  const blocked = isStreaming
   const showStop = isStreaming
 
   return (
@@ -872,14 +932,13 @@ export function ChatPanel({ onClose }: ChatPanelProps): JSX.Element {
             <MessageBubble
               key={item.id}
               message={item}
-              thinkingActive={item.streaming ? thinkingActive : false}
               hideFooter={hasTrailingTools}
             />
           )
         })}
 
         {/* Ask user interactive card */}
-        {pendingAskUser && isStreaming && (
+        {pendingAskUser && (
           <AskUserCard
             request={pendingAskUser}
             onSubmit={(id, answers) => {
@@ -890,7 +949,7 @@ export function ChatPanel({ onClose }: ChatPanelProps): JSX.Element {
         )}
 
         {/* Tool approval request — write tools get diff preview card */}
-        {pendingApproval && isStreaming && (
+        {pendingApproval && (
           <EditPreviewCard
             tool={pendingApproval.tool}
             preview={pendingApproval.preview ?? null}
@@ -900,6 +959,34 @@ export function ChatPanel({ onClose }: ChatPanelProps): JSX.Element {
           />
         )}
 
+        {/* Turn status — one line, visible throughout an agent/chat turn */}
+        {isStreaming && turn && (
+          <div
+            className="flex items-center gap-2 px-2 py-1.5 selectable animate-fade-in"
+            style={{ fontSize: 12, color: "var(--text-secondary)", fontFamily: "'JetBrains Mono', monospace" }}
+            data-tick={tick}
+          >
+            <span
+              aria-hidden
+              className="animate-glow-pulse-text"
+              style={{ color: "var(--accent)", fontSize: 14, display: "inline-block" }}
+            >✶</span>
+            <span style={{ color: "var(--text-primary)" }}>{turn.verb}…</span>
+            <span style={{ color: "var(--text-muted)" }}>
+              ({formatDuration(Math.floor((Date.now() - turn.startedAt) / 1000))}
+              {(tokens.input - turn.tokenSnap.input) > 0 && (
+                <> · ↑ {((tokens.input - turn.tokenSnap.input) / 1000).toFixed(1)}k</>
+              )}
+              {(tokens.output - turn.tokenSnap.output) > 0 && (
+                <> ↓ {((tokens.output - turn.tokenSnap.output) / 1000).toFixed(1)}k</>
+              )}
+              {turn.thoughtMs !== null && turn.thoughtMs >= 500 && (
+                <> · thought for {formatDuration(Math.round(turn.thoughtMs / 1000))}</>
+              )}
+              )
+            </span>
+          </div>
+        )}
 
         <div ref={messagesEndRef} />
       </div>
@@ -1006,7 +1093,7 @@ export function ChatPanel({ onClose }: ChatPanelProps): JSX.Element {
                 : "Ask anything or request code edits..."
             }
             rows={2}
-            disabled={blocked || !projectPath}
+            disabled={!projectPath}
             className="w-full resize-none selectable focus:outline-none rounded-t-lg"
             style={{
               background: "var(--bg-elevated)",

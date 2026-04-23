@@ -19,6 +19,7 @@ const INITIAL: Parameters<typeof useSettingsStore.setState>[0] = {
   localEndpoint: "http://localhost:11434/v1",
   localModel: "",
   provider: "anthropic",
+  prevByokProvider: "anthropic",
   model: "claude-sonnet-4-6",
   advisorEnabled: false,
   autoSave: true,
@@ -96,6 +97,16 @@ describe("simple setters", () => {
     useSettingsStore.getState().setModel("gpt-4o")
     expect(useSettingsStore.getState().provider).toBe("openai")
     expect(useSettingsStore.getState().model).toBe("gpt-4o")
+  })
+
+  it("setPrevByokProvider persists the chosen BYOK provider", () => {
+    useSettingsStore.getState().setPrevByokProvider("gemini")
+    expect(useSettingsStore.getState().prevByokProvider).toBe("gemini")
+  })
+
+  it("prevByokProvider defaults to anthropic", () => {
+    useSettingsStore.setState({ prevByokProvider: "anthropic" })
+    expect(useSettingsStore.getState().prevByokProvider).toBe("anthropic")
   })
 
   it("setAdvisorEnabled", () => {

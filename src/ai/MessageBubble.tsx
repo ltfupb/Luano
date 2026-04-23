@@ -3,7 +3,7 @@ import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import { ChatMessage } from "../stores/aiStore"
 import { CodeBlock } from "./CodeBlock"
-import { ThinkingBubble, formatDuration, pickVerbPair } from "./ThinkingBubble"
+import { formatDuration, pickVerbPair } from "./ThinkingBubble"
 
 const MARKDOWN_COMPONENTS = {
   code({ inline, className, children, ...props }: {
@@ -12,7 +12,12 @@ const MARKDOWN_COMPONENTS = {
     children?: React.ReactNode
   } & Record<string, unknown>): JSX.Element {
     const text = String(children ?? "").replace(/\n$/, "")
-    if (inline) {
+    // react-markdown v9 dropped the inline prop — detect inline by
+    // absence of a fenced `language-*` class AND no newline in body.
+    const hasLangClass = /language-\w+/.test(className ?? "")
+    const hasNewline = text.includes("\n")
+    const isInline = inline ?? (!hasLangClass && !hasNewline)
+    if (isInline) {
       return (
         <code
           className={className}
@@ -121,6 +126,10 @@ export function MessageFooter({ message }: { message: ChatMessage }): JSX.Elemen
   const [, pastTense] = pickVerbPair(message.id)
   const hasTokens = (message.inputTokens ?? 0) > 0 || (message.outputTokens ?? 0) > 0
   const hasThinking = message.thinkingSeconds !== undefined && message.thinkingSeconds > 0
+  // While the message is still streaming, the ChatPanel's turn-status line
+  // already shows live ✶ {verb}… (elapsed · tokens). Suppress the footer to
+  // avoid showing two indicators at once.
+  if (message.streaming) return null
   if (!hasThinking && !hasTokens) return null
 
   return (
@@ -144,9 +153,6 @@ export function MessageFooter({ message }: { message: ChatMessage }): JSX.Elemen
           {hasThinking && <span style={{ opacity: 0.5 }}>·</span>}
           <span>↑{((message.inputTokens ?? 0) / 1000).toFixed(1)}k</span>
           <span>↓{((message.outputTokens ?? 0) / 1000).toFixed(1)}k</span>
-          {(message.cacheTokens ?? 0) > 0 && (
-            <span style={{ opacity: 0.6 }}>({((message.cacheTokens ?? 0) / 1000).toFixed(1)}k cache)</span>
-          )}
         </>
       )}
     </div>
@@ -155,9 +161,8 @@ export function MessageFooter({ message }: { message: ChatMessage }): JSX.Elemen
 
 export const MessageBubble = React.memo(function MessageBubble({
   message,
-  thinkingActive,
   hideFooter
-}: { message: ChatMessage; thinkingActive?: boolean; hideFooter?: boolean }): JSX.Element {
+}: { message: ChatMessage; hideFooter?: boolean }): JSX.Element {
   const isUser = message.role === "user"
 
   if (isUser) {
@@ -183,7 +188,6 @@ export const MessageBubble = React.memo(function MessageBubble({
 
   // Assistant: flat, no container.
   const hasContent = Boolean(message.content)
-  const [gerund] = pickVerbPair(message.id)
 
   return (
     <div
@@ -202,12 +206,7 @@ export const MessageBubble = React.memo(function MessageBubble({
           <ReactMarkdown remarkPlugins={[remarkGfm]} components={MARKDOWN_COMPONENTS}>
             {message.content}
           </ReactMarkdown>
-          {message.streaming && (
-            <span className="animate-blink" style={{ color: "var(--accent)", marginLeft: 2 }}>{"\u258C"}</span>
-          )}
         </>
-      ) : message.streaming ? (
-        <ThinkingBubble verb={gerund} thinkingActive={thinkingActive} />
       ) : null}
 
       {!hideFooter && <MessageFooter message={message} />}

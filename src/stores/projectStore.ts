@@ -1,5 +1,6 @@
 import { create } from "zustand"
 import { persist, createJSONStorage } from "zustand/middleware"
+import { track, Events } from "../analytics"
 
 export interface FileEntry {
   name: string
@@ -47,14 +48,16 @@ export const useProjectStore = create<ProjectStore>()(
       lspStartedAt: null,
       dirtyFiles: [],
 
-      setProject: (path, tree, lspPort) =>
+      setProject: (path, tree, lspPort) => {
+        try { track(Events.PROJECT_OPENED) } catch { /* analytics must never block store */ }
         set({
           projectPath: path,
           fileTree: tree,
           lspPort,
           lspStatus: "running",
           lspStartedAt: null
-        }),
+        })
+      },
 
       closeProject: () =>
         set({

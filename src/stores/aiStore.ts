@@ -38,6 +38,7 @@ interface AIStore {
 
   addMessage: (msg: Omit<ChatMessage, "id">) => string
   updateMessage: (id: string, content: string, streaming?: boolean) => void
+  removeMessage: (id: string) => void
   setThinkingSeconds: (id: string, seconds: number) => void
   setMessageTokens: (id: string, tokens: { input: number; output: number; cache: number }) => void
   setStreaming: (v: boolean) => void
@@ -130,6 +131,9 @@ export const useAIStore = create<AIStore>()(
             m.id === id ? { ...m, content, streaming: streaming ?? m.streaming } : m
           )
         }),
+
+      removeMessage: (id) =>
+        set({ messages: get().messages.filter((m) => m.id !== id) }),
 
       setThinkingSeconds: (id, seconds) =>
         set({

@@ -1,55 +1,57 @@
 /**
- * tests/thinking-bubble.test.tsx — ThinkingBubble component (CC-style timer)
+ * tests/thinking-bubble.test.tsx — ThinkingBubble helpers
+ *
+ * The component this file originally tested was removed in v0.9.0; the
+ * turn-level status line in ChatPanel now covers the live indicator.
+ * What remains is the utility surface (verb pairs + duration formatter).
  */
 
-import React from "react"
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
-import { render, screen, act } from "@testing-library/react"
-import "@testing-library/jest-dom/vitest"
-import { ThinkingBubble, formatDuration } from "../src/ai/ThinkingBubble"
-
-void React
-
-beforeEach(() => { vi.useFakeTimers() })
-afterEach(() => { vi.useRealTimers() })
-
-describe("ThinkingBubble", () => {
-  it("shows blinking cursor initially (under 1s elapsed)", () => {
-    const { container } = render(<ThinkingBubble />)
-    expect(container.querySelector(".animate-blink")).toBeInTheDocument()
-  })
-
-  it("transitions to verb + elapsed timer after 1s", () => {
-    render(<ThinkingBubble verb="Respawning" />)
-    act(() => { vi.advanceTimersByTime(1500) })
-    expect(screen.getByText(/Respawning/)).toBeInTheDocument()
-    expect(screen.getByText(/\(1s\)/)).toBeInTheDocument()
-  })
-
-  it("updates the elapsed timer as time advances", () => {
-    render(<ThinkingBubble />)
-    act(() => { vi.advanceTimersByTime(5500) })
-    expect(screen.getByText(/\(5s\)/)).toBeInTheDocument()
-  })
-
-  it("does not crash when thinkingActive prop is undefined", () => {
-    expect(() => render(<ThinkingBubble />)).not.toThrow()
-  })
-})
+import { describe, it, expect } from "vitest"
+import { VERB_PAIRS, pickVerbPair, formatDuration } from "../src/ai/ThinkingBubble"
 
 describe("formatDuration", () => {
-  it("formats under 60s as Xs", () => {
+  it("formats seconds under a minute as Xs", () => {
     expect(formatDuration(0)).toBe("0s")
+    expect(formatDuration(1)).toBe("1s")
     expect(formatDuration(59)).toBe("59s")
   })
 
-  it("formats 60s+ as Xm Ys", () => {
+  it("formats 60 seconds and over as Xm Ys", () => {
     expect(formatDuration(60)).toBe("1m 0s")
-    expect(formatDuration(148)).toBe("2m 28s")
-    expect(formatDuration(3600)).toBe("60m 0s")
+    expect(formatDuration(61)).toBe("1m 1s")
+    expect(formatDuration(125)).toBe("2m 5s")
   })
 
-  it("clamps negative values to 0s", () => {
+  it("clamps negative input to 0s", () => {
     expect(formatDuration(-5)).toBe("0s")
+  })
+
+  it("floors fractional seconds", () => {
+    expect(formatDuration(2.9)).toBe("2s")
+  })
+})
+
+describe("pickVerbPair", () => {
+  it("returns a [gerund, pastTense] pair from VERB_PAIRS", () => {
+    const pair = pickVerbPair("test-seed")
+    expect(Array.isArray(pair)).toBe(true)
+    expect(pair.length).toBe(2)
+    expect(VERB_PAIRS).toContainEqual(pair)
+  })
+
+  it("is deterministic for the same seed", () => {
+    const a = pickVerbPair("abc")
+    const b = pickVerbPair("abc")
+    expect(a).toEqual(b)
+  })
+
+  it("different seeds can pick different pairs (across the full set)", () => {
+    const seen = new Set<string>()
+    for (const seed of ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j"]) {
+      const [gerund] = pickVerbPair(seed)
+      seen.add(gerund)
+    }
+    // With 27 pairs and 10 seeds, we should almost always see multiple
+    expect(seen.size).toBeGreaterThan(1)
   })
 })

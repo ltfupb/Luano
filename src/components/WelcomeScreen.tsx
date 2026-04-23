@@ -16,7 +16,8 @@ export function WelcomeScreen({ onOpenFolder, onNewProject, onOpenRecent, onOpen
   const openaiKey = useSettingsStore((s) => s.openaiKey)
   const geminiKey = useSettingsStore((s) => s.geminiKey)
   const localEndpoint = useSettingsStore((s) => s.localEndpoint)
-  const aiConfigured = Boolean(apiKey || openaiKey || geminiKey || localEndpoint)
+  const localModel = useSettingsStore((s) => s.localModel)
+  const aiConfigured = Boolean(apiKey || openaiKey || geminiKey || (localEndpoint && localModel))
 
   return (
     <div className="flex-1 flex flex-col items-center justify-center animate-fade-in" style={{ gap: "32px" }}>

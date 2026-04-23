@@ -165,7 +165,12 @@ function createWindow(): void {
   mainWindow.on("unmaximize", saveHandler)
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    shell.openExternal(url)
+    try {
+      const { protocol } = new URL(url)
+      if (protocol === "https:" || protocol === "http:" || protocol === "mailto:") {
+        void shell.openExternal(url)
+      }
+    } catch { /* invalid URL — deny */ }
     return { action: "deny" }
   })
 

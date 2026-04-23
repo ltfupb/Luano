@@ -13,5 +13,8 @@ interface MiscApi {
     version: string
     environment: string
     crashReportsEnabled: boolean
+    analyticsEnabled: boolean
   } | null
+  analyticsUsageIsEnabled: () => Promise<boolean>
+  analyticsUsageSetEnabled: (enabled: boolean) => Promise<{ success: boolean }>
 }

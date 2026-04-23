@@ -4,9 +4,11 @@ import { useProjectStore } from "../stores/projectStore"
 import { useT } from "../i18n/useT"
 import { SettingsAI, type ProviderModels } from "./SettingsAI"
 import { OpenSourceLicenses } from "./OpenSourceLicenses"
+import { setAnalyticsEnabled } from "../analytics"
 
 interface SettingsPanelProps {
   onClose: () => void
+  onProActivated?: () => void
 }
 
 const LANGUAGES = [
@@ -146,7 +148,7 @@ function SkillEditor({
 
 // ── Main Settings Panel ─────────────────────────────────────────────────────
 
-export function SettingsPanel({ onClose }: SettingsPanelProps): JSX.Element {
+export function SettingsPanel({ onClose, onProActivated }: SettingsPanelProps): JSX.Element {
   const {
     language, setLanguage, theme, setTheme,
     setProvider, setModel, setAdvisorEnabled,
@@ -162,10 +164,12 @@ export function SettingsPanel({ onClose }: SettingsPanelProps): JSX.Element {
   const [editingSkill, setEditingSkill] = useState<{ index: number; skill: CustomSkill } | null>(null)
   const [telemetryEnabled, setTelemetryEnabled] = useState(false)
   const [crashReportsEnabled, setCrashReportsEnabled] = useState(false)
+  const [analyticsUsageEnabled, setAnalyticsUsageEnabled] = useState(false)
   const [proStatus, setProStatus] = useState<{ isPro: boolean } | null>(null)
   const [licenseInfo, setLicenseInfo] = useState<{ isActive: boolean; customerName?: string; customerEmail?: string } | null>(null)
   const [licenseKeyInput, setLicenseKeyInput] = useState("")
   const [licenseActivating, setLicenseActivating] = useState(false)
+  const [deactivateConfirm, setDeactivateConfirm] = useState(false)
   const [licenseError, setLicenseError] = useState("")
 
   useEffect(() => {
@@ -188,6 +192,7 @@ export function SettingsPanel({ onClose }: SettingsPanelProps): JSX.Element {
     // Load telemetry and pro status
     window.api.telemetryIsEnabled().then((v: boolean) => setTelemetryEnabled(v)).catch(() => {})
     window.api.crashReportsIsEnabled().then((v: boolean) => setCrashReportsEnabled(v)).catch(() => {})
+    window.api.analyticsUsageIsEnabled().then((v: boolean) => setAnalyticsUsageEnabled(v)).catch(() => {})
     window.api.getProStatus().then((s: { isPro: boolean }) => setProStatus(s)).catch(() => {})
     window.api.licenseInfo().then(setLicenseInfo).catch(() => {})
     // eslint-disable-next-line react-hooks/exhaustive-deps -- init once on mount
@@ -231,6 +236,8 @@ export function SettingsPanel({ onClose }: SettingsPanelProps): JSX.Element {
         transition: "all 0.18s ease"
       }}
       onClick={(e) => e.target === e.currentTarget && handleClose()}
+      onDragOver={(e) => e.stopPropagation()}
+      onDrop={(e) => e.stopPropagation()}
     >
       <div
         className="w-[480px] max-h-[85vh] rounded-2xl overflow-hidden flex flex-col"
@@ -519,6 +526,30 @@ export function SettingsPanel({ onClose }: SettingsPanelProps): JSX.Element {
               </span>
             </div>
 
+            {/* Usage Analytics → PostHog (external, independent of crash reports) */}
+            <div className="flex flex-col gap-1">
+              <label className="flex items-center gap-2.5 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={analyticsUsageEnabled}
+                  onChange={async (e) => {
+                    const v = e.target.checked
+                    setAnalyticsUsageEnabled(v)
+                    setAnalyticsEnabled(v)
+                    await window.api.analyticsUsageSetEnabled(v)
+                  }}
+                  className="accent-[var(--accent)]"
+                  style={{ width: 14, height: 14 }}
+                />
+                <span style={{ fontSize: "11px", color: "var(--text-secondary)" }}>
+                  {t("analyticsUsageLabel")}
+                </span>
+              </label>
+              <span style={{ fontSize: "10px", color: "var(--text-muted)", lineHeight: 1.4, marginLeft: 22 }}>
+                {t("analyticsUsageNote")}
+              </span>
+            </div>
+
             {/* AI sqlite (local only) */}
             <div className="flex flex-col gap-1">
               <label className="flex items-center gap-2.5 cursor-pointer">
@@ -564,24 +595,63 @@ export function SettingsPanel({ onClose }: SettingsPanelProps): JSX.Element {
             </div>
 
             {licenseInfo?.isActive ? (
-              <button
-                onClick={async () => {
-                  const result = await window.api.licenseDeactivate()
-                  if (result.success) {
-                    setLicenseInfo({ isActive: false })
-                    setProStatus({ isPro: false })
-                  }
-                }}
-                className="px-3 py-1.5 rounded-lg text-xs transition-all duration-150"
-                style={{
-                  background: "var(--bg-elevated)",
-                  color: "var(--danger)",
-                  border: "1px solid rgba(248,113,113,0.3)",
-                  alignSelf: "flex-start"
-                }}
-              >
-                {t("deactivateLicense")}
-              </button>
+              <div className="flex items-center gap-2">
+                {deactivateConfirm ? (
+                  <>
+                    <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>
+                      {t("deactivateConfirmPrompt")}
+                    </span>
+                    <button
+                      onClick={async () => {
+                        const result = await window.api.licenseDeactivate()
+                        if (result.success) {
+                          setLicenseInfo({ isActive: false })
+                          setProStatus({ isPro: false })
+                          setDeactivateConfirm(false)
+                        } else {
+                          setLicenseError(result.error ?? "Deactivation failed. Try again or contact support.")
+                          setDeactivateConfirm(false)
+                        }
+                      }}
+                      className="px-3 py-1.5 rounded-lg text-xs transition-all duration-150"
+                      style={{
+                        background: "var(--bg-elevated)",
+                        color: "var(--danger)",
+                        border: "1px solid rgba(248,113,113,0.3)"
+                      }}
+                    >
+                      {t("deactivateConfirm")}
+                    </button>
+                    <button
+                      onClick={() => setDeactivateConfirm(false)}
+                      className="px-3 py-1.5 rounded-lg text-xs transition-all duration-150"
+                      style={{
+                        background: "var(--bg-elevated)",
+                        color: "var(--text-secondary)",
+                        border: "1px solid var(--border)"
+                      }}
+                    >
+                      {t("cancel")}
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    onClick={() => setDeactivateConfirm(true)}
+                    className="px-3 py-1.5 rounded-lg text-xs transition-all duration-150"
+                    style={{
+                      background: "var(--bg-elevated)",
+                      color: "var(--danger)",
+                      border: "1px solid rgba(248,113,113,0.3)",
+                      alignSelf: "flex-start"
+                    }}
+                  >
+                    {t("deactivateLicense")}
+                  </button>
+                )}
+                {licenseError && !deactivateConfirm && (
+                  <span style={{ fontSize: "10px", color: "var(--danger)" }}>{licenseError}</span>
+                )}
+              </div>
             ) : (
               <div className="flex flex-col gap-2">
                 <div className="flex gap-2">
@@ -611,6 +681,7 @@ export function SettingsPanel({ onClose }: SettingsPanelProps): JSX.Element {
                         setLicenseKeyInput("")
                         setLicenseInfo({ isActive: true, customerName: result.customerName, customerEmail: result.customerEmail })
                         setProStatus({ isPro: true })
+                        onProActivated?.()
                       } else {
                         setLicenseError(result.error ?? "Activation failed")
                       }

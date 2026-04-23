@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react"
+import { STORAGE_KEYS, STORAGE_FLAG_TRUE } from "../storageKeys"
 
 const isMac = typeof navigator !== "undefined" &&
   (navigator.platform.toLowerCase().includes("mac") ||
@@ -65,7 +66,7 @@ const STEPS: TutorialStep[] = [
   }
 ]
 
-const STORAGE_KEY = "luano-tutorial-done"
+const STORAGE_KEY = STORAGE_KEYS.TUTORIAL_DONE
 
 interface TooltipPos {
   top: number
@@ -158,14 +159,14 @@ export function TutorialOverlay({ onDone }: { onDone: () => void }): JSX.Element
       if (step < STEPS.length - 1) {
         setStep(step + 1)
       } else {
-        localStorage.setItem(STORAGE_KEY, "true")
+        localStorage.setItem(STORAGE_KEY, STORAGE_FLAG_TRUE)
         onDone()
       }
     }, 150)
   }
 
   const skip = () => {
-    localStorage.setItem(STORAGE_KEY, "true")
+    localStorage.setItem(STORAGE_KEY, STORAGE_FLAG_TRUE)
     onDone()
   }
 

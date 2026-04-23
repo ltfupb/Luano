@@ -12,6 +12,7 @@ import {
   setProvider, setModel, getProviderAndModel,
   setAdvisorEnabled, getAdvisorEnabled,
   setThinkingEffort, getThinkingEffort,
+  fetchManagedUsage,
   MODELS, getTokenUsage, resetTokenUsage
 } from "../ai/provider"
 import { hasFeature } from "../pro"
@@ -82,7 +83,7 @@ export function registerAIHandlers(): void {
   ipcMain.handle("ai:get-local-model", () => getLocalModel())
   ipcMain.handle("ai:fetch-local-models", () => fetchLocalModels())
   ipcMain.handle("ai:set-provider", (_, provider: string) => {
-    setProvider(provider as "anthropic" | "openai" | "gemini" | "local")
+    setProvider(provider as "anthropic" | "openai" | "gemini" | "local" | "managed")
     return { success: true }
   })
   ipcMain.handle("ai:set-model", (_, model: string) => {
@@ -104,6 +105,8 @@ export function registerAIHandlers(): void {
     return { success: true }
   })
   ipcMain.handle("ai:get-thinking-effort", () => getThinkingEffort())
+
+  ipcMain.handle("managed:fetch-usage", () => fetchManagedUsage())
 
   // Menu rebuild — called by renderer when a project opens/closes so items
   // like "Close Project" / "Quick Open" toggle enabled state correctly.

@@ -79,6 +79,32 @@ describe("updateMessage", () => {
   })
 })
 
+// ── removeMessage ────────────────────────────────────────────────────────────
+
+describe("removeMessage", () => {
+  it("removes only the matching id and keeps the rest in order", () => {
+    const id1 = useAIStore.getState().addMessage({ role: "user", content: "a" })
+    const id2 = useAIStore.getState().addMessage({ role: "assistant", content: "b" })
+    const id3 = useAIStore.getState().addMessage({ role: "user", content: "c" })
+    useAIStore.getState().removeMessage(id2)
+    const msgs = useAIStore.getState().messages
+    expect(msgs).toHaveLength(2)
+    expect(msgs[0].id).toBe(id1)
+    expect(msgs[1].id).toBe(id3)
+  })
+
+  it("is a safe no-op for an unknown id", () => {
+    useAIStore.getState().addMessage({ role: "user", content: "a" })
+    expect(() => useAIStore.getState().removeMessage("nope")).not.toThrow()
+    expect(useAIStore.getState().messages).toHaveLength(1)
+  })
+
+  it("handles removing from an empty list", () => {
+    expect(() => useAIStore.getState().removeMessage("x")).not.toThrow()
+    expect(useAIStore.getState().messages).toEqual([])
+  })
+})
+
 // ── simple setters ────────────────────────────────────────────────────────────
 
 describe("simple setters", () => {

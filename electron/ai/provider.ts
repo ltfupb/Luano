@@ -106,7 +106,10 @@ export class StreamBlockTracker {
   }
 }
 
-export type Provider = "anthropic" | "openai" | "gemini" | "local"
+export type Provider = "anthropic" | "openai" | "gemini" | "local" | "managed"
+
+export const MANAGED_BASE_URL = "https://api.luano.dev"
+export const MANAGED_MODEL = "claude-sonnet-4-6"
 
 export const MODELS: Record<Provider, Array<{ id: string; label: string }>> = {
   anthropic: [
@@ -127,12 +130,22 @@ export const MODELS: Record<Provider, Array<{ id: string; label: string }>> = {
     { id: "gemini-2.5-flash", label: "Gemini 2.5 Flash" },
     { id: "gemini-2.0-flash", label: "Gemini 2.0 Flash" }
   ],
-  local: []
+  local: [],
+  managed: [
+    { id: MANAGED_MODEL, label: "Sonnet 4.6 (Managed)" }
+  ]
 }
 
 // ── State ────────────────────────────────────────────────────────────────────
 
 let anthropicClient: Anthropic | null = null
+let managedClient: Anthropic | null = null
+// License validity cache: avoid re-reading electron-store on every agent tick.
+// License state only changes via licenseActivate/licenseDeactivate IPC (see
+// invalidateManagedLicenseCache below) and on timeout-tuning path, both of which
+// reset `managedClient` anyway — so caching validity for the life of the client
+// is safe. Nulling managedClient implicitly invalidates this cache.
+let managedLicenseKey: string | null = null
 let openaiClient: OpenAI | null = null
 let geminiClient: GoogleGenerativeAI | null = null
 let localClient: OpenAI | null = null
@@ -193,6 +206,8 @@ export function setNetworkTimeoutMs(ms: number): void {
   store.set("networkTimeoutMs", ms)
   // Invalidate clients so they re-init with the new timeout
   anthropicClient = null
+  managedClient = null
+  managedLicenseKey = null
   openaiClient = null
 }
 
@@ -204,6 +219,69 @@ export async function getAnthropicClient(): Promise<Anthropic> {
     anthropicClient = new AnthropicCtor({ apiKey, timeout: getNetworkTimeoutMs() })
   }
   return anthropicClient
+}
+
+interface ManagedLicenseData { key: string; instanceId: string; valid: boolean }
+
+export interface ManagedUsageData {
+  period_ym: string
+  used: number
+  cap: number
+  remaining: number
+  cache_hit_rate: number
+  resets_at: number
+}
+
+export async function getManagedClient(): Promise<Anthropic> {
+  // Fast path: cached client still valid for the same license key
+  if (managedClient && managedLicenseKey) return managedClient
+
+  const license = store.get<ManagedLicenseData>("license")
+  if (!license?.key || !license.valid) {
+    managedClient = null
+    managedLicenseKey = null
+    throw new Error("Pro license required for Managed AI")
+  }
+  const AnthropicCtor = await loadAnthropic()
+  managedClient = new AnthropicCtor({
+    baseURL: MANAGED_BASE_URL,
+    apiKey: license.key,
+    defaultHeaders: { "X-Instance-Id": license.instanceId },
+    timeout: getNetworkTimeoutMs(),
+  })
+  managedLicenseKey = license.key
+  return managedClient
+}
+
+/** Called by the license IPC handlers on activate/deactivate. */
+export function invalidateManagedLicenseCache(): void {
+  managedClient = null
+  managedLicenseKey = null
+}
+
+export function isManagedMode(): boolean {
+  return getProvider() === "managed"
+}
+
+/** Fetch current Managed usage from the Worker. Returns null on error. */
+export async function fetchManagedUsage(): Promise<ManagedUsageData | null> {
+  const license = store.get<ManagedLicenseData>("license")
+  if (!license?.key || !license.valid) return null
+  try {
+    const res = await fetch(`${MANAGED_BASE_URL}/v1/usage`, {
+      headers: { Authorization: `Bearer ${license.key}` },
+      signal: AbortSignal.timeout(10_000),
+    })
+    if (!res.ok) return null
+    const data = await res.json() as ManagedUsageData
+    if (
+      typeof data?.used !== "number" || !isFinite(data.used) ||
+      typeof data?.cap !== "number" || !isFinite(data.cap) || data.cap <= 0
+    ) return null
+    return data
+  } catch {
+    return null
+  }
 }
 
 export async function getOpenAIClient(): Promise<OpenAI> {
@@ -322,10 +400,14 @@ export async function fetchLocalModels(): Promise<Array<{ id: string; label: str
 
 export function setProvider(provider: Provider): void {
   store.set("provider", provider)
-  // Reset to the provider's default model
   if (provider === "local") {
     const localModel = (store.get("localModel") as string) || ""
     store.set("model", localModel)
+    return
+  }
+  if (provider === "managed") {
+    store.set("model", MANAGED_MODEL)
+    managedClient = null  // re-init on next request
     return
   }
   store.set("model", MODELS[provider][0].id)
@@ -343,9 +425,10 @@ export function getAdvisorEnabled(): boolean {
   return (store.get("advisorEnabled") as boolean | undefined) ?? false
 }
 
-/** Advisor is usable only with Anthropic non-Opus models */
+/** Advisor is usable with Anthropic or Managed non-Opus Sonnet models */
 export function isAdvisorAvailable(): boolean {
-  return getProvider() === "anthropic" &&
+  const provider = getProvider()
+  return (provider === "anthropic" || provider === "managed") &&
     getAdvisorEnabled() &&
     !getModel().includes("opus")
 }
@@ -406,12 +489,11 @@ export function setThinkingEffort(effort: ThinkingEffort): void {
 export function supportsThinking(): boolean {
   const provider = getProvider()
   const model = getModel()
+  if (provider === "managed") return true  // Sonnet 4.6 supports thinking
   if (provider === "anthropic") {
-    // Opus + Sonnet support extended thinking; Haiku does not (as of 4.5).
     return model.includes("opus") || model.includes("sonnet")
   }
   if (provider === "openai") {
-    // o1, o1-mini, o3, o3-mini, o4 — the reasoning family.
     return /^o[1-9]/.test(model)
   }
   return false
@@ -435,7 +517,9 @@ const FRONTIER_MODELS = new Set([
 ])
 
 export function getModelTier(): ModelTier {
-  if (getProvider() === "local") return "standard"
+  const provider = getProvider()
+  if (provider === "local") return "standard"
+  if (provider === "managed") return "frontier"  // always Sonnet 4.6
   return FRONTIER_MODELS.has(getModel()) ? "frontier" : "standard"
 }
 
@@ -569,9 +653,10 @@ export async function chat(messages: ChatMessage[], systemPrompt: string): Promi
     return response.response.text()
   }
 
-  const anthropic = await getAnthropicClient()
+  const anthropic = provider === "managed" ? await getManagedClient() : await getAnthropicClient()
   const response = await withRetry(() => withTimeout(anthropic.messages.create({
-    model, max_tokens: 8192,
+    model: provider === "managed" ? MANAGED_MODEL : model,
+    max_tokens: 8192,
     system: toCachedSystem(systemPrompt),
     messages
   })))
@@ -638,35 +723,26 @@ export async function chatStream(
       return
     }
 
-    const anthropic = await getAnthropicClient()
-    const useAdvisor = isAdvisorAvailable()
-    const advisorTool = useAdvisor ? [{
-      type: "advisor_20260301" as const,
-      name: "advisor" as const,
-      model: getAdvisorModel(),
-      max_uses: 5,
-      caching: { type: "ephemeral" as const }
-    }] : []
-
-    const stream = useAdvisor
-      ? anthropic.beta.messages.stream({
-          model,
-          max_tokens: 8192,
-          system: toCachedSystem(systemPrompt),
-          messages,
-          tools: advisorTool,
-          betas: ["advisor-tool-2026-03-01"]
-        })
-      : anthropic.messages.stream({
-          model,
-          max_tokens: 8192,
-          system: toCachedSystem(systemPrompt),
-          messages
-        })
+    const anthropic = provider === "managed" ? await getManagedClient() : await getAnthropicClient()
+    const effectiveModel = provider === "managed" ? MANAGED_MODEL : model
+    // Chat mode: no tools. Advisor belongs in Agent loop — sending advisor
+    // here contradicts the "you have no tools" chat prompt and causes some
+    // models to hallucinate tool-call markup in the text response.
+    const controller = new AbortController()
+    activeAbortController = controller
+    const stream = anthropic.messages.stream(
+      {
+        model: effectiveModel,
+        max_tokens: 8192,
+        system: toCachedSystem(systemPrompt),
+        messages
+      },
+      { signal: controller.signal }
+    )
 
     let streamedChars = 0
     let inputTracked = false
-    const blocks = new StreamBlockTracker(streamChannel, useAdvisor)
+    const blocks = new StreamBlockTracker(streamChannel, false)
     for await (const chunk of stream) {
       if (chunk.type === "message_start" && !inputTracked) {
         const msg = (chunk as unknown as StreamMessageStart).message
@@ -690,12 +766,12 @@ export async function chatStream(
     }
     send(null)
   } catch (err) {
-    // Clean up stuck advisor indicator on stream error
-    if (isAdvisorAvailable()) {
-      BrowserWindow.getAllWindows().forEach((win) =>
-        win.webContents.send(`${streamChannel}:advisor`, false)
-      )
-    }
+    // Clear any stuck advisor/thinking indicator — StreamBlockTracker's
+    // onStop never fires if the upstream errors mid-block
+    BrowserWindow.getAllWindows().forEach((win) => {
+      win.webContents.send(`${streamChannel}:advisor`, false)
+      win.webContents.send(`${streamChannel}:thinking`, false)
+    })
     const waitSec = is429(err)
     if (waitSec !== null) {
       send(`\n\nRate limited. Please wait ${waitSec}s and try again.`)
@@ -703,6 +779,8 @@ export async function chatStream(
     } else {
       sendError(err)
     }
+  } finally {
+    if (activeAbortController?.signal.aborted) activeAbortController = null
   }
 }
 
