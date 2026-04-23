@@ -178,38 +178,24 @@ export default function App(): JSX.Element {
   const [showTutorial, setShowTutorial] = useState(() => shouldShowTutorial())
   const [showProOnboarding, setShowProOnboarding] = useState(false)
 
-  // Sync layout to store on change. Store writes happen in useEffect AFTER render
-  // commits — calling them inside a setState updater is a React 18 render-phase
-  // side effect and triggers "Cannot update a component while rendering" warnings.
+  // Sync layout to store on change. Store writes happen in useEffect AFTER
+  // render commits. Calling them INSIDE a setState updater (the previous
+  // implementation did this) emits a Zustand `set()` during React's render
+  // phase, which triggers any subscriber (e.g. AppTitlebar via useT) to
+  // re-render mid-render — React warns "Cannot update a component while
+  // rendering a different component". The one-frame lag vs. an inline store
+  // write is imperceptible on a drag; the warning is not.
   const storeSetTerminalHeight = useSettingsStore((s) => s.setTerminalHeight)
   const storeSetSidePanelWidth = useSettingsStore((s) => s.setSidePanelWidth)
   const storeSetChatPanelWidth = useSettingsStore((s) => s.setChatPanelWidth)
 
-  // Setters update local state (for layout props on this file) AND the store
-  // synchronously, so components that subscribe to the store (e.g. EditorPane's
-  // pinned buttons reading `chatPanelWidth`) reposition in sync with the drag
-  // instead of lagging by one render cycle.
-  const setTerminalHeight: React.Dispatch<React.SetStateAction<number>> = useCallback((update) => {
-    _setTerminalHeight((prev) => {
-      const next = typeof update === "function" ? update(prev) : update
-      storeSetTerminalHeight(next)
-      return next
-    })
-  }, [storeSetTerminalHeight])
-  const setSidePanelWidth: React.Dispatch<React.SetStateAction<number>> = useCallback((update) => {
-    _setSidePanelWidth((prev) => {
-      const next = typeof update === "function" ? update(prev) : update
-      storeSetSidePanelWidth(next)
-      return next
-    })
-  }, [storeSetSidePanelWidth])
-  const setChatPanelWidth: React.Dispatch<React.SetStateAction<number>> = useCallback((update) => {
-    _setChatPanelWidth((prev) => {
-      const next = typeof update === "function" ? update(prev) : update
-      storeSetChatPanelWidth(next)
-      return next
-    })
-  }, [storeSetChatPanelWidth])
+  const setTerminalHeight = _setTerminalHeight
+  const setSidePanelWidth = _setSidePanelWidth
+  const setChatPanelWidth = _setChatPanelWidth
+
+  useEffect(() => { storeSetTerminalHeight(terminalHeight) }, [terminalHeight, storeSetTerminalHeight])
+  useEffect(() => { storeSetSidePanelWidth(sidePanelWidth) }, [sidePanelWidth, storeSetSidePanelWidth])
+  useEffect(() => { storeSetChatPanelWidth(chatPanelWidth) }, [chatPanelWidth, storeSetChatPanelWidth])
 
   // Panel resize hooks
   const handleResizeMouseDown = usePanelResize("y", TERMINAL_MIN, TERMINAL_MAX, setTerminalHeight, true)
