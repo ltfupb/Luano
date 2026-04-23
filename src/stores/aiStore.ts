@@ -10,6 +10,14 @@ export interface ChatMessage {
   streaming?: boolean
   toolName?: string
   toolSuccess?: boolean
+  /**
+   * The `path` input to a file-touching tool (Lint, Read, TypeCheck, Edit,
+   * Write, MultiEdit, Patch, Delete, etc.). Persisted on the tool event so
+   * the UI can show the filename even when the tool's text output doesn't
+   * mention it — Lint's "No lint errors found." has no path in the output,
+   * so a regex over content was silently dropping the filename.
+   */
+  toolPath?: string
   /** Seconds spent thinking before this assistant message started streaming. Displayed as "Cogitated for X". */
   thinkingSeconds?: number
   /** Token counts for this single turn (computed as delta from session totals when the message ends). */

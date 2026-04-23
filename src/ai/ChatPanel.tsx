@@ -460,7 +460,10 @@ export function ChatPanel({ onClose }: ChatPanelProps): JSX.Element {
               role: "tool",
               content: event.output.slice(0, 200),
               toolName: event.tool,
-              toolSuccess: event.success
+              toolSuccess: event.success,
+              // Prefer input.path for the filename label — output text is
+              // unreliable (e.g. Lint's "No lint errors found." has none).
+              toolPath: typeof event.input?.path === "string" ? event.input.path : undefined
             })
             currentId = null
             accumulated = ""

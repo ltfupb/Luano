@@ -51,6 +51,10 @@ const FILE_TOOLS = new Set(["Read", "Edit", "Write", "Delete", "Glob", "Grep", "
 
 function getToolTarget(event: ChatMessage): string {
   if (!FILE_TOOLS.has(event.toolName ?? "")) return ""
+  // Prefer the input path captured at tool-call time. Fallback regex over
+  // output text is for old persisted sessions that predate toolPath —
+  // don't remove it or their tool rows lose the filename label.
+  if (event.toolPath) return getFileName(event.toolPath)
   const pathMatch = event.content?.match(/(?:^|\s)([\w.\\/:-]+\.\w+)/)
   return pathMatch ? getFileName(pathMatch[1]) : ""
 }
