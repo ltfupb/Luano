@@ -13,7 +13,7 @@ const TOOL_META: Record<string, { label: string; icon: string; bridge?: boolean 
   Lint:             { label: "Lint",               icon: "check" },
   TypeCheck:        { label: "Type check",         icon: "check" },
   Format:           { label: "Format",             icon: "check" },
-  MultiEdit:        { label: "Multi-edit",         icon: "pencil" },
+  MultiEdit:        { label: "Multi edit",         icon: "pencil" },
   Patch:            { label: "Patch",              icon: "pencil" },
   TodoWrite:        { label: "Todo",               icon: "check" },
   WagRead:          { label: "WAG read",           icon: "book" },
