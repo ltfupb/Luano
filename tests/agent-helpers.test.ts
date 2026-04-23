@@ -34,6 +34,22 @@ vi.mock("../electron/mcp/client", () => ({
 }))
 vi.mock("../electron/ai/rag", () => ({ searchDocs: vi.fn() }))
 vi.mock("../electron/file/sandbox", () => ({ validatePath: vi.fn() }))
+// autoVerifyLint calls lintModifiedFiles, which calls executeTool("Lint", ...).
+// Mock executeTool so we control the lint output without wiring Selene.
+// Hoisted so the vi.mock factory can see it.
+const { mockExecuteTool } = vi.hoisted(() => ({ mockExecuteTool: vi.fn() }))
+// Preserve the real TOOLS array (getToolsForExecution tests need it) but
+// override executeTool so autoVerifyLint tests can drive the lint output.
+vi.mock("../electron/ai/tools", async () => {
+  const actual = await vi.importActual<typeof import("../electron/ai/tools")>("../electron/ai/tools")
+  return { ...actual, executeTool: mockExecuteTool }
+})
+// lintModifiedFiles only runs executeTool on paths where existsSync(path) is true.
+// Return true for any .luau path so the tests can drive the lint result.
+vi.mock("fs", async () => {
+  const actual = await vi.importActual<typeof import("fs")>("fs")
+  return { ...actual, existsSync: vi.fn(() => true), readFileSync: vi.fn(() => "") }
+})
 vi.mock("../electron/ai/wag", () => ({
   wagExists: vi.fn(() => false), readWagFile: vi.fn(),
   listSiblings: vi.fn(() => []), searchWag: vi.fn(() => []), rebuildWagIndex: vi.fn()
@@ -57,7 +73,8 @@ import {
   detectStall, broadcastRound, STALL_THRESHOLD,
   estimateTokens, microCompact,
   appendWagReminder, WAG_VALUE_PATTERN,
-  getToolsForExecution, studioAvailable
+  getToolsForExecution, studioAvailable,
+  autoVerifyLint
 } from "../electron/ai/agent"
 import { wagExists } from "../electron/ai/wag"
 import { isBridgeConnected } from "../electron/bridge/server"
@@ -271,6 +288,58 @@ describe("getToolsForExecution (STUDIO filter)", () => {
     const names = getToolsForExecution().map((t) => t.name)
     expect(names).toContain("ReadInstanceTree")
     expect(names).toContain("Glob")
+  })
+})
+
+describe("autoVerifyLint", () => {
+  beforeEach(() => { mockExecuteTool.mockReset() })
+
+  it("returns null when modifiedFiles is empty — no lint run", async () => {
+    const result = await autoVerifyLint([], "ch", "/proj", "")
+    expect(result).toBeNull()
+    expect(mockExecuteTool).not.toHaveBeenCalled()
+  })
+
+  it("returns null when lint finds no errors", async () => {
+    mockExecuteTool.mockResolvedValue({ success: true, output: "No lint errors" })
+    const result = await autoVerifyLint(["/proj/a.luau"], "ch", "/proj", "")
+    expect(result).toBeNull()
+  })
+
+  it("returns errors object when lint finds new errors", async () => {
+    mockExecuteTool.mockResolvedValue({
+      success: true,
+      output: "ERROR: unused variable 'x'"
+    })
+    const result = await autoVerifyLint(["/proj/a.luau"], "ch", "/proj", "")
+    expect(result).not.toBeNull()
+    expect(result!.errors.length).toBeGreaterThan(0)
+    expect(result!.errorKey).toBe(result!.errors.join("\n"))
+  })
+
+  it("returns null when errors match the previous round (loop stuck on same problem)", async () => {
+    mockExecuteTool.mockResolvedValue({
+      success: true,
+      output: "ERROR: unused variable 'x'"
+    })
+    // First call — should return errors and we record the key.
+    const first = await autoVerifyLint(["/proj/a.luau"], "ch", "/proj", "")
+    expect(first).not.toBeNull()
+    const prevKey = first!.errorKey
+    // Second call with same prevKey and same lint output — dedup kicks in.
+    const second = await autoVerifyLint(["/proj/a.luau"], "ch", "/proj", prevKey)
+    expect(second).toBeNull()
+  })
+
+  it("dedupes entirely independently of warning-only output (warnings are stripped by lintModifiedFiles)", async () => {
+    mockExecuteTool.mockResolvedValue({
+      success: true,
+      output: "WARN: style issue only (no ERROR lines)"
+    })
+    const result = await autoVerifyLint(["/proj/a.luau"], "ch", "/proj", "")
+    // lintModifiedFiles filters to ERROR-only — warnings alone should not
+    // trigger an AUTO-VERIFY round.
+    expect(result).toBeNull()
   })
 })
 
