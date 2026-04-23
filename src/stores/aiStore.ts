@@ -63,15 +63,17 @@ function makeSessionId(): string {
  * Tool-name migration for persisted sessions.
  *
  * Pre-v0.8.6 sessions stored toolName in snake_case (read_file, edit_file, …).
- * v0.8.6 renamed to CC-style PascalCase (Read, Edit, …). Without this map the
- * UI falls back to the raw string for old sessions — icons miss, labels drop
- * to "custom_tool" style display. Run on migrate to keep history readable.
+ * v0.8.6 renamed to CC-style PascalCase (Read, Edit, …). v0.9.0 renamed Write
+ * → CreateFile so the tool name carries its semantic (Write was ambiguous and
+ * the model frequently picked it for existing files). Both old names redirect
+ * to the current tool name here so persisted sessions stay readable.
  */
 export const TOOL_NAME_MIGRATION: Record<string, string> = {
   read_file: "Read",
   edit_file: "Edit",
   multi_edit: "MultiEdit",
-  create_file: "Write",
+  create_file: "CreateFile",
+  Write: "CreateFile",
   delete_file: "Delete",
   list_files: "Glob",
   grep_files: "Grep",

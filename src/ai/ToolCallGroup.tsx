@@ -5,7 +5,7 @@ import { getFileName } from "../lib/utils"
 const TOOL_META: Record<string, { label: string; icon: string; bridge?: boolean }> = {
   Read:             { label: "Read",               icon: "eye" },
   Edit:             { label: "Edit",               icon: "pencil" },
-  Write:            { label: "Create",             icon: "plus" },
+  CreateFile:       { label: "Create",             icon: "plus" },
   Delete:           { label: "Delete",             icon: "trash" },
   Glob:             { label: "List",               icon: "folder" },
   Grep:             { label: "Search",             icon: "search" },
@@ -47,7 +47,7 @@ function ToolIcon({ type, size = 12 }: { type: string; size?: number }): JSX.Ele
   }
 }
 
-const FILE_TOOLS = new Set(["Read", "Edit", "Write", "Delete", "Glob", "Grep", "Lint", "TypeCheck", "Format", "MultiEdit", "Patch"])
+const FILE_TOOLS = new Set(["Read", "Edit", "CreateFile", "Delete", "Glob", "Grep", "Lint", "TypeCheck", "Format", "MultiEdit", "Patch"])
 
 function getToolTarget(event: ChatMessage): string {
   if (!FILE_TOOLS.has(event.toolName ?? "")) return ""

@@ -68,7 +68,7 @@ beforeEach(() => { vi.clearAllMocks() })
 describe("detectStall", () => {
   it("resets counter and returns no-nudge when a write tool is used", () => {
     const state = { executeRoundsWithoutWrite: 5 }
-    const result = detectStall("execute", ["Read", "Write"], state)
+    const result = detectStall("execute", ["Read", "CreateFile"], state)
     expect(result).toEqual({ nudge: false })
     expect(state.executeRoundsWithoutWrite).toBe(0)
   })
@@ -255,7 +255,7 @@ describe("getToolsForExecution (STUDIO filter)", () => {
   it("keeps non-Studio tools regardless of studioConnected", () => {
     const offNames = getToolsForExecution({ studioConnected: false }).map((t) => t.name)
     expect(offNames).toContain("Read")
-    expect(offNames).toContain("Write")
+    expect(offNames).toContain("CreateFile")
     expect(offNames).toContain("Edit")
   })
 
