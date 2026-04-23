@@ -83,7 +83,7 @@ describe("ProOnboardingOverlay state machine", () => {
       "You're Pro",
       "Managed AI — no key needed",
       "Agent & Plan Mode",
-      "Inline Edit — not the chat panel",
+      "Inline Edit",
       "Ready",
     ]
     for (let i = 0; i < titles.length; i++) {

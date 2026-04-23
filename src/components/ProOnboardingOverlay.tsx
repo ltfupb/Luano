@@ -28,8 +28,8 @@ const STEPS: Step[] = [
   },
   {
     emoji: "⌨",
-    title: "Inline Edit — not the chat panel",
-    body: "Highlight the exact code you want to change, press Ctrl+K (Cmd+K on Mac), type what to change. AI edits only that range — no whole-file rewrite, no chat back-and-forth."
+    title: "Inline Edit",
+    body: "Select any code and press Ctrl+K (Cmd+K on Mac). AI edits exactly what you highlighted, nothing else."
   },
   {
     emoji: "🚀",
