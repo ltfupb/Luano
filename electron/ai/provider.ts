@@ -140,12 +140,6 @@ export const MODELS: Record<Provider, Array<{ id: string; label: string }>> = {
 
 let anthropicClient: Anthropic | null = null
 let managedClient: Anthropic | null = null
-// License validity cache: avoid re-reading electron-store on every agent tick.
-// License state only changes via licenseActivate/licenseDeactivate IPC (see
-// invalidateManagedLicenseCache below) and on timeout-tuning path, both of which
-// reset `managedClient` anyway — so caching validity for the life of the client
-// is safe. Nulling managedClient implicitly invalidates this cache.
-let managedLicenseKey: string | null = null
 let openaiClient: OpenAI | null = null
 let geminiClient: GoogleGenerativeAI | null = null
 let localClient: OpenAI | null = null
@@ -207,7 +201,6 @@ export function setNetworkTimeoutMs(ms: number): void {
   // Invalidate clients so they re-init with the new timeout
   anthropicClient = null
   managedClient = null
-  managedLicenseKey = null
   openaiClient = null
 }
 
@@ -233,13 +226,10 @@ export interface ManagedUsageData {
 }
 
 export async function getManagedClient(): Promise<Anthropic> {
-  // Fast path: cached client still valid for the same license key
-  if (managedClient && managedLicenseKey) return managedClient
+  if (managedClient) return managedClient
 
   const license = store.get<ManagedLicenseData>("license")
   if (!license?.key || !license.valid) {
-    managedClient = null
-    managedLicenseKey = null
     throw new Error("Pro license required for Managed AI")
   }
   const AnthropicCtor = await loadAnthropic()
@@ -249,18 +239,29 @@ export async function getManagedClient(): Promise<Anthropic> {
     defaultHeaders: { "X-Instance-Id": license.instanceId },
     timeout: getNetworkTimeoutMs(),
   })
-  managedLicenseKey = license.key
   return managedClient
 }
 
 /** Called by the license IPC handlers on activate/deactivate. */
 export function invalidateManagedLicenseCache(): void {
   managedClient = null
-  managedLicenseKey = null
 }
 
 export function isManagedMode(): boolean {
   return getProvider() === "managed"
+}
+
+/**
+ * Resolve the Anthropic SDK client + effective model for the current provider.
+ * "managed" swaps to the proxy client and forces the allowlisted model;
+ * "anthropic" uses the user's BYOK client with the requested model.
+ * Callers on the OpenAI/Gemini/local paths handle those providers separately.
+ */
+export async function getAnthropicPath(requestedModel: string): Promise<{ client: Anthropic; model: string }> {
+  if (getProvider() === "managed") {
+    return { client: await getManagedClient(), model: MANAGED_MODEL }
+  }
+  return { client: await getAnthropicClient(), model: requestedModel }
 }
 
 /** Fetch current Managed usage from the Worker. Returns null on error. */
@@ -653,9 +654,9 @@ export async function chat(messages: ChatMessage[], systemPrompt: string): Promi
     return response.response.text()
   }
 
-  const anthropic = provider === "managed" ? await getManagedClient() : await getAnthropicClient()
+  const { client: anthropic, model: effectiveModel } = await getAnthropicPath(model)
   const response = await withRetry(() => withTimeout(anthropic.messages.create({
-    model: provider === "managed" ? MANAGED_MODEL : model,
+    model: effectiveModel,
     max_tokens: 8192,
     system: toCachedSystem(systemPrompt),
     messages
@@ -723,8 +724,7 @@ export async function chatStream(
       return
     }
 
-    const anthropic = provider === "managed" ? await getManagedClient() : await getAnthropicClient()
-    const effectiveModel = provider === "managed" ? MANAGED_MODEL : model
+    const { client: anthropic, model: effectiveModel } = await getAnthropicPath(model)
     // Chat mode: no tools. Advisor belongs in Agent loop — sending advisor
     // here contradicts the "you have no tools" chat prompt and causes some
     // models to hallucinate tool-call markup in the text response.

@@ -186,14 +186,14 @@ export function ChatPanel({ onClose }: ChatPanelProps): JSX.Element {
   }, [isStreaming])
 
   const sessionsVisible = showSessions || sessionsClosing
-  const showSessionsRef = useRef(showSessions)
-  showSessionsRef.current = showSessions
 
   const closeSessions = useCallback(() => {
-    if (!showSessionsRef.current) return
-    setSessionsClosing(true)
-    setShowSessions(false)
-    setTimeout(() => setSessionsClosing(false), 180)
+    setShowSessions((prev) => {
+      if (!prev) return prev
+      setSessionsClosing(true)
+      setTimeout(() => setSessionsClosing(false), 180)
+      return false
+    })
   }, [])
 
   const [proFeatures, setProFeatures] = useState<Record<string, boolean>>({})

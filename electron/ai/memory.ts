@@ -6,9 +6,10 @@
  */
 
 import { join, dirname, relative, sep } from "path"
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from "fs"
+import { existsSync, readFileSync, writeFileSync } from "fs"
 import { homedir } from "os"
 import { randomUUID } from "crypto"
+import { ensureLuanoDir } from "../file/sandbox"
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
@@ -30,11 +31,6 @@ interface MemoryStore {
 
 function memoryPath(projectPath: string): string {
   return join(projectPath, ".luano", "memory.json")
-}
-
-function ensureLuanoDir(projectPath: string): void {
-  const dir = join(projectPath, ".luano")
-  if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
 }
 
 function loadStore(projectPath: string): MemoryStore {

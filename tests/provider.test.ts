@@ -4,7 +4,12 @@ import { describe, it, expect, vi } from "vitest"
 vi.mock("electron", () => ({
   app: { getPath: () => "/tmp/luano-test" },
   safeStorage: { isEncryptionAvailable: () => false },
-  BrowserWindow: { getAllWindows: () => [] }
+  BrowserWindow: { getAllWindows: () => [] },
+  // Under parallel test runs multiple suites share this temp dir and the
+  // store save can hit a transient rename failure — which in real Electron
+  // would pop a dialog. Swallow it in tests so the race doesn't surface as
+  // "No dialog export is defined on the electron mock".
+  dialog: { showErrorBox: vi.fn() }
 }))
 
 import {

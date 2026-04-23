@@ -43,6 +43,7 @@ vi.mock("../electron/ai/provider", () => ({
   getModel: vi.fn().mockReturnValue("claude-sonnet-4-6"),
   getModelTier: vi.fn().mockReturnValue("frontier"),
   getAnthropicClient: vi.fn(), getOpenAIClient: vi.fn(),
+  getAnthropicPath: vi.fn(),
   isAdvisorAvailable: vi.fn().mockReturnValue(false),
   getAdvisorModel: vi.fn().mockReturnValue("claude-opus-4-6"),
   _setActiveAbortController: vi.fn(),

@@ -1,4 +1,5 @@
-import { resolve, normalize, sep } from "path"
+import { resolve, normalize, sep, join } from "path"
+import { existsSync, mkdirSync } from "fs"
 
 /**
  * Validate that a file path is within the allowed project boundary.
@@ -28,4 +29,10 @@ export function isPathSafe(filePath: string, projectRoot: string): boolean {
   } catch {
     return false
   }
+}
+
+/** Ensure the project's `.luano/` state directory exists. */
+export function ensureLuanoDir(projectPath: string): void {
+  const dir = join(projectPath, ".luano")
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
 }
