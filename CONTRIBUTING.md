@@ -7,10 +7,29 @@ Thanks for your interest in contributing! Here's how to get started.
 ```bash
 git clone https://github.com/ltfupb/luano.git
 cd luano
+
 npm install
-npx ts-node scripts/download-binaries.ts win  # or mac / linux
-npm run dev
+npx ts-node scripts/download-binaries.ts win   # or mac / linux
+
+npm run dev              # dev server with HMR + DevTools
+npm run build            # production build (no installer)
+npm run package:win      # installer: .exe  (or package:mac / package:linux)
+npm run test             # unit tests
+npm run typecheck        # full-tree type check
 ```
+
+## Tech Stack
+
+- Electron + React + TypeScript
+- Monaco Editor with `monaco-languageclient` for Luau LSP
+- Vite (`electron-vite`) as the bundler
+- Zustand (persisted) for state
+- Tailwind for styling
+- xterm.js + node-pty for the terminal
+- better-sqlite3 + FTS5 for docs retrieval
+- Anthropic / OpenAI / Google SDKs for chat
+- Sidecar binaries: Argon, Rojo, Selene, StyLua, luau-lsp
+- electron-updater for auto-update, Sentry (opt-in) for crash reports
 
 ## How to Contribute
 
@@ -44,4 +63,6 @@ npm run dev
 
 ## License
 
-By contributing, you agree that your contributions will be licensed under the [MIT License](LICENSE).
+By contributing, you agree that your contributions will be licensed under the [Functional Source License 1.1 (Apache 2.0 Future License)](LICENSE).
+
+After two years, each release automatically converts to Apache 2.0.
