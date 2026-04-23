@@ -909,6 +909,12 @@ export function ChatPanel({ onClose }: ChatPanelProps): JSX.Element {
           </div>
         )}
         {groupedMessages.map((item, i) => {
+          // While the turn is active, ALL assistant footers are suppressed —
+          // the bottom turn-status line is the single live indicator. Otherwise
+          // rotation between bubbles shows a frozen "Unioned for 6s" footer on
+          // the just-completed bubble AND the live status at the bottom, which
+          // reads as two indicators for the same turn.
+          const turnActive = turn !== null
           if (Array.isArray(item)) {
             // Tool group. If the assistant message immediately before this one
             // had its footer deferred (because a tool group followed it), render
@@ -918,19 +924,22 @@ export function ChatPanel({ onClose }: ChatPanelProps): JSX.Element {
             return (
               <div key={`tg-${i}`}>
                 <ToolCallGroup events={item} />
-                {deferredFooter && <MessageFooter message={deferredFooter} />}
+                {!turnActive && deferredFooter && <MessageFooter message={deferredFooter} />}
               </div>
             )
           }
           // Hide this message's footer if the next item is a tool group —
-          // the footer will render after the tool group instead.
+          // the footer will render after the tool group instead. Also hide
+          // while turn is active (any assistant bubble mid-turn would double
+          // up with the turn-status line).
           const next = groupedMessages[i + 1]
           const hasTrailingTools = Array.isArray(next) && item.role === "assistant"
+          const hideFooter = hasTrailingTools || (turnActive && item.role === "assistant")
           return (
             <MessageBubble
               key={item.id}
               message={item}
-              hideFooter={hasTrailingTools}
+              hideFooter={hideFooter}
             />
           )
         })}
