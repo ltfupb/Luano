@@ -93,6 +93,7 @@ const api = {
   aiGetThinkingEffort: () => ipcRenderer.invoke("ai:get-thinking-effort"),
   managedFetchUsage: () => ipcRenderer.invoke("managed:fetch-usage"),
   isDirectory: (p: string): Promise<boolean> => ipcRenderer.invoke("file:is-directory", p),
+  probeRojo: (folderPath: string): Promise<boolean> => ipcRenderer.invoke("project:probe-rojo", folderPath),
   menuSetProjectState: (hasProject: boolean) => ipcRenderer.invoke("menu:set-project-state", hasProject),
   aiGetTokenUsage: () => ipcRenderer.invoke("ai:token-usage"),
   aiResetTokenUsage: () => ipcRenderer.invoke("ai:reset-token-usage"),
@@ -157,7 +158,8 @@ const api = {
     onThinking?: (active: boolean) => void,
     onApprovalRequest?: (req: { id: string; tool: string; input: Record<string, unknown>; preview?: unknown }) => void,
     onAskUserRequest?: (req: { id: string; questions: unknown[] }) => void,
-    autoAccept?: boolean
+    autoAccept?: boolean,
+    planMode?: boolean
   ): Promise<{ modifiedFiles: string[] }> => {
     const channel = `ai:agent:${randomUUID()}`
     ipcRenderer.on(channel, (_, chunk) => onChunk(chunk as string | null))
@@ -178,7 +180,7 @@ const api = {
       ipcRenderer.on(`${channel}:ask-user`, (_, req) => onAskUserRequest(req as { id: string; questions: unknown[] }))
     }
     return ipcRenderer
-      .invoke("ai:agent-chat", messages, context, channel, autoAccept === true)
+      .invoke("ai:agent-chat", messages, context, channel, autoAccept === true, planMode === true)
       .finally(() => {
         ipcRenderer.removeAllListeners(channel)
         ipcRenderer.removeAllListeners(`${channel}:tool`)

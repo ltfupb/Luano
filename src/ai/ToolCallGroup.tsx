@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, useRef, useEffect } from "react"
 import { ChatMessage } from "../stores/aiStore"
 import { getFileName } from "../lib/utils"
 
@@ -84,6 +84,15 @@ export function ToolCallGroup({ events }: { events: ChatMessage[] }): JSX.Elemen
   // Multi-tool groups collapse behind a summary header by default.
   // Single tool: always "open" — there's nothing to collapse.
   const [groupOpen, setGroupOpen] = useState(!multi)
+  // A group starts with events.length === 1 (open), then a second tool arrives
+  // and multi flips true. useState only runs on mount, so without this effect
+  // the group stays open from the single-tool era. Force-close on the single→
+  // multi transition; user's manual opens after that point are preserved.
+  const prevMultiRef = useRef(multi)
+  useEffect(() => {
+    if (!prevMultiRef.current && multi) setGroupOpen(false)
+    prevMultiRef.current = multi
+  }, [multi])
   const [rowsOpen, setRowsOpen] = useState<Set<string>>(() => new Set())
 
   const toggleRow = (id: string): void =>

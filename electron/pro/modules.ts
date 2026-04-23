@@ -247,7 +247,7 @@ export const getBridgeToken = bridge?.getBridgeToken ?? (() => "")
 // ── Agent (chat + inline edit + checkpoint) ────────────────────────────────
 
 const agent = tryRequire<{
-  agentChat: (messages: any[], systemPrompt: string, streamChannel: string, projectRoot?: string, autoAccept?: boolean) => Promise<{ modifiedFiles: string[] }>
+  agentChat: (messages: any[], systemPrompt: string, streamChannel: string, projectRoot?: string, autoAccept?: boolean, planMode?: boolean) => Promise<{ modifiedFiles: string[] }>
   inlineEdit: (filePath: string, fileContent: string, instruction: string, systemPrompt: string) => Promise<string>
   getLastCheckpoint: () => any
   revertCheckpoint: (checkpoint: any) => string[]

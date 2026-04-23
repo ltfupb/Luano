@@ -425,7 +425,9 @@ export function SettingsAI({ models, setModels }: {
           onSave={async (key) => {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             await (window.api as any)[KEY_CONFIGS[provider].ipcSet](key)
-            keyStoreSetters[KEY_CONFIGS[provider].storeKey](key)
+            // Store only the "configured" marker — the raw key lives encrypted
+            // in the main process, never in the renderer.
+            keyStoreSetters[KEY_CONFIGS[provider].storeKey]("***set***")
           }}
         />
       )}

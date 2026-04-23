@@ -6,7 +6,7 @@
  */
 
 import { join, dirname, relative, sep } from "path"
-import { existsSync, readFileSync, writeFileSync } from "fs"
+import { existsSync, readFileSync, writeFileSync, lstatSync } from "fs"
 import { homedir } from "os"
 import { randomUUID } from "crypto"
 import { ensureLuanoDir } from "../file/sandbox"
@@ -200,6 +200,11 @@ const INSTRUCTIONS_MAX_CHARS = 8000
 function readTrimmed(fp: string): string {
   if (!existsSync(fp)) return ""
   try {
+    // Refuse to follow symlinks. A malicious project can drop LUANO.md as a
+    // symlink to ~/.ssh/id_rsa or /etc/passwd; readFileSync would chase it
+    // and we'd inject that content into the system prompt — exfiltrated to
+    // the model provider on the next turn.
+    if (lstatSync(fp).isSymbolicLink()) return ""
     return readFileSync(fp, "utf-8").trim().slice(0, INSTRUCTIONS_MAX_CHARS)
   } catch { return "" }
 }

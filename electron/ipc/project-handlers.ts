@@ -6,6 +6,7 @@ import { resolve as pathResolve } from "path"
 import { is } from "@electron-toolkit/utils"
 import { syncManager, lspManager } from "../main"
 import { readDir, readFile, writeFile, createFile, createFolder, renameEntry, deleteEntry, moveEntry, initProject, ensureLintConfig } from "../file/project"
+import { isPathSafe } from "../file/sandbox"
 import { watchProject, stopWatcher } from "../file/watcher"
 import { cleanupPtys } from "./terminal-handlers"
 import { lintFile } from "../sidecar/selene"
@@ -145,8 +146,24 @@ export function registerProjectHandlers(): void {
   })
 
   // ── File ──────────────────────────────────────────────────────────────────
+  // Every file handler MUST sandbox paths to the current project. Without this,
+  // a compromised renderer (XSS in markdown/deps) or malicious AI tool output
+  // could read ~/.ssh/id_rsa, overwrite Windows startup scripts, etc. The AI
+  // agent tools use validatePath already (electron/file/sandbox.ts); these
+  // direct IPC handlers were missing it.
+  const requireInProject = (p: string): void => {
+    const project = getCurrentProject()
+    if (!project) throw new Error("No project is open")
+    if (!isPathSafe(p, project)) {
+      throw new Error(`Path outside project: ${p}`)
+    }
+  }
+
   ipcMain.handle("file:read", (_, filePath: string) => {
-    try { return readFile(filePath) } catch (err) {
+    try {
+      requireInProject(filePath)
+      return readFile(filePath)
+    } catch (err) {
       // Only swallow missing-file errors (e.g. file deleted between reads).
       // Other errors (EACCES, EISDIR, etc.) re-throw so renderer sees the real failure.
       if ((err as NodeJS.ErrnoException).code === "ENOENT") return null
@@ -154,6 +171,7 @@ export function registerProjectHandlers(): void {
     }
   })
   ipcMain.handle("file:write", (_, filePath: string, content: string) => {
+    requireInProject(filePath)
     const aiContent = aiGeneratedFiles.get(filePath)
     if (aiContent && content !== aiContent) {
       const fileType = filePath.includes(".server.") ? "server"
@@ -172,24 +190,33 @@ export function registerProjectHandlers(): void {
     writeFile(filePath, content)
     return { success: true }
   })
-  ipcMain.handle("file:read-dir", (_, dirPath: string) => readDir(dirPath))
+  ipcMain.handle("file:read-dir", (_, dirPath: string) => {
+    requireInProject(dirPath)
+    return readDir(dirPath)
+  })
   ipcMain.handle("file:watch", (_, projectPath: string) => {
+    // file:watch sets a new project root, so it bypasses requireInProject
+    // (setCurrentProject happens via project:open before this fires).
     watchProject(projectPath)
     return { success: true }
   })
   ipcMain.handle("file:create-file", (_, dirPath: string, name: string) => {
+    requireInProject(dirPath)
     const fullPath = createFile(dirPath, name)
     return { success: true, path: fullPath }
   })
   ipcMain.handle("file:create-folder", (_, dirPath: string, name: string) => {
+    requireInProject(dirPath)
     const fullPath = createFolder(dirPath, name)
     return { success: true, path: fullPath }
   })
   ipcMain.handle("file:rename", (_, oldPath: string, newName: string) => {
+    requireInProject(oldPath)
     const newPath = renameEntry(oldPath, newName)
     return { success: true, path: newPath }
   })
   ipcMain.handle("file:delete", (_, entryPath: string) => {
+    requireInProject(entryPath)
     deleteEntry(entryPath)
     return { success: true }
   })
@@ -206,12 +233,31 @@ export function registerProjectHandlers(): void {
     }
   })
 
+  // Pre-open probe: does this folder have a default.project.json (= Rojo
+  // project)? Runs BEFORE project:open, so the sandboxed file:read handler
+  // can't answer — no project is set yet. Unsandboxed by design, but scoped
+  // to one specific filename so it can't be used to read arbitrary files.
+  ipcMain.handle("project:probe-rojo", (_, folderPath: string) => {
+    try {
+      if (typeof folderPath !== "string" || folderPath.length === 0) return false
+      return existsSync(join(folderPath, "default.project.json"))
+    } catch {
+      return false
+    }
+  })
+
   ipcMain.handle("file:move", async (_, srcPath: string) => {
+    requireInProject(srcPath)
     const result = await dialog.showOpenDialog({
       properties: ["openDirectory"],
       title: "Select destination folder"
     })
     if (result.canceled || result.filePaths.length === 0) return { success: false, canceled: true }
+    // The destination came from the OS file dialog (user-picked), not the
+    // renderer — trusted input. Still enforce it ends up inside the project
+    // so "move to /tmp" is refused. moveEntry may fail if user picks outside;
+    // we don't require dest-in-project because rename-out-of-project is a
+    // legitimate user choice via dialog.
     const destPath = moveEntry(srcPath, result.filePaths[0])
     return { success: true, path: destPath }
   })
@@ -370,6 +416,10 @@ export function registerProjectHandlers(): void {
   //   (2) Markdown: `.luano/skills/*.md` (project) AND `~/.luano/skills/*.md` (global)
   //       Matches Claude Code's format — frontmatter (name, description) + body is the prompt.
   ipcMain.handle("skills:load", (_, projectPath: string) => {
+    // Must match the currently-open project — renderer can't point this at
+    // an arbitrary filesystem location.
+    const current = getCurrentProject()
+    if (!current || pathResolve(projectPath) !== pathResolve(current)) return []
     const skills: Array<Record<string, unknown>> = []
 
     // (1) Legacy JSON
@@ -406,6 +456,10 @@ export function registerProjectHandlers(): void {
   })
 
   ipcMain.handle("skills:save", (_, projectPath: string, skills: unknown[]) => {
+    const current = getCurrentProject()
+    if (!current || pathResolve(projectPath) !== pathResolve(current)) {
+      return { success: false, error: "Invalid project path" }
+    }
     const dir = join(projectPath, ".luano")
     if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
     writeFileSync(join(dir, "skills.json"), JSON.stringify(skills, null, 2), "utf-8")

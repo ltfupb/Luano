@@ -426,10 +426,17 @@ export function getAdvisorEnabled(): boolean {
   return (store.get("advisorEnabled") as boolean | undefined) ?? false
 }
 
-/** Advisor is usable with Anthropic or Managed non-Opus Sonnet models */
+/**
+ * Advisor is BYOK-Anthropic only on non-Opus models.
+ *
+ * Managed AI is intentionally excluded: advisor spawns a server-side Opus
+ * subagent and its tokens roll up into the main response's usage field.
+ * The Worker meter currently prices everything at Sonnet rates, so any
+ * advisor usage in Managed mode silently under-bills us. Re-enable once
+ * the meter can separate advisor-attributable Opus tokens.
+ */
 export function isAdvisorAvailable(): boolean {
-  const provider = getProvider()
-  return (provider === "anthropic" || provider === "managed") &&
+  return getProvider() === "anthropic" &&
     getAdvisorEnabled() &&
     !getModel().includes("opus")
 }
@@ -513,6 +520,7 @@ export type ModelTier = "frontier" | "standard"
 
 const FRONTIER_MODELS = new Set([
   "claude-opus-4-7", "claude-sonnet-4-6", "claude-opus-4-6",
+  "claude-haiku-4-5-20251001",
   "gpt-4o", "gpt-4-turbo", "o1",
   "gemini-2.5-pro"
 ])

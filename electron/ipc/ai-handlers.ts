@@ -25,7 +25,7 @@ import {
 } from "../ai/memory"
 import {
   agentChat, inlineEdit,
-  buildGlobalSummary, buildSystemPrompt,
+  buildGlobalSummary,
   getLastCheckpoint, revertCheckpoint,
   evaluateCode, evaluateFiles,
   isBridgeConnected, getBridgeTree, getBridgeLogs,
@@ -74,7 +74,7 @@ export function registerAIHandlers(): void {
   })
   ipcMain.handle("ai:get-local-key", () => {
     const key = getLocalKey()
-    return key || null
+    return key ? "***set***" : null
   })
   ipcMain.handle("ai:set-local-model", (_, model: string) => {
     setLocalModel(model)
@@ -155,10 +155,11 @@ export function registerAIHandlers(): void {
       contextData: unknown
     ) => {
       if (!hasFeature("inline-edit")) return PRO_REQUIRED("inline-edit")
-      const ctx = contextData as { globalSummary: string; currentFile?: string }
-      const systemPrompt = buildSystemPrompt({
-        globalSummary: ctx.globalSummary ?? "",
-        currentFile: filePath
+      const ctx = contextData as AIContext
+      const systemPrompt = buildFullSystemPrompt({
+        ...ctx,
+        currentFile: filePath,
+        mode: "chat"
       })
       return inlineEdit(filePath, fileContent, instruction, systemPrompt)
     }
@@ -170,7 +171,7 @@ export function registerAIHandlers(): void {
   // ── Agent Chat (Tool Use) [Pro] ────────────────────────────────────────────
   ipcMain.handle(
     "ai:agent-chat",
-    async (_, messages: unknown[], contextData: unknown, streamChannel: string, autoAccept?: boolean) => {
+    async (_, messages: unknown[], contextData: unknown, streamChannel: string, autoAccept?: boolean, planMode?: boolean) => {
       if (!hasFeature("agent")) return PRO_REQUIRED("agent")
       const ctx = contextData as AIContext
 
@@ -197,7 +198,7 @@ export function registerAIHandlers(): void {
       }
 
       const fullPrompt = buildFullSystemPrompt(ctx, { bridgeContext, includeProgress: true })
-      const result = await agentChat(messages as never, fullPrompt, streamChannel, ctx.projectPath, autoAccept === true)
+      const result = await agentChat(messages as never, fullPrompt, streamChannel, ctx.projectPath, autoAccept === true, planMode === true)
       recordQuery({ userQuery: lastUserMsg, apisReferenced: [], ragHit: false })
 
       for (const fp of result.modifiedFiles) {

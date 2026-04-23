@@ -65,6 +65,26 @@ interface SettingsStore {
   removeRecentProject: (path: string) => void
 }
 
+/**
+ * On app boot, pull the "is key set" signal from the main process (which stores
+ * keys encrypted via safeStorage). The main process returns `"***set***"` or
+ * `null`; the renderer only ever sees the marker, never the raw key.
+ */
+export async function hydrateKeyStatus(): Promise<void> {
+  const api = (window as { api?: Window["api"] }).api
+  if (!api) return
+  const [a, o, g] = await Promise.all([
+    api.aiGetKey().catch(() => null),
+    api.aiGetOpenAIKey().catch(() => null),
+    api.aiGetGeminiKey().catch(() => null),
+  ])
+  useSettingsStore.setState({
+    apiKey: a ?? "",
+    openaiKey: o ?? "",
+    geminiKey: g ?? "",
+  })
+}
+
 export const useSettingsStore = create<SettingsStore>()(
   persist(
     (set, get) => ({
@@ -125,12 +145,26 @@ export const useSettingsStore = create<SettingsStore>()(
     {
       name: "luano-settings",
       storage: createJSONStorage(() => localStorage),
+      // API keys are intentionally NOT persisted here. The main process stores
+      // them encrypted via safeStorage (OS keychain). On boot, hydrateKeyStatus()
+      // reads back a "***set***" marker so UI booleans work. Persisting the raw
+      // key in localStorage would leak them to any renderer-side XSS or anyone
+      // with filesystem access.
+      version: 1,
+      migrate: (state) => {
+        if (!state || typeof state !== "object") return state
+        const s = state as Record<string, unknown>
+        // v1: strip any previously-persisted plaintext API keys. Main process
+        // still has the encrypted copy — the boot hydration will repopulate
+        // the in-memory markers.
+        delete s.apiKey
+        delete s.openaiKey
+        delete s.geminiKey
+        return s
+      },
       partialize: (state) => ({
         language: state.language,
         theme: state.theme,
-        apiKey: state.apiKey,
-        openaiKey: state.openaiKey,
-        geminiKey: state.geminiKey,
         localEndpoint: state.localEndpoint,
         localModel: state.localModel,
         provider: state.provider,

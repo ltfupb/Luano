@@ -260,6 +260,13 @@ describe("isAdvisorAvailable", () => {
     setAdvisorEnabled(true)
     expect(isAdvisorAvailable()).toBe(false)
   })
+
+  it("returns false for Managed AI — advisor disabled there until the meter can price its Opus tokens", () => {
+    setProvider("managed")
+    setModel("claude-sonnet-4-6")
+    setAdvisorEnabled(true)
+    expect(isAdvisorAvailable()).toBe(false)
+  })
 })
 
 describe("getAdvisorModel / setAdvisorModel", () => {
@@ -314,10 +321,10 @@ describe("getModelTier", () => {
     expect(getModelTier()).toBe("frontier")
   })
 
-  it("classifies Haiku 4.5 as standard (smaller model)", () => {
+  it("classifies Haiku 4.5 as frontier (tool-use capable, skip the extended Luau scaffolding)", () => {
     setProvider("anthropic")
     setModel("claude-haiku-4-5-20251001")
-    expect(getModelTier()).toBe("standard")
+    expect(getModelTier()).toBe("frontier")
   })
 
   it("classifies gpt-4o as frontier", () => {

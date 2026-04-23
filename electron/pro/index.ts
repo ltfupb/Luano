@@ -9,11 +9,14 @@
  * performance lint, DataStore schema generator, skills system.
  */
 
+import { app } from "electron"
 import { hasValidLicense } from "./license"
 
 export function isPro(): boolean {
-  // Dev override: LUANO_PRO=1 in env enables Pro features locally
-  if (process.env.LUANO_PRO === "1") return true
+  // Dev override: LUANO_PRO=1 only enables Pro in unpackaged (dev) builds.
+  // A packaged install must go through a real license — otherwise any user
+  // can flip Pro on by setting an env var.
+  if (!app.isPackaged && process.env.LUANO_PRO === "1") return true
   // LemonSqueezy license key
   return hasValidLicense()
 }

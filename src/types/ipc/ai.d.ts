@@ -103,7 +103,8 @@ interface AiApi {
     onThinking?: (active: boolean) => void,
     onApprovalRequest?: (req: { id: string; tool: string; input: Record<string, unknown>; preview?: EditPreviewPayload | null }) => void,
     onAskUserRequest?: (req: { id: string; questions: AskUserQuestion[] }) => void,
-    autoAccept?: boolean
+    autoAccept?: boolean,
+    planMode?: boolean
   ) => Promise<{ modifiedFiles: string[] }>
 
 

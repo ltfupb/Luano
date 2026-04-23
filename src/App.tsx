@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback, lazy, Suspense } from "react"
 import { useProjectStore } from "./stores/projectStore"
 import { useSyncStore } from "./stores/syncStore"
 import { useAIStore } from "./stores/aiStore"
-import { useSettingsStore } from "./stores/settingsStore"
+import { useSettingsStore, hydrateKeyStatus } from "./stores/settingsStore"
 import { useIpcEvent } from "./hooks/useIpc"
 import { Sidebar, SidePanel } from "./components/Sidebar"
 import { QuickOpen } from "./components/QuickOpen"
@@ -118,6 +118,10 @@ export default function App(): JSX.Element {
       if (s.isPro && shouldShowProOnboarding()) markProOnboardingDone()
     }).catch(() => {})
   }, [])
+
+  // Hydrate BYOK key markers from the main process. Keys live encrypted in
+  // safeStorage (OS keychain); the renderer only ever sees "***set***" | "".
+  useEffect(() => { void hydrateKeyStatus() }, [])
 
   // First-run crash-reports prompt. Until the user gives an explicit answer,
   // Sentry stays dormant — without this prompt nobody opts in and the
@@ -545,13 +549,12 @@ export default function App(): JSX.Element {
   }, [closeProject, clearMessages, setGlobalSummary, openPath, saveProjectChat, loadProjectChat])
 
   const checkRojoAndOpen = async (path: string) => {
-    // file:read returns null (not throws) on ENOENT — so a try/catch around
-    // readFile silently treats a missing default.project.json as 'present'
-    // and skips the setup dialog. Check the return value explicitly.
+    // Use the dedicated pre-open probe — runs BEFORE project:open, so the
+    // sandboxed file:read handler (which requires a current project) would
+    // throw here. probeRojo is unsandboxed but scoped to one filename.
     let hasRojo = false
     try {
-      const content = await window.api.readFile(`${path}/default.project.json`)
-      hasRojo = content !== null && content !== undefined
+      hasRojo = await window.api.probeRojo(path)
     } catch { /* unrelated error — treat as no project */ }
     if (!hasRojo) {
       setRojoSetup(path)

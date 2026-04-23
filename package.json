@@ -163,8 +163,9 @@
         }
       ],
       "icon": "resources/icons/icon.ico",
-      "signingHashAlgorithms": null,
-      "sign": null
+      "signingHashAlgorithms": [
+        "sha256"
+      ]
     },
     "nsis": {
       "oneClick": false,
@@ -187,7 +188,10 @@
         }
       ],
       "icon": "resources/icons/icon.icns",
-      "category": "public.app-category.developer-tools"
+      "category": "public.app-category.developer-tools",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "notarize": false
     },
     "linux": {
       "target": "AppImage",

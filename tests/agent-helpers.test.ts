@@ -291,6 +291,36 @@ describe("getToolsForExecution (STUDIO filter)", () => {
   })
 })
 
+describe("getToolsForExecution (PLAN MODE filter)", () => {
+  it("strips every write/mutate tool in plan mode", () => {
+    const names = getToolsForExecution({ planMode: true }).map((t) => t.name)
+    expect(names).not.toContain("Write")
+    expect(names).not.toContain("Edit")
+    expect(names).not.toContain("MultiEdit")
+    expect(names).not.toContain("Patch")
+    expect(names).not.toContain("Delete")
+    expect(names).not.toContain("RunScript")
+    expect(names).not.toContain("SetProperty")
+    expect(names).not.toContain("InsertModel")
+  })
+
+  it("keeps read-only tools in plan mode", () => {
+    const names = getToolsForExecution({ planMode: true }).map((t) => t.name)
+    expect(names).toContain("Read")
+    expect(names).toContain("Glob")
+    expect(names).toContain("Grep")
+    expect(names).toContain("TodoWrite")
+  })
+
+  it("plan mode strips tools even when studio is connected", () => {
+    const names = getToolsForExecution({ planMode: true, studioConnected: true }).map((t) => t.name)
+    expect(names).toContain("ReadInstanceTree")
+    expect(names).toContain("RuntimeLogs")
+    expect(names).not.toContain("RunScript")
+    expect(names).not.toContain("SetProperty")
+  })
+})
+
 describe("autoVerifyLint", () => {
   beforeEach(() => { mockExecuteTool.mockReset() })
 

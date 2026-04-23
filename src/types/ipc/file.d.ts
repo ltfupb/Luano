@@ -10,4 +10,5 @@ interface FileApi {
   moveEntry: (srcPath: string) => Promise<{ success: boolean; canceled?: boolean; path?: string }>
   searchFiles: (projectPath: string, query: string) => Promise<Array<{ file: string; line: number; text: string }>>
   isDirectory: (path: string) => Promise<boolean>
+  probeRojo: (folderPath: string) => Promise<boolean>
 }

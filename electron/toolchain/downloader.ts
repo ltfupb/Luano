@@ -5,7 +5,8 @@
  */
 
 import { join } from "path"
-import { createWriteStream, mkdirSync, existsSync, chmodSync, readdirSync, copyFileSync, rmSync, statSync } from "fs"
+import { createWriteStream, mkdirSync, existsSync, chmodSync, readdirSync, copyFileSync, rmSync, statSync, readFileSync } from "fs"
+import { createHash } from "crypto"
 import { get as httpsGet } from "https"
 import { pipeline } from "stream/promises"
 import { execFileSync } from "child_process"
@@ -118,7 +119,8 @@ async function downloadAndInstall(
   toolId: string,
   binaryName: string,
   url: string,
-  version?: string
+  version?: string,
+  expectedSha256?: string
 ): Promise<{ success: boolean; error?: string }> {
   const ext = process.platform === "win32" ? ".exe" : ""
   const binDir = getUserBinDir()
@@ -137,6 +139,24 @@ async function downloadAndInstall(
     const stat = statSync(zipPath)
     if (stat.size < 1000) {
       throw new Error(`Downloaded file too small (${stat.size} bytes), likely corrupt`)
+    }
+
+    // Hash verification. A CDN takeover or compromised release tooling
+    // could swap a legitimate URL's content for malicious code; we chmod
+    // +x and execute this archive's contents, so HTTPS alone isn't enough.
+    // expectedSha256 is present only for the pinned version in TOOL_REGISTRY;
+    // checkToolUpdates() calls this without a hash (newer versions aren't
+    // in the registry yet — that path stays on HTTPS-only trust).
+    if (expectedSha256) {
+      const actual = createHash("sha256").update(readFileSync(zipPath)).digest("hex")
+      if (actual !== expectedSha256) {
+        throw new Error(
+          `SHA256 mismatch for ${toolId} — expected ${expectedSha256}, got ${actual}. ` +
+          `Refusing to install. This usually means the release asset was replaced; ` +
+          `please report this at github.com/ltfupb/Luano/issues.`
+        )
+      }
+      log.info(`SHA256 verified for ${toolId}`)
     }
 
     // Extract
@@ -183,7 +203,8 @@ export async function downloadTool(toolId: string): Promise<{ success: boolean; 
   try {
     const platform = getPlatformKey()
     const url = tool.releaseUrls[platform]
-    return await downloadAndInstall(toolId, tool.binaryName, url, tool.version)
+    const expectedSha256 = tool.sha256?.[platform]
+    return await downloadAndInstall(toolId, tool.binaryName, url, tool.version, expectedSha256)
   } finally {
     activeDownloads.delete(toolId)
   }

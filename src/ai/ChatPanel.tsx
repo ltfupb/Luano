@@ -422,12 +422,18 @@ export function ChatPanel({ onClose }: ChatPanelProps): JSX.Element {
 
   // ── Agent mode: AI reads/writes files directly ──────────────────────────
   const executeAgent = useCallback(
-    async (apiMessages: Array<{role: string; content: string}>) => {
+    async (apiMessages: Array<{role: string; content: string}>, opts?: { planMode?: boolean }) => {
       const assistantId = addMessage({ role: "assistant", content: "", streaming: true })
       setStreaming(true)
+      // Seed the turn's verb pair with the assistant message id so the live
+      // "Oofing…" verb and the post-turn "Oofed for 3s" footer (MessageFooter
+      // at MessageBubble.tsx:126) come from the SAME pair. Prior code used
+      // Math.random() here and message.id in the footer — two random seeds =
+      // two entirely different verb pairs, so users saw the verb "change"
+      // when the turn ended.
       setTurn({
         startedAt: Date.now(),
-        verb: pickVerbPair(String(Math.random()))[0],
+        verb: pickVerbPair(assistantId)[0],
         tokenSnap: { ...tokens },
         thoughtMs: null,
       })
@@ -500,7 +506,8 @@ export function ChatPanel({ onClose }: ChatPanelProps): JSX.Element {
           (req) => { setPendingAskUser(req) },
           // Read latest autoAccept via getState — useCallback closure would
           // otherwise freeze it at the first-render value (always false).
-          useAIStore.getState().autoAccept
+          useAIStore.getState().autoAccept,
+          opts?.planMode === true
         )
         // If the agent ended right after a tool (no trailing text), there's
         // no live bubble — token stats/final state attach to the initial
@@ -547,9 +554,11 @@ export function ChatPanel({ onClose }: ChatPanelProps): JSX.Element {
     async (apiMessages: Array<{role: string; content: string}>) => {
       const assistantId = addMessage({ role: "assistant", content: "", streaming: true })
       setStreaming(true)
+      // Seed verb with assistantId so live "Oofing…" and footer "Oofed for 3s"
+      // come from the same pair — see executeAgent comment above.
       setTurn({
         startedAt: Date.now(),
-        verb: pickVerbPair(String(Math.random()))[0],
+        verb: pickVerbPair(assistantId)[0],
         tokenSnap: { ...tokens },
         thoughtMs: null,
       })
@@ -561,7 +570,10 @@ export function ChatPanel({ onClose }: ChatPanelProps): JSX.Element {
         let accumulated = ""
         await window.api.aiChatStream(
           apiMessages,
-          buildContext(),
+          // Force mode="chat" — chatStream has no tools, so the prompt
+          // must not promise tool access (matters for non-Pro plan/agent
+          // fallback where UI mode is "plan" or "agent").
+          { ...buildContext(), mode: "chat" },
           (chunk) => {
             if (chunk === null) return
             if (!thinkingCaptured) {
@@ -623,7 +635,15 @@ export function ChatPanel({ onClose }: ChatPanelProps): JSX.Element {
     if (mode === "chat") {
       await doSendChat(apiMessages)
     } else if (mode === "plan") {
-      await doSendChat(apiMessages)
+      if (proFeatures.agent === false) {
+        addMessage({
+          role: "assistant",
+          content: "Plan mode requires **Luano Pro**. Switching to chat mode.\n\nUpgrade at [luano.dev/pricing](https://luano.dev/pricing) — includes autonomous coding, inline edit, Studio bridge, and more."
+        })
+        await doSendChat(apiMessages)
+      } else {
+        await executeAgent(apiMessages, { planMode: true })
+      }
     } else if (proFeatures.agent === false) {
       // Agent mode requires Pro — fall back to basic chat with a notice
       addMessage({
