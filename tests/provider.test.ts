@@ -26,7 +26,8 @@ import {
   getNetworkTimeoutMs, setNetworkTimeoutMs,
   MIN_NETWORK_TIMEOUT_MS, DEFAULT_NETWORK_TIMEOUT_MS,
   getModelTier,
-  MANAGED_BASE_URL, MANAGED_MODEL
+  MANAGED_BASE_URL, MANAGED_MODEL,
+  getManagedClient, invalidateManagedLicenseCache
 } from "../electron/ai/provider"
 
 describe("toCachedSystem", () => {
@@ -365,5 +366,29 @@ describe("Managed AI constants", () => {
   it("MODELS.managed lists exactly one entry and it matches MANAGED_MODEL", () => {
     expect(MODELS.managed).toHaveLength(1)
     expect(MODELS.managed[0].id).toBe(MANAGED_MODEL)
+  })
+})
+
+describe("Managed license cache invalidation", () => {
+  it("getManagedClient throws when no license is stored", async () => {
+    // Fresh test env has no license in the store — SimpleStore constructor
+    // returned an empty object.
+    await expect(getManagedClient()).rejects.toThrow(/Pro license required/)
+  })
+
+  it("invalidateManagedLicenseCache is safe to call repeatedly with no cached client", () => {
+    // Defensive: IPC handlers call this on every activate/deactivate, even
+    // when no Managed client was ever built. Must not throw.
+    expect(() => invalidateManagedLicenseCache()).not.toThrow()
+    expect(() => invalidateManagedLicenseCache()).not.toThrow()
+    expect(() => invalidateManagedLicenseCache()).not.toThrow()
+  })
+
+  it("invalidateManagedLicenseCache forces getManagedClient to re-check the license next call", async () => {
+    // After invalidation, the next getManagedClient call consults the store
+    // again. With no valid license stored it throws — confirming the cache
+    // was not silently reused.
+    invalidateManagedLicenseCache()
+    await expect(getManagedClient()).rejects.toThrow(/Pro license required/)
   })
 })

@@ -55,7 +55,9 @@ class SimpleStore {
       // Clean up orphaned tmp file so the next save doesn't fail trying to
       // open the same name with a dirty handle.
       try { if (existsSync(this.tmpPath)) unlinkSync(this.tmpPath) } catch { /* noop */ }
-      dialog.showErrorBox(
+      // Optional-chain dialog so a missing mock (tests) or a headless context
+      // can't turn a recoverable save failure into a hard TypeError crash.
+      dialog?.showErrorBox?.(
         "Settings Save Failed",
         `Could not save settings to ${this.filePath}. Changes may be lost on restart.`
       )
