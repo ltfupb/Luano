@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback, useMemo, type KeyboardEvent } from "react"
+import { useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo, type KeyboardEvent } from "react"
 import { useAIStore, ChatMessage } from "../stores/aiStore"
 import { useProjectStore } from "../stores/projectStore"
 import { useSettingsStore } from "../stores/settingsStore"
@@ -297,11 +297,17 @@ export function ChatPanel({ onClose }: ChatPanelProps): JSX.Element {
     // margin so the user doesn't have to be pixel-perfect at the bottom.
     isFollowingRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80
   }, [])
-  useEffect(() => {
+  // useLayoutEffect (not useEffect) so the pin runs synchronously after DOM
+  // mutation and BEFORE paint. Markdown streaming can shrink content height
+  // mid-stream (e.g. when a closing ``` fence completes and the preceding
+  // prose becomes a tighter code block). With useEffect, the browser paints
+  // the shrunk layout first — visible as a brief upward jump — and only
+  // then our pin runs. useLayoutEffect blocks paint until after the pin, so
+  // the user never sees the intermediate state.
+  useLayoutEffect(() => {
     if (!isFollowingRef.current) return
     const el = scrollContainerRef.current
     if (!el) return
-    // Instant scroll — no animation to fight with the next chunk's scroll.
     el.scrollTop = el.scrollHeight
   }, [messages, pendingApproval, pendingAskUser])
 
