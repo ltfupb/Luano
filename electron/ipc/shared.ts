@@ -42,12 +42,19 @@ export const PRO_REQUIRED = (feature: ProFeature) => ({
   message: `This feature requires Luano Pro. Start your free 7-day trial at luano.dev/pricing`
 })
 
-/** Extract last user message and build RAG docs context */
+/** Extract last user message and build RAG docs context.
+ *
+ * The search query concatenates the last 2 user messages so follow-ups like
+ * "how do I use that?" still retrieve docs matching the prior turn's subject.
+ * Cap per-message length at 2000 chars so a pasted file doesn't drown the
+ * signal from the actual question. */
 export async function buildRAGContext(messages: unknown[]): Promise<{ lastUserMsg: string; docsContext: string }> {
   const msgList = messages as Array<{ role: string; content: string }>
-  const lastMsg = [...msgList].reverse().find((m) => m.role === "user")
-  const lastUserMsg = lastMsg?.content ?? ""
-  const docsContext = lastUserMsg ? await buildDocsContext(lastUserMsg) : ""
+  const userMsgs = msgList.filter((m) => m.role === "user")
+  const lastUserMsg = userMsgs[userMsgs.length - 1]?.content ?? ""
+  const recentUserMsgs = userMsgs.slice(-2).map((m) => (m.content ?? "").slice(0, 2000))
+  const searchQuery = recentUserMsgs.join(" ").trim()
+  const docsContext = searchQuery ? await buildDocsContext(searchQuery) : ""
   return { lastUserMsg, docsContext }
 }
 
