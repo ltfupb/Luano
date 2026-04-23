@@ -63,12 +63,27 @@ const componentModules = import.meta.glob<Record<string, ComponentType>>([
   "../ai/InlineEditOverlay.tsx",
 ])
 
+function ProComponentLoading(): JSX.Element {
+  // Visible fallback while a lazy Pro component's chunk loads. Without this,
+  // pressing Ctrl+K on a cold start was rendering nothing (Suspense fallback=null)
+  // for the 100-500ms the chunk takes to resolve — perceived as "nothing happened".
+  return (
+    <div
+      className="absolute inset-0 z-50 flex items-center justify-center"
+      style={{ background: "var(--bg-base)", color: "var(--text-muted)", fontSize: 12 }}
+    >
+      <span className="animate-spin inline-block mr-2">⟳</span>
+      Loading…
+    </div>
+  )
+}
+
 function loadProComponent<P>(path: string, exportName: string): ComponentType<P> | null {
   const loader = componentModules[path]
   if (!loader) return null
   const Lazy = lazy(() => loader().then(m => ({ default: m[exportName] as ComponentType<P> })))
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  function ProComponentWrapper(props: P) { return <Suspense fallback={null}><Lazy {...(props as any)} /></Suspense> }
+  function ProComponentWrapper(props: P) { return <Suspense fallback={<ProComponentLoading />}><Lazy {...(props as any)} /></Suspense> }
   return ProComponentWrapper as ComponentType<P>
 }
 
@@ -77,5 +92,6 @@ export const DiffView = loadProComponent<{ original: string; modified: string }>
 )
 
 export const InlineEditOverlay = loadProComponent<{
-  filePath: string; content: string; onAccept: (code: string) => void; onClose: () => void
+  filePath: string; content: string; isSelection?: boolean;
+  onAccept: (code: string) => void; onClose: () => void
 }>("../ai/InlineEditOverlay.tsx", "InlineEditOverlay")

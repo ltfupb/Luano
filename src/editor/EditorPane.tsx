@@ -171,6 +171,16 @@ export function EditorPane(): JSX.Element {
   const monacoTheme = appTheme === "tokyo-night" ? "luano-tokyo-night" : appTheme === "light" ? "luano-light" : "luano-dark"
 
   const [inlineEditOpen, setInlineEditOpen] = useState(false)
+  /**
+   * Captured at the moment Ctrl+K fires. If range is non-null, we're editing
+   * just that selection; on accept we apply the AI output to that range via
+   * Monaco.executeEdits. If range is null, it's a whole-file edit (fallback
+   * behavior when the user has no selection).
+   */
+  const [inlineEditCtx, setInlineEditCtx] = useState<{
+    text: string
+    range: Monaco.IRange | null
+  } | null>(null)
   const [previewMode, setPreviewMode] = useState(false)
   const [previewContent, setPreviewContent] = useState<string | null>(null) // null = use activeFile content
   const [splitFile, setSplitFile] = useState<string | null>(null)
@@ -443,10 +453,25 @@ export function EditorPane(): JSX.Element {
   // ── Inline edit handlers ───────────────────────────────────────────────────
   const handleInlineAccept = useCallback(async (newContent: string) => {
     if (!activeFile) return
-    updateFileContent(activeFile, newContent)
+    const editor = editorRef.current
+    if (inlineEditCtx?.range && editor) {
+      // Selection edit: splice the new text into the original range and
+      // leave the rest of the file untouched.
+      editor.executeEdits("inline-edit", [{
+        range: inlineEditCtx.range,
+        text: newContent,
+        forceMoveMarkers: true,
+      }])
+      const full = editor.getModel()?.getValue() ?? ""
+      updateFileContent(activeFile, full)
+    } else {
+      // Whole-file fallback (no selection at Ctrl+K time).
+      updateFileContent(activeFile, newContent)
+    }
     await saveFile(activeFile)
     setInlineEditOpen(false)
-  }, [activeFile, updateFileContent, saveFile])
+    setInlineEditCtx(null)
+  }, [activeFile, inlineEditCtx, updateFileContent, saveFile])
 
   const handleEditorChange = useCallback(
     (value: string | undefined) => {
@@ -489,6 +514,26 @@ export function EditorPane(): JSX.Element {
       editor.addCommand(
         monacoInstance.KeyMod.CtrlCmd | monacoInstance.KeyCode.KeyK,
         () => {
+          // Capture the selection NOW — if we read it later the user may have
+          // moved the cursor. Empty selection → whole-file edit.
+          const sel = editor.getSelection()
+          const model = editor.getModel()
+          if (sel && model && !sel.isEmpty()) {
+            setInlineEditCtx({
+              text: model.getValueInRange(sel),
+              range: {
+                startLineNumber: sel.startLineNumber,
+                startColumn: sel.startColumn,
+                endLineNumber: sel.endLineNumber,
+                endColumn: sel.endColumn,
+              },
+            })
+          } else {
+            setInlineEditCtx({
+              text: model?.getValue() ?? "",
+              range: null,
+            })
+          }
           setInlineEditOpen(true)
         }
       )
@@ -886,12 +931,13 @@ export function EditorPane(): JSX.Element {
       )}
 
       {/* Inline edit overlay (Cmd+K) — Pro only */}
-      {inlineEditOpen && activeFile && InlineEditOverlay && (
+      {inlineEditOpen && activeFile && inlineEditCtx && InlineEditOverlay && (
         <InlineEditOverlay
           filePath={activeFile}
-          content={fileContents[activeFile] ?? ""}
+          content={inlineEditCtx.text}
+          isSelection={inlineEditCtx.range !== null}
           onAccept={handleInlineAccept}
-          onClose={() => setInlineEditOpen(false)}
+          onClose={() => { setInlineEditOpen(false); setInlineEditCtx(null) }}
         />
       )}
 
