@@ -456,16 +456,17 @@ export function EditorPane(): JSX.Element {
     const editor = editorRef.current
     if (inlineEditCtx?.range && editor) {
       // Selection edit: splice the new text into the original range and
-      // leave the rest of the file untouched.
+      // leave the rest of the file untouched. executeEdits triggers Monaco's
+      // onModelContentChange synchronously, which fires handleEditorChange
+      // → updateFileContent — no explicit store write needed here.
       editor.executeEdits("inline-edit", [{
         range: inlineEditCtx.range,
         text: newContent,
         forceMoveMarkers: true,
       }])
-      const full = editor.getModel()?.getValue() ?? ""
-      updateFileContent(activeFile, full)
     } else {
-      // Whole-file fallback (no selection at Ctrl+K time).
+      // Whole-file fallback (no selection at Ctrl+K time). No editor edit,
+      // so the store isn't updated for us — do it explicitly.
       updateFileContent(activeFile, newContent)
     }
     await saveFile(activeFile)

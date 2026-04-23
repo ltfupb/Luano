@@ -193,9 +193,25 @@ export default function App(): JSX.Element {
   const setSidePanelWidth = _setSidePanelWidth
   const setChatPanelWidth = _setChatPanelWidth
 
-  useEffect(() => { storeSetTerminalHeight(terminalHeight) }, [terminalHeight, storeSetTerminalHeight])
-  useEffect(() => { storeSetSidePanelWidth(sidePanelWidth) }, [sidePanelWidth, storeSetSidePanelWidth])
-  useEffect(() => { storeSetChatPanelWidth(chatPanelWidth) }, [chatPanelWidth, storeSetChatPanelWidth])
+  // Skip the initial fire — local state is seeded from store.getState(), so
+  // the first effect run would write the same value back and needlessly
+  // re-render every store subscriber on mount. Only write when the user
+  // actually changes a size.
+  const didMountLayoutSyncRef = useRef(false)
+  useEffect(() => {
+    if (!didMountLayoutSyncRef.current) { didMountLayoutSyncRef.current = true; return }
+    storeSetTerminalHeight(terminalHeight)
+  }, [terminalHeight, storeSetTerminalHeight])
+  const didMountSidePanelSyncRef = useRef(false)
+  useEffect(() => {
+    if (!didMountSidePanelSyncRef.current) { didMountSidePanelSyncRef.current = true; return }
+    storeSetSidePanelWidth(sidePanelWidth)
+  }, [sidePanelWidth, storeSetSidePanelWidth])
+  const didMountChatPanelSyncRef = useRef(false)
+  useEffect(() => {
+    if (!didMountChatPanelSyncRef.current) { didMountChatPanelSyncRef.current = true; return }
+    storeSetChatPanelWidth(chatPanelWidth)
+  }, [chatPanelWidth, storeSetChatPanelWidth])
 
   // Panel resize hooks
   const handleResizeMouseDown = usePanelResize("y", TERMINAL_MIN, TERMINAL_MAX, setTerminalHeight, true)
