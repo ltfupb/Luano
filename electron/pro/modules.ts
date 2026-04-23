@@ -71,7 +71,7 @@ IMPORTANT: You must NEVER generate or guess URLs for the user unless you are con
 
 === CRITICAL: READ-ONLY MODE — NO FILE MODIFICATIONS ===
 This is a READ-ONLY planning task. You are STRICTLY PROHIBITED from:
-- Creating new files (no CreateFile)
+- Creating new files (no Write, no Create)
 - Modifying existing files (no Edit, MultiEdit, Patch)
 - Deleting files (no Delete)
 - Running commands that change state (RunScript, SetProperty, InsertModel all forbidden)

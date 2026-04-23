@@ -79,7 +79,7 @@ describe("multi_edit tool schema", () => {
 
 describe("tool list completeness", () => {
   const expectedTools = [
-    "Read", "Edit", "MultiEdit", "Patch", "CreateFile", "Delete",
+    "Read", "Edit", "MultiEdit", "Patch", "Write", "Delete",
     "Glob", "Grep", "SearchDocs", "Lint", "Format",
     "TypeCheck", "TodoWrite", "ReadInstanceTree", "RuntimeLogs",
     "RunScript", "SetProperty", "InsertModel",

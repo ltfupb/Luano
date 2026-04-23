@@ -25,7 +25,7 @@ describe("migrateToolName", () => {
       ["read_file", "Read"],
       ["edit_file", "Edit"],
       ["multi_edit", "MultiEdit"],
-      ["create_file", "CreateFile"],
+      ["create_file", "Write"],
       ["delete_file", "Delete"],
       ["list_files", "Glob"],
       ["lint_file", "Lint"],
@@ -59,12 +59,6 @@ describe("migrateToolName", () => {
     expect(migrateToolName("Edit")).toBe("Edit")
     expect(migrateToolName("Grep")).toBe("Grep")
     expect(migrateToolName("TypeCheck")).toBe("TypeCheck")
-  })
-
-  it("maps v0.8.6 'Write' to v0.9.0 'CreateFile'", () => {
-    // Write was renamed to CreateFile because the generic verb 'Write' led
-    // models to call it for existing-file overwrites instead of Edit.
-    expect(migrateToolName("Write")).toBe("CreateFile")
   })
 
   it("leaves unknown names unchanged (no spurious rewrites)", () => {

@@ -91,7 +91,7 @@ function trimContextRuns(rows: DiffRow[]): DiffRow[] {
 
 export function EditPreviewCard({ tool, preview, input, onAccept, onReject }: EditPreviewCardProps): JSX.Element {
   const path = preview?.path ?? String(input.path ?? "")
-  const kind = preview?.kind ?? (tool === "CreateFile" ? "create" : tool === "Delete" ? "delete" : "edit")
+  const kind = preview?.kind ?? (tool === "Write" ? "create" : tool === "Delete" ? "delete" : "edit")
   const oldContent = preview?.oldContent ?? ""
   const newContent = preview?.newContent ?? ""
   const hasError = Boolean(preview?.error)
