@@ -59,7 +59,7 @@ export function ToastContainer(): JSX.Element {
             role={role}
             aria-live={ariaLive}
             aria-atomic="true"
-            className="flex items-start gap-2 px-3 py-2.5 rounded-lg text-xs max-w-xs animate-fade-in pointer-events-auto"
+            className="flex items-start gap-2.5 px-4 py-3 rounded-lg text-sm max-w-sm animate-fade-in pointer-events-auto"
             style={{
               background: "var(--bg-elevated)",
               border: `1px solid ${color}`,
@@ -71,9 +71,9 @@ export function ToastContainer(): JSX.Element {
             {t.action && (
               <button
                 onClick={() => { t.action!.onClick(); dismiss(t.id) }}
-                className="flex-shrink-0 px-2 py-0.5 rounded transition-colors duration-100"
+                className="flex-shrink-0 px-2.5 py-1 rounded transition-colors duration-100"
                 style={{
-                  fontSize: "11px",
+                  fontSize: "13px",
                   fontWeight: 500,
                   color: "var(--text-primary)",
                   background: "transparent",
@@ -88,9 +88,9 @@ export function ToastContainer(): JSX.Element {
             <button
               onClick={() => dismiss(t.id)}
               aria-label="Dismiss notification"
-              className="opacity-50 hover:opacity-100 transition-opacity mt-0.5 flex-shrink-0"
+              className="opacity-50 hover:opacity-100 transition-opacity mt-1 flex-shrink-0"
             >
-              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
                 <line x1="18" y1="6" x2="6" y2="18" />
                 <line x1="6" y1="6" x2="18" y2="18" />
               </svg>

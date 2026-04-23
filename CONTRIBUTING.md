@@ -9,7 +9,6 @@ git clone https://github.com/ltfupb/luano.git
 cd luano
 
 npm install
-npx ts-node scripts/download-binaries.ts win   # or mac / linux
 
 npm run dev              # dev server with HMR + DevTools
 npm run build            # production build (no installer)

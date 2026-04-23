@@ -39,7 +39,7 @@ export const PRO_REQUIRED = (feature: ProFeature) => ({
   success: false,
   error: "pro_required",
   feature,
-  message: `This feature requires Luano Pro. Start your free 7-day trial at luano.dev/pricing`
+  message: `This feature requires Luano Pro. Upgrade at luano.dev/pricing`
 })
 
 /** Extract last user message and build RAG docs context.

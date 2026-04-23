@@ -66,12 +66,22 @@ beforeEach(() => {
 })
 
 describe("RojoManager.serve()", () => {
-  it("sets status to stopped and notifies when default.project.json is missing", () => {
+  it("surfaces an error status + toast when default.project.json is missing", () => {
     const mgr = new RojoManager()
     mgr.serve(PROJECT) // existsSync returns false
 
-    expect(mgr.getStatus()).toBe("stopped")
-    expect(h.winSend).toHaveBeenCalledWith("sync:status-changed", "stopped", null, null)
+    expect(mgr.getStatus()).toBe("error")
+    expect(h.winSend).toHaveBeenCalledWith(
+      "sync:status-changed",
+      "error",
+      null,
+      expect.stringMatching(/default\.project\.json/)
+    )
+    expect(h.winSend).toHaveBeenCalledWith(
+      "sync:notice",
+      expect.stringMatching(/default\.project\.json/),
+      "error"
+    )
   })
 
   it("spawns rojo and transitions to 'starting' then 'running' on stdout data", () => {

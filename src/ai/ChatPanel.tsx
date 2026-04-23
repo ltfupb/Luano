@@ -628,7 +628,7 @@ export function ChatPanel({ onClose }: ChatPanelProps): JSX.Element {
       // Agent mode requires Pro — fall back to basic chat with a notice
       addMessage({
         role: "assistant",
-        content: "Agent mode requires **Luano Pro**. Switching to chat mode.\n\nStart your **free 7-day trial** at [luano.dev/pricing](https://luano.dev/pricing) — includes autonomous coding, inline edit, Studio bridge, and more."
+        content: "Agent mode requires **Luano Pro**. Switching to chat mode.\n\nUpgrade at [luano.dev/pricing](https://luano.dev/pricing) — includes autonomous coding, inline edit, Studio bridge, and more."
       })
       await doSendChat(apiMessages)
     } else {

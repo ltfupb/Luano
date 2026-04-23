@@ -47,8 +47,15 @@ export class ArgonManager {
     this.projectPath = projectPath
 
     if (!existsSync(join(projectPath, "default.project.json"))) {
+      // Common cause of "Argon isn't working" reports: user opened a folder
+      // that isn't actually a Rojo project (empty "New Folder", documents
+      // folder, etc). Silently setting status=stopped + logging to disk
+      // gives the user zero feedback — they just see the sync indicator
+      // stay idle. Surface it as an error status + a visible toast.
       log.warn("[argon] no default.project.json found; refusing to serve")
-      this.status = "stopped"
+      this.lastError = "No default.project.json — this folder isn't a Rojo project. Run `rojo init` in the terminal or open a project folder that has one."
+      this.status = "error"
+      this.notifyUser(this.lastError, "error")
       this.notifyStatus()
       return
     }

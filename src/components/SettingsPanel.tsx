@@ -704,8 +704,6 @@ export function SettingsPanel({ onClose, onProActivated }: SettingsPanelProps): 
                     rel="noreferrer"
                     style={{ color: "var(--accent)", textDecoration: "underline", cursor: "pointer" }}
                   >luano.dev/pricing</a>
-                  {" · "}
-                  <span style={{ color: "var(--accent)" }}>7-day free trial</span>
                 </span>
               </div>
             )}

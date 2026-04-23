@@ -93,12 +93,24 @@ beforeEach(() => {
 // ── serve() ───────────────────────────────────────────────────────────────────
 
 describe("ArgonManager.serve()", () => {
-  it("sets status to stopped when default.project.json is missing", () => {
+  it("surfaces an error status + toast when default.project.json is missing", () => {
     const mgr = new ArgonManager()
     mgr.serve(PROJECT)
 
-    expect(mgr.getStatus()).toBe("stopped")
-    expect(h.winSend).toHaveBeenCalledWith("sync:status-changed", "stopped", null, null)
+    // Previously silent: status=stopped, no toast. Users opened an empty
+    // "New Folder" and saw Argon just idle. Now it's an explicit error.
+    expect(mgr.getStatus()).toBe("error")
+    expect(h.winSend).toHaveBeenCalledWith(
+      "sync:status-changed",
+      "error",
+      null,
+      expect.stringMatching(/default\.project\.json/)
+    )
+    expect(h.winSend).toHaveBeenCalledWith(
+      "sync:notice",
+      expect.stringMatching(/default\.project\.json/),
+      "error"
+    )
   })
 
   it("transitions to starting then running after port line on stderr", () => {

@@ -20,9 +20,15 @@ export class RojoManager {
     this.projectPath = projectPath
     this.lastError = null
 
-    // Skip if no default.project.json
+    // Skip if no default.project.json. Surface as error so the sync panel
+    // tells the user "this isn't a Rojo project" instead of silently
+    // sitting idle (see argon-manager for the same fix).
     if (!existsSync(join(projectPath, "default.project.json"))) {
-      this.status = "stopped"
+      this.lastError = "No default.project.json — this folder isn't a Rojo project. Run `rojo init` in the terminal or open a project folder that has one."
+      this.status = "error"
+      BrowserWindow.getAllWindows().forEach((win) => {
+        win.webContents.send("sync:notice", this.lastError, "error")
+      })
       this.notifyStatus()
       return
     }
