@@ -58,3 +58,9 @@ coverage/
 # Temp files
 tsc_*.txt
 .gstack/
+
+# User test Rojo project scaffolding (accidentally committed 2524270, untracked after)
+/default.project.json
+/src/client/
+/src/server/
+/src/shared/
