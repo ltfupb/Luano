@@ -29,9 +29,18 @@ describe("preprocessQuery", () => {
     expect(identifiers).toEqual(expect.arrayContaining(["getservice", "playeradded"]))
   })
 
-  it("extracts dotted API paths like game.Workspace.Camera", () => {
+  it("splits dotted API paths into segments (FTS tokenizer compatibility)", () => {
     const { identifiers } = preprocessQuery("set game.Workspace.CurrentCamera")
-    expect(identifiers).toContain("game.workspace.currentcamera")
+    // FTS5 strips periods, so phrase-matching the joined form rarely hits.
+    // We index each segment separately for AND-joined retrieval instead.
+    expect(identifiers).toEqual(expect.arrayContaining(["game", "workspace", "currentcamera"]))
+    expect(identifiers).not.toContain("game.workspace.currentcamera")
+  })
+
+  it("skips path segments shorter than 3 chars", () => {
+    const { identifiers } = preprocessQuery("a.BigService")
+    expect(identifiers).toContain("bigservice")
+    expect(identifiers).not.toContain("a")
   })
 
   it("dedupes identifiers across the query", () => {
