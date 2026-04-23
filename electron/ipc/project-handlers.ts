@@ -124,7 +124,12 @@ export function registerProjectHandlers(): void {
     ensureLintConfig(projectPath, resourcesDir)
     watchProject(projectPath)
     await lspManager.start(projectPath)
-    syncManager.serve(projectPath)
+    // Only auto-start sync if this is actually a Rojo project. Folders opened
+    // via the 'Open As-Is' dialog path shouldn't trigger a sync attempt that's
+    // guaranteed to surface a 'No default.project.json' error toast.
+    if (existsSync(join(projectPath, "default.project.json"))) {
+      syncManager.serve(projectPath)
+    }
     return { success: true, lspPort: lspManager.getPort() }
   })
 

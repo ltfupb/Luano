@@ -545,11 +545,14 @@ export default function App(): JSX.Element {
   }, [closeProject, clearMessages, setGlobalSummary, openPath, saveProjectChat, loadProjectChat])
 
   const checkRojoAndOpen = async (path: string) => {
+    // file:read returns null (not throws) on ENOENT — so a try/catch around
+    // readFile silently treats a missing default.project.json as 'present'
+    // and skips the setup dialog. Check the return value explicitly.
     let hasRojo = false
     try {
-      await window.api.readFile(`${path}/default.project.json`)
-      hasRojo = true
-    } catch { /* no project file */ }
+      const content = await window.api.readFile(`${path}/default.project.json`)
+      hasRojo = content !== null && content !== undefined
+    } catch { /* unrelated error — treat as no project */ }
     if (!hasRojo) {
       setRojoSetup(path)
       return
