@@ -282,8 +282,27 @@ export function ChatPanel({ onClose }: ChatPanelProps): JSX.Element {
     return () => clearTimeout(timer)
   }, [projectPath, messages, isStreaming, saveProjectChat])
 
+  // Follow-mode auto-scroll: keep the viewport pinned to the bottom as new
+  // tokens stream in, BUT only while the user is still "near" the bottom.
+  // If the user scrolled up to read something earlier, we stop auto-scrolling
+  // so reading isn't interrupted. Scroll is instant, not smooth — smooth
+  // restarts its animation on every chunk and that's what the user sees as
+  // "뚝 하고 위로 점프" mid-stream.
+  const scrollContainerRef = useRef<HTMLDivElement>(null)
+  const isFollowingRef = useRef(true)
+  const handleScroll = useCallback(() => {
+    const el = scrollContainerRef.current
+    if (!el) return
+    // Within 80px of the bottom counts as "following". Allows for a small
+    // margin so the user doesn't have to be pixel-perfect at the bottom.
+    isFollowingRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80
+  }, [])
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
+    if (!isFollowingRef.current) return
+    const el = scrollContainerRef.current
+    if (!el) return
+    // Instant scroll — no animation to fight with the next chunk's scroll.
+    el.scrollTop = el.scrollHeight
   }, [messages, pendingApproval, pendingAskUser])
 
   const groupedMessages = useMemo(() => {
@@ -889,7 +908,12 @@ export function ChatPanel({ onClose }: ChatPanelProps): JSX.Element {
       )}
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-3 py-3 flex flex-col gap-3" style={{ scrollbarGutter: "stable" }}>
+      <div
+        ref={scrollContainerRef}
+        onScroll={handleScroll}
+        className="flex-1 overflow-y-auto px-3 py-3 flex flex-col gap-3"
+        style={{ scrollbarGutter: "stable" }}
+      >
         {messages.length === 0 && (
           <div className="flex flex-col items-center justify-center h-full gap-3 py-12 animate-fade-in">
             <div
