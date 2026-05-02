@@ -1,5 +1,5 @@
 import { resolve, normalize, sep, join, dirname, relative } from "path"
-import { existsSync, mkdirSync, realpathSync, lstatSync, openSync } from "fs"
+import { existsSync, mkdirSync, realpathSync, lstatSync, openSync, readlinkSync } from "fs"
 
 /**
  * Resolve a path with symlinks fully resolved. Returns null if the path
@@ -59,7 +59,16 @@ export function assertNoEscapingSymlink(p: string, root: string): void {
     try {
       const stat = lstatSync(current)
       if (stat.isSymbolicLink()) {
-        const real = realpathSync.native(current)
+        // Dangling-symlink case: realpathSync.native throws ENOENT when the
+        // symlink target doesn't exist. Fall back to readlinkSync + manual
+        // resolve so we still catch escapes via not-yet-created targets.
+        let real: string
+        try {
+          real = realpathSync.native(current)
+        } catch {
+          const target = readlinkSync(current)
+          real = normalize(resolve(dirname(current), target))
+        }
         const realRoot = realpathSync.native(root)
         if (real !== realRoot && !real.startsWith(realRoot + sep)) {
           throw new Error(`Symlink escape blocked: ${current} resolves outside project root`)
