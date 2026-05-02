@@ -628,6 +628,7 @@ export function EditorPane(): JSX.Element {
               onMouseDown={(e) => handleTabMouseDown(e, idx)}
               className={`relative flex items-center gap-1.5 px-3 flex-shrink-0 group select-none ${isDragging ? "" : "transition-all duration-150"}`}
               style={{
+                width: "160px",
                 height: "34px",
                 fontSize: "12px",
                 color: isActive ? "var(--text-primary)" : "var(--text-secondary)",
@@ -658,7 +659,7 @@ export function EditorPane(): JSX.Element {
                   boxShadow: isActive ? `0 0 4px ${dotColor}80` : "none"
                 }}
               />
-              <span className="leading-none">{name}</span>
+              <span className="leading-none truncate flex-1 min-w-0" title={name}>{name}</span>
               {/* Dirty indicator — shown when unsaved, hidden on hover to reveal × */}
               {isDirty && (
                 <span

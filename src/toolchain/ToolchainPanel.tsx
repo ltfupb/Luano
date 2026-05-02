@@ -8,11 +8,17 @@ import { useState, useEffect, useRef } from "react"
 import { useProjectStore } from "../stores/projectStore"
 import { useSyncStore } from "../stores/syncStore"
 import { useT } from "../i18n/useT"
+import { toast } from "../components/Toast"
 
-import rojoLogo from "../assets/toolchain/rojo.png"
-import argonLogo from "../assets/toolchain/argon.png"
-import styluaLogo from "../assets/toolchain/stylua.png"
-import luauLspLogo from "../assets/toolchain/luau-lsp.png"
+// Tool logos are loaded by globbing the assets/toolchain/ folder rather than
+// listed by hand. Drop a `<tool-id>.png` (or .svg/.webp) into that folder
+// and it gets picked up automatically — no code change needed when the
+// registry grows. The keys are the basenames without extension, matching
+// `ToolDefinition.id` in electron/toolchain/registry.ts.
+const TOOL_LOGO_MODULES = import.meta.glob<{ default: string }>(
+  "../assets/toolchain/*.{png,svg,webp}",
+  { eager: true }
+)
 
 interface ToolDef {
   id: string
@@ -38,12 +44,14 @@ interface ToolchainPanelProps {
   targetProjectPath?: string
 }
 
-const TOOL_LOGOS: Record<string, string> = {
-  rojo: rojoLogo,
-  argon: argonLogo,
-  stylua: styluaLogo,
-  "luau-lsp": luauLspLogo
-}
+const TOOL_LOGOS: Record<string, string> = Object.fromEntries(
+  Object.entries(TOOL_LOGO_MODULES).map(([path, mod]) => {
+    // path looks like "../assets/toolchain/rojo.png" — extract "rojo".
+    const file = path.split("/").pop() ?? ""
+    const id = file.replace(/\.(png|svg|webp)$/i, "")
+    return [id, mod.default]
+  })
+)
 
 function ToolLogo({ id, name, className }: { id: string; name: string; className?: string }): JSX.Element {
   const [failed, setFailed] = useState(false)
@@ -53,6 +61,7 @@ function ToolLogo({ id, name, className }: { id: string; name: string; className
       <div
         className={`rounded-md flex items-center justify-center ${className ?? "w-8 h-8"}`}
         style={{ background: "var(--bg-elevated)", color: "var(--text-muted)", fontSize: "14px", fontWeight: 600 }}
+        aria-label={name}
       >
         {name[0]}
       </div>
@@ -238,7 +247,83 @@ export function ToolchainPanel({ onClose, onCancel, mode = "normal", targetProje
       }
     }
 
-    // Persist per-project selection for every category where pending differs
+    // Detect package-manager direction up front so the migration runs FIRST.
+    // Persisting the toolchain selection before migration is dangerous: if the
+    // migration fails, the saved selection says "pesde" but the on-disk
+    // manifest is still wally.toml — next project open hits the
+    // "Both wally.toml and pesde.toml are present" tie-break in resolveTool
+    // and the package-manager workflow stays broken until the user manually
+    // intervenes.
+    let pkgManagerDirection: "wally-to-pesde" | "pesde-to-wally" | null = null
+    if (pending["package-manager"] !== undefined && pending["package-manager"] !== (selections["package-manager"] ?? null)) {
+      const prev = selections["package-manager"] ?? null
+      const next = pending["package-manager"]
+      if (prev === "wally" && next === "pesde") pkgManagerDirection = "wally-to-pesde"
+      else if (prev === "pesde" && next === "wally") pkgManagerDirection = "pesde-to-wally"
+    }
+
+    // 1) Run the on-disk manifest migration first. If it fails we abort
+    //    without touching the persisted toolchain selection — disk and
+    //    selection stay in their previous consistent state.
+    if (pkgManagerDirection && projectPath) {
+      try {
+        if (pkgManagerDirection === "wally-to-pesde") {
+          const result = await window.api.packageManagerMigrateToPesde(projectPath)
+          if (result.success) {
+            const unmapped = result.unmappedCount ?? 0
+            const migrated = result.migratedCount ?? 0
+            const detail = unmapped > 0
+              ? `Migrated ${migrated} dependencies (${unmapped} could not be parsed — see comments in pesde.toml). wally.toml renamed to .bak.`
+              : `Migrated ${migrated} dependencies. wally.toml renamed to .bak.`
+            toast(detail, "info")
+            window.dispatchEvent(new CustomEvent("manifest-changed"))
+          } else if (result.error && !/No wally\.toml found|pesde\.toml already exists/i.test(result.error)) {
+            // Hard failure — keep the previous toolchain selection so disk and
+            // config stay aligned.
+            toast(`Migration failed — keeping previous package manager selection. ${result.error}`, "error")
+            setApplying(false)
+            return
+          }
+        } else {
+          let result = await window.api.packageManagerMigrateToWally(projectPath)
+          if (!result.success && result.staleBackup) {
+            // The backup is older than the user's current pesde.toml — restoring
+            // would silently throw away every dep edit they made on pesde. Get
+            // explicit confirmation before re-invoking with force.
+            const { backupAgeDays, pesdeAgeDays } = result.staleBackup
+            const ageDelta = backupAgeDays - pesdeAgeDays
+            const proceed = window.confirm(
+              `wally.toml.bak is ${Math.max(0, ageDelta)} day(s) older than your current pesde.toml.\n\n` +
+              `Restoring will overwrite any dependency edits you made on pesde since the original migration.\n\n` +
+              `Continue and restore the backup?`
+            )
+            if (!proceed) {
+              toast("Kept previous package manager — pesde.toml unchanged.", "info")
+              setApplying(false)
+              return
+            }
+            result = await window.api.packageManagerMigrateToWally(projectPath, { force: true })
+          }
+          if (result.success) {
+            toast("Restored wally.toml from backup. pesde.toml moved to pesde.toml.bak.", "info")
+            window.dispatchEvent(new CustomEvent("manifest-changed"))
+          } else if (result.notSupported) {
+            toast("Switched to wally — pesde.toml stays as-is (no wally.toml.bak to restore from).", "info")
+          } else if (result.error && !/No pesde\.toml found|wally\.toml already exists/i.test(result.error)) {
+            toast(`Migration failed — keeping previous package manager selection. ${result.error}`, "error")
+            setApplying(false)
+            return
+          }
+        }
+      } catch (err) {
+        toast(`Migration failed — keeping previous package manager selection. ${(err as Error).message}`, "error")
+        setApplying(false)
+        return
+      }
+    }
+
+    // 2) Persist per-project selection only after migration succeeded (or there
+    //    was no migration to run). Toolchain config now matches disk state.
     for (const [cat, toolId] of Object.entries(pending)) {
       if (toolId === (selections[cat] ?? null)) continue
       try {
@@ -256,6 +341,10 @@ export function ToolchainPanel({ onClose, onCancel, mode = "normal", targetProje
     setSelections(prev => ({ ...prev, ...pending }))
     setPending({})
     setApplying(false)
+    // Notify other surfaces (StatusBar's package-manager workflow, etc.) that
+    // the active selection set changed — without this, those surfaces only
+    // re-resolve the active tool when the project is switched.
+    window.dispatchEvent(new CustomEvent("toolchain-config-changed"))
     handleClose()
   }
 
@@ -272,6 +361,7 @@ export function ToolchainPanel({ onClose, onCancel, mode = "normal", targetProje
         try {
           await window.api.toolchainSetTool(tool.category, null, projectPath ?? undefined)
           setSelections(prev => ({ ...prev, [tool.category]: null }))
+          window.dispatchEvent(new CustomEvent("toolchain-config-changed"))
         } catch { /* non-fatal */ }
       }
       if (pending[tool.category] === toolId) {
@@ -284,7 +374,8 @@ export function ToolchainPanel({ onClose, onCancel, mode = "normal", targetProje
     const info = updates[toolId]
     if (!info) return
     setUpdating(prev => new Set(prev).add(toolId))
-    const result = await window.api.toolchainUpdateTool(toolId, info.downloadUrl, info.latestVersion)
+    // M3: downloadUrl dropped from IPC call — handler resolves URL server-side
+    const result = await window.api.toolchainUpdateTool(toolId, info.latestVersion)
     setUpdating(prev => { const n = new Set(prev); n.delete(toolId); return n })
     if (result.success) {
       setUpdates(prev => { const n = { ...prev }; delete n[toolId]; return n })
@@ -388,7 +479,7 @@ export function ToolchainPanel({ onClose, onCancel, mode = "normal", targetProje
                             transform: "translateY(-50%)",
                             width: "2px",
                             height: "13px",
-                            background: unmet ? "#f87171" : "var(--accent)",
+                            background: unmet ? "var(--danger)" : "var(--accent)",
                             opacity: unmet ? 1 : isActive ? 1 : 0.55,
                             transition: "opacity 0.15s ease, background 0.15s ease"
                           }}
@@ -399,7 +490,7 @@ export function ToolchainPanel({ onClose, onCancel, mode = "normal", targetProje
                         <span
                           aria-label={`${catUpdateCount} update${catUpdateCount > 1 ? "s" : ""} available`}
                           className="ml-2 min-w-[16px] h-[14px] px-1 rounded-full flex items-center justify-center text-[9px] font-semibold"
-                          style={{ background: "#fb923c", color: "white" }}
+                          style={{ background: "var(--warning)", color: "white" }}
                         >
                           {catUpdateCount}
                         </span>
@@ -471,7 +562,7 @@ export function ToolchainPanel({ onClose, onCancel, mode = "normal", targetProje
                         {tool.recommended && (
                           <span
                             className="px-1.5 py-0.5 rounded text-[9px] font-medium"
-                            style={{ background: "rgba(59,130,246,0.15)", color: "#3b82f6" }}
+                            style={{ background: "var(--accent-muted)", color: "var(--accent)" }}
                           >
                             Recommended
                           </span>
@@ -479,7 +570,7 @@ export function ToolchainPanel({ onClose, onCancel, mode = "normal", targetProje
                         {updates[tool.id] && installed[tool.id] && (
                           <span
                             className="px-1.5 py-0.5 rounded text-[9px] font-medium flex items-center gap-0.5"
-                            style={{ background: "rgba(251,146,60,0.15)", color: "#fb923c" }}
+                            style={{ background: "var(--warning-muted)", color: "var(--warning)" }}
                             title={`Update available: ${updates[tool.id].latestVersion}`}
                           >
                             <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
@@ -560,36 +651,43 @@ export function ToolchainPanel({ onClose, onCancel, mode = "normal", targetProje
                     {detail.description}
                   </div>
 
-                  <div className="flex flex-col gap-1.5">
-                    <div className="flex items-center justify-between">
-                      <span style={{ fontSize: "10px", color: "var(--text-muted)" }}>Version</span>
-                      <span style={{ fontSize: "10px", color: "var(--text-secondary)", fontFamily: "monospace" }}>
-                        {detail.version}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span style={{ fontSize: "10px", color: "var(--text-muted)" }}>Author</span>
-                      <span style={{ fontSize: "10px", color: "var(--text-secondary)" }}>
-                        {detail.github.split("/")[0]}
-                      </span>
-                    </div>
-                    {metadata[detail.id]?.license && (
-                      <div className="flex items-center justify-between">
-                        <span style={{ fontSize: "10px", color: "var(--text-muted)" }}>License</span>
-                        <span style={{ fontSize: "10px", color: "var(--text-secondary)" }}>
-                          {metadata[detail.id].license}
-                        </span>
+                  {/* Always render the same 4 rows so the detail pane has a
+                      consistent shape across every tool. License / Updated
+                      come from a GitHub fetch (cached 24h) — when they're
+                      missing or still loading we show an em-dash rather than
+                      collapsing the row, which would otherwise leave half
+                      the registry showing 2 rows and half showing 4. */}
+                  {(() => {
+                    const meta = metadata[detail.id]
+                    const license = meta?.license ?? "—"
+                    const updated = meta?.updatedAt
+                      ? new Date(meta.updatedAt).toLocaleDateString()
+                      : "—"
+                    const rows: { label: string; value: string; mono?: boolean }[] = [
+                      { label: "Version", value: detail.version, mono: true },
+                      { label: "Author", value: detail.github.split("/")[0] },
+                      { label: "License", value: license },
+                      { label: "Updated", value: updated }
+                    ]
+                    return (
+                      <div className="flex flex-col gap-1.5">
+                        {rows.map((row) => (
+                          <div key={row.label} className="flex items-center justify-between">
+                            <span style={{ fontSize: "10px", color: "var(--text-muted)" }}>{row.label}</span>
+                            <span
+                              style={{
+                                fontSize: "10px",
+                                color: row.value === "—" ? "var(--text-ghost)" : "var(--text-secondary)",
+                                fontFamily: row.mono ? "monospace" : undefined
+                              }}
+                            >
+                              {row.value}
+                            </span>
+                          </div>
+                        ))}
                       </div>
-                    )}
-                    {metadata[detail.id]?.updatedAt && (
-                      <div className="flex items-center justify-between">
-                        <span style={{ fontSize: "10px", color: "var(--text-muted)" }}>Updated</span>
-                        <span style={{ fontSize: "10px", color: "var(--text-secondary)" }}>
-                          {new Date(metadata[detail.id].updatedAt as string).toLocaleDateString()}
-                        </span>
-                      </div>
-                    )}
-                  </div>
+                    )
+                  })()}
 
                   <a
                     href={`https://github.com/${detail.github}`}
@@ -610,7 +708,7 @@ export function ToolchainPanel({ onClose, onCancel, mode = "normal", targetProje
                         onClick={() => handleUpdate(detail.id)}
                         disabled={updating.has(detail.id)}
                         className="w-full py-1.5 rounded-md text-xs font-medium transition-all duration-100 disabled:opacity-50"
-                        style={{ background: "#3b82f6", color: "white" }}
+                        style={{ background: "var(--accent)", color: "white" }}
                       >
                         {updating.has(detail.id) ? t("toolchainDownloading") : `Update to ${updates[detail.id].latestVersion}`}
                       </button>
@@ -619,7 +717,7 @@ export function ToolchainPanel({ onClose, onCancel, mode = "normal", targetProje
                       <button
                         onClick={() => handleRemove(detail.id)}
                         className="w-full py-1.5 rounded-md text-xs transition-all duration-100"
-                        style={{ background: "transparent", color: "#f87171", border: "1px solid rgba(248,113,113,0.3)" }}
+                        style={{ background: "transparent", color: "var(--danger)", border: "1px solid var(--danger)" }}
                       >
                         {t("toolchainRemove")}
                       </button>
@@ -627,7 +725,7 @@ export function ToolchainPanel({ onClose, onCancel, mode = "normal", targetProje
                     {installError && (
                       <div
                         className="px-2.5 py-2 rounded-md text-[10px] leading-relaxed"
-                        style={{ background: "rgba(248,113,113,0.1)", color: "#f87171", border: "1px solid rgba(248,113,113,0.2)" }}
+                        style={{ background: "var(--danger-muted)", color: "var(--danger)", border: "1px solid var(--danger)" }}
                       >
                         {installError}
                       </div>

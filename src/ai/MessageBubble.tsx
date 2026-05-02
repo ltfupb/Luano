@@ -5,6 +5,34 @@ import { ChatMessage } from "../stores/aiStore"
 import { CodeBlock } from "./CodeBlock"
 import { formatDuration, pickVerbPair } from "./ThinkingBubble"
 
+// Allow only well-known, safe URL schemes in rendered links and images.
+// `javascript:`, `data:`, `vbscript:`, `file:` and friends are stripped.
+// react-markdown v9+ uses `urlTransform` for this purpose. Note: we do NOT
+// use `rehype-raw`, so raw HTML in markdown is already ignored — this is an
+// extra belt-and-braces check for href/src values in sanitized markdown.
+const ALLOWED_URL_SCHEMES = ["http:", "https:", "mailto:"]
+function safeUrl(url: string): string {
+  if (!url) return ""
+  // Protocol-relative URLs (`//host/...`, `\\server\share`) inherit the
+  // current protocol — in a local file app that can silently load remote
+  // content. Reject them explicitly BEFORE the relative-path allow branch
+  // below, which would otherwise treat a leading `/` as "relative".
+  if (/^(\/\/|\\\\)/.test(url)) return ""
+  // Relative URLs, fragments, and query strings don't have a scheme — allow.
+  if (/^(\/|#|\?|\.)/.test(url)) return url
+  try {
+    // Use a base so relative URLs don't throw. Absolute URLs keep their scheme.
+    const parsed = new URL(url, "http://local.invalid")
+    // If the parse resolved against our dummy base, it's effectively relative.
+    if (parsed.origin === "http://local.invalid" && !/^https?:\/\//i.test(url)) {
+      return url
+    }
+    return ALLOWED_URL_SCHEMES.includes(parsed.protocol) ? url : ""
+  } catch {
+    return ""
+  }
+}
+
 const MARKDOWN_COMPONENTS = {
   code({ inline, className, children, ...props }: {
     inline?: boolean
@@ -118,43 +146,35 @@ const MARKDOWN_COMPONENTS = {
  *   CLI output. The surrounding ChatPanel gutter provides breathing room.
  */
 /**
- * Standalone footer — "✻ {Past} for Xs · ↑1.5k ↓0.3k".
+ * Standalone footer — "✻ {Past} for Xs".
  * Exported so ChatPanel can relocate it below the tool group when an assistant
  * turn fired tools (CC-style: footer goes at the very end of the turn).
  */
-export function MessageFooter({ message }: { message: ChatMessage }): JSX.Element | null {
+export function MessageFooter({ message, attached }: { message: ChatMessage; attached?: boolean }): JSX.Element | null {
   const [, pastTense] = pickVerbPair(message.id)
-  const hasTokens = (message.inputTokens ?? 0) > 0 || (message.outputTokens ?? 0) > 0
   const hasThinking = message.thinkingSeconds !== undefined && message.thinkingSeconds > 0
   // While the message is still streaming, the ChatPanel's turn-status line
   // already shows live ✶ {verb}… (elapsed · tokens). Suppress the footer to
   // avoid showing two indicators at once.
   if (message.streaming) return null
-  if (!hasThinking && !hasTokens) return null
+  if (!hasThinking) return null
 
+  // `attached` is set when the footer is rendered inside a ToolCallGroup
+  // wrapper (turn ended on a tool). The group's expanded-rows bottom padding
+  // is 4px, so adding mt-3 (12px) on top creates a 16px gap — out of step
+  // with the 12px gap a footer attached directly to a message produces.
+  // mt-2 (8px) + 4px = 12px, matching the in-message case.
   return (
     <div
-      className="flex items-center gap-2 mt-3"
+      className={`flex items-center gap-2 ${attached ? "mt-2" : "mt-3"}`}
       style={{ fontSize: 12, color: "var(--text-muted)", fontFamily: "'JetBrains Mono', monospace" }}
-      title={
-        hasTokens
-          ? `Input: ${(message.inputTokens ?? 0).toLocaleString()} tokens\nOutput: ${(message.outputTokens ?? 0).toLocaleString()} tokens\nCache read: ${(message.cacheTokens ?? 0).toLocaleString()} tokens`
-          : undefined
-      }
     >
-      {hasThinking && (
-        <>
-          <span aria-hidden style={{ color: "var(--accent)", fontSize: 13 }}>✻</span>
-          <span>{pastTense} for {formatDuration(message.thinkingSeconds ?? 0)}</span>
-        </>
-      )}
-      {hasTokens && (
-        <>
-          {hasThinking && <span style={{ opacity: 0.5 }}>·</span>}
-          <span>↑{((message.inputTokens ?? 0) / 1000).toFixed(1)}k</span>
-          <span>↓{((message.outputTokens ?? 0) / 1000).toFixed(1)}k</span>
-        </>
-      )}
+      {/* Glyph + size kept in sync with the live turn-status indicator
+       *  in ChatPanel (✶ at 14px) so the star doesn't visually morph
+       *  when the turn finishes — only the verb tense + animation change.
+       *  Uses var(--accent) so a single token controls both states. */}
+      <span aria-hidden style={{ color: "var(--accent)", fontSize: 14 }}>✶</span>
+      <span>{pastTense} for {formatDuration(message.thinkingSeconds ?? 0)}</span>
     </div>
   )
 }
@@ -202,8 +222,12 @@ export const MessageBubble = React.memo(function MessageBubble({
     >
       {hasContent ? (
         <>
-          {/* @ts-expect-error react-markdown component prop typing is loose */}
-          <ReactMarkdown remarkPlugins={[remarkGfm]} components={MARKDOWN_COMPONENTS}>
+          <ReactMarkdown
+            remarkPlugins={[remarkGfm]}
+            // @ts-expect-error react-markdown component prop typing is loose
+            components={MARKDOWN_COMPONENTS}
+            urlTransform={safeUrl}
+          >
             {message.content}
           </ReactMarkdown>
         </>

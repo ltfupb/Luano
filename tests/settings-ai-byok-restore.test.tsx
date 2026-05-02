@@ -84,7 +84,7 @@ describe("BYOK → Managed transition persists prevByokProvider", () => {
       provider: "managed",
       model: "claude-sonnet-4-6",
     })
-    render(<SettingsAI models={models} setModels={vi.fn()} />)
+    render(<SettingsAI models={models} setModels={vi.fn()} isPro={true} />)
 
     fireEvent.click(screen.getByRole("button", { name: /managed \(pro\)/i }))
 
@@ -100,7 +100,7 @@ describe("BYOK → Managed transition persists prevByokProvider", () => {
       provider: "managed",
       model: "claude-sonnet-4-6",
     })
-    render(<SettingsAI models={models} setModels={vi.fn()} />)
+    render(<SettingsAI models={models} setModels={vi.fn()} isPro={true} />)
     fireEvent.click(screen.getByRole("button", { name: /managed \(pro\)/i }))
     await waitFor(() => {
       expect(mockApi.aiSetProvider).toHaveBeenCalledWith("managed")
@@ -114,7 +114,7 @@ describe("BYOK → Managed transition persists prevByokProvider", () => {
       provider: "managed",
       prevByokProvider: "anthropic",
     })
-    render(<SettingsAI models={models} setModels={vi.fn()} />)
+    render(<SettingsAI models={models} setModels={vi.fn()} isPro={true} />)
     fireEvent.click(screen.getByRole("button", { name: /managed \(pro\)/i }))
     // provider already managed, so handleSetProvider should return early
     expect(mockApi.aiSetProvider).not.toHaveBeenCalled()
@@ -134,7 +134,7 @@ describe("BYOK click from Managed restores best provider", () => {
       provider: "openai",
       model: "gpt-4o",
     })
-    render(<SettingsAI models={models} setModels={vi.fn()} />)
+    render(<SettingsAI models={models} setModels={vi.fn()} isPro={true} />)
     fireEvent.click(screen.getByRole("button", { name: /bring your own key/i }))
     await waitFor(() => {
       expect(mockApi.aiSetProvider).toHaveBeenCalledWith("openai")
@@ -153,7 +153,7 @@ describe("BYOK click from Managed restores best provider", () => {
       provider: "openai",
       model: "gpt-4o",
     })
-    render(<SettingsAI models={models} setModels={vi.fn()} />)
+    render(<SettingsAI models={models} setModels={vi.fn()} isPro={true} />)
     fireEvent.click(screen.getByRole("button", { name: /bring your own key/i }))
     await waitFor(() => {
       expect(mockApi.aiSetProvider).toHaveBeenCalledWith("openai")
@@ -172,7 +172,7 @@ describe("BYOK click from Managed restores best provider", () => {
       provider: "anthropic",
       model: "claude-sonnet-4-6",
     })
-    render(<SettingsAI models={models} setModels={vi.fn()} />)
+    render(<SettingsAI models={models} setModels={vi.fn()} isPro={true} />)
     fireEvent.click(screen.getByRole("button", { name: /bring your own key/i }))
     await waitFor(() => {
       expect(mockApi.aiSetProvider).toHaveBeenCalledWith("anthropic")
@@ -193,7 +193,7 @@ describe("BYOK click from Managed restores best provider", () => {
       provider: "anthropic",
       model: "claude-sonnet-4-6",
     })
-    render(<SettingsAI models={models} setModels={vi.fn()} />)
+    render(<SettingsAI models={models} setModels={vi.fn()} isPro={true} />)
     fireEvent.click(screen.getByRole("button", { name: /bring your own key/i }))
     // local without model should not be chosen → falls through to anthropic
     await waitFor(() => {
@@ -215,7 +215,7 @@ describe("BYOK click from Managed restores best provider", () => {
       provider: "local",
       model: "llama3",
     })
-    render(<SettingsAI models={models} setModels={vi.fn()} />)
+    render(<SettingsAI models={models} setModels={vi.fn()} isPro={true} />)
     fireEvent.click(screen.getByRole("button", { name: /bring your own key/i }))
     await waitFor(() => {
       expect(mockApi.aiSetProvider).toHaveBeenCalledWith("local")

@@ -56,5 +56,6 @@ const FREE_FEATURES = new Set<ProFeature>([
   "terminal",
   "explorer",
   "templates",
-  "basic-chat"
+  "basic-chat",
+  "skills"
 ])

@@ -45,6 +45,10 @@ vi.mock("../electron/sidecar/index", () => ({
   validateBinary: vi.fn()
 }))
 
+vi.mock("../electron/logger", () => ({
+  log: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() }
+}))
+
 // ── Import under test ─────────────────────────────────────────────────────────
 
 import { RojoManager } from "../electron/sidecar/rojo"
@@ -135,8 +139,10 @@ describe("RojoManager.serve()", () => {
     mgr.serve(PROJECT)
 
     expect(mgr.getStatus()).toBe("error")
-    // port and lastError are null at this point (spawn threw before any data)
-    expect(h.winSend).toHaveBeenCalledWith("sync:status-changed", "error", null, null)
+    // The catch block records the spawn error in lastError so the renderer
+    // can surface it (previously was null because spawn failures were silent).
+    expect(h.winSend).toHaveBeenCalledWith("sync:status-changed", "error", null, "binary not found")
+    expect(mgr.getLastError()).toBe("binary not found")
   })
 
   it("records error from stderr matching 'error' keyword", () => {

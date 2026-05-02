@@ -84,8 +84,6 @@ vi.mock("../../electron/ai/memory", () => ({
   deleteMemory: vi.fn(),
   buildMemoryContext: vi.fn().mockReturnValue(""),
   loadInstructions: vi.fn().mockReturnValue(""),
-  buildMemoryDetectPrompt: vi.fn().mockReturnValue(""),
-  parseMemoryDetectResponse: vi.fn().mockReturnValue([]),
   estimateMessagesTokens: vi.fn().mockResolvedValue(0),
   buildCompressionPrompt: vi.fn().mockReturnValue(""),
   buildMemoryIndex: vi.fn().mockReturnValue("")
@@ -109,7 +107,6 @@ vi.mock("../../electron/pro/modules", () => ({
   clearBridgeLogs: vi.fn(),
   queueScript: vi.fn(),
   consumeCommandResult: vi.fn(),
-  getConsoleOutput: vi.fn(),
   isStudioConnected: vi.fn().mockReturnValue(false),
   analyzeTopology: vi.fn(),
   analyzeCrossScript: vi.fn(),

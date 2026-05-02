@@ -15,54 +15,20 @@ interface TutorialStep {
 
 const STEPS: TutorialStep[] = [
   {
-    title: "Welcome to Luano!",
-    description: "The all-in-one AI bibecoding editor for Roblox. Rojo, Selene, StyLua, luau-lsp — all bundled, zero setup. Let's take a quick tour.",
+    title: "Welcome to Luano",
+    description: "AI vibecoding editor for Roblox. Toolchain sets itself up — no installers.",
+    position: "center"
+  },
+  {
+    title: "AI, your way",
+    description: `Managed AI (Pro, no key) or your own. Chat, Agent, Plan + ${KB} inline edits.`,
     position: "center"
   },
   {
     target: "welcome-new",
-    title: "Start a New Game",
-    description: "Pick a template and Luano scaffolds a Rojo project for you. Tools download on demand — the first run grabs Rojo, Selene, StyLua, and luau-lsp automatically.",
+    title: "Let's go",
+    description: "New Game scaffolds a project. Open Project picks up an existing one.",
     position: "top"
-  },
-  {
-    target: "welcome-open",
-    title: "Or Open an Existing Project",
-    description: "Point Luano at any Rojo project folder (`default.project.json` or `*.project.json`). Your last few projects show up below for quick access.",
-    position: "top"
-  },
-  {
-    target: "settings-btn",
-    title: "Settings & API Key",
-    description: "Bring your own key for Claude, OpenAI, Gemini, or a local model (Ollama, LM Studio, vLLM). Pick a theme (Dark, Light, Tokyo Night) and tune editor preferences.",
-    position: "bottom"
-  },
-  {
-    target: "toolchain-btn",
-    title: "Toolchain Manager",
-    description: "Everything auto-installs on first use, but you can inspect versions or switch tool releases here. Binaries live in the app data folder — never touches your system PATH.",
-    position: "bottom"
-  },
-  {
-    target: "file-btn",
-    title: "File Menu",
-    description: `New Project, Open Folder, and Close Project also live under File. ${KB} is the universal inline-edit shortcut once you're in a file.`,
-    position: "bottom"
-  },
-  {
-    title: "After You Open a Project",
-    description: "You'll get a sidebar with Files, Search, Sync (Rojo + Studio Bridge), Analysis (perf lint + topology graph), and DataStore. The Luau editor has autocomplete, strict types, diagnostics, and 30+ Roblox snippets.",
-    position: "center"
-  },
-  {
-    title: "AI Assistant",
-    description: `The chat panel opens on the right of any open project. Three modes: Agent edits files with per-change approval, Agent (Auto) runs hands-free, Plan is read-only for discussion. Type / for skills like /explain, /fix, /review, /security. Select code and press ${KB} for inline edits.`,
-    position: "center"
-  },
-  {
-    title: "You're Ready!",
-    description: "Pick New Game or Open Project above to get started. Your layout, settings, and chat sessions persist across restarts.",
-    position: "center"
   }
 ]
 

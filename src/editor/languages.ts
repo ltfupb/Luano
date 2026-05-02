@@ -12,6 +12,7 @@ const EXT_TO_LANG: Record<string, string> = {
   jsonc: "json",
   luaurc: "json",
   toml: "toml",
+  lock: "toml",
   yaml: "yaml",
   yml: "yaml",
   md: "markdown",
@@ -35,7 +36,7 @@ export function registerCustomLanguages(monaco: typeof Monaco): void {
 
   monaco.languages.register({
     id: "toml",
-    extensions: [".toml"],
+    extensions: [".toml", ".lock"],
     aliases: ["TOML", "toml"]
   })
 

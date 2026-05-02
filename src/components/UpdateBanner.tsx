@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react"
 import { useIpcEvent } from "../hooks/useIpc"
 import { ConfirmDialog } from "./ConfirmDialog"
+import { toast } from "./Toast"
 import { useT } from "../i18n/useT"
 
 type UpdateStatus = "idle" | "checking" | "available" | "downloading" | "downloaded" | "error"
@@ -107,9 +108,16 @@ export function UpdateBanner(): JSX.Element | null {
           body=""
           confirmLabel={t("updateConfirmAccept")}
           cancelLabel={t("updateConfirmCancel")}
-          onConfirm={() => {
+          onConfirm={async () => {
             setConfirmInstall(false)
-            void window.api.updaterInstall()
+            try {
+              const result = await window.api.updaterInstall()
+              if (!result.success) {
+                toast(`Install failed: ${result.error ?? "unknown error"}`, "error")
+              }
+            } catch (err) {
+              toast(`Install failed: ${(err as Error).message}`, "error")
+            }
           }}
           onCancel={() => setConfirmInstall(false)}
         />

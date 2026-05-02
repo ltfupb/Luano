@@ -126,6 +126,47 @@ describe("lintFile", () => {
     expect(result[0].col).toBe(1)
   })
 
+  it("filters out non-Diagnostic json2 records (Summary, InvalidConfig)", async () => {
+    // selene --display-style=json2 emits a Summary line at end of every run
+    // (and InvalidConfig on bad config). Without a type filter, the parser
+    // would surface them as phantom "WARNING line 1: []" entries — which
+    // the agent then describes as "empty [] tag on the --!strict line."
+    let capturedOnData: ((d: string) => void) | undefined
+    const proc = makeProc()
+    h.mockSpawnSidecar.mockImplementationOnce((_, __, opts) => {
+      capturedOnData = opts?.onData
+      return proc
+    })
+
+    const realDiag = JSON.stringify({
+      type: "Diagnostic",
+      severity: "Warning",
+      message: "unused variable 'x'",
+      code: "unused_variable",
+      primary_label: { span: { start_line: 7, start_column: 4 } }
+    })
+    const summary = JSON.stringify({
+      type: "Summary",
+      passed: true,
+      counts: { error: 0, warning: 1 }
+    })
+    const invalidConfig = JSON.stringify({
+      type: "InvalidConfig",
+      severity: "Error",
+      message: "config error",
+      code: ""
+    })
+
+    const promise = lintFile("/project/test.luau")
+    capturedOnData?.(`${realDiag}\n${summary}\n${invalidConfig}`)
+    proc.process.emit("exit", 0)
+
+    const result = await promise
+    expect(result).toHaveLength(1)
+    expect(result[0].code).toBe("unused_variable")
+    expect(result[0].line).toBe(7)
+  })
+
   it("skips malformed JSON lines and still returns valid diagnostics", async () => {
     let capturedOnData: ((d: string) => void) | undefined
     const proc = makeProc()
@@ -149,6 +190,62 @@ describe("lintFile", () => {
     const result = await promise
     expect(result).toHaveLength(1)
     expect(result[0].severity).toBe("warning")
+  })
+
+  it("rejects with a timeout error when the sidecar never exits", async () => {
+    vi.useFakeTimers()
+    try {
+      const proc = makeProc()
+      h.mockSpawnSidecar.mockReturnValueOnce(proc)
+
+      const promise = lintFile("/project/test.luau")
+      // Surface the rejection as a handled rejection early so Node doesn't
+      // warn about an unhandled one while the timers advance.
+      const caught = promise.catch((err) => err)
+      // Never emit "exit" — let the timeout fire.
+      await vi.advanceTimersByTimeAsync(30_001)
+      const err = await caught
+      expect(err).toBeInstanceOf(Error)
+      expect(String(err)).toMatch(/timed out/i)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it("kills the sidecar process on timeout", async () => {
+    vi.useFakeTimers()
+    try {
+      const proc = makeProc()
+      h.mockSpawnSidecar.mockReturnValueOnce(proc)
+
+      const promise = lintFile("/project/test.luau")
+      const caught = promise.catch(() => { /* swallow */ })
+      await vi.advanceTimersByTimeAsync(30_001)
+      await caught
+
+      // spawnSidecar returns { process, kill } — selene calls the outer kill()
+      expect(proc.kill).toHaveBeenCalled()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it("clears the timeout when the sidecar exits normally (no stray rejection)", async () => {
+    vi.useFakeTimers()
+    try {
+      const proc = makeProc()
+      h.mockSpawnSidecar.mockReturnValueOnce(proc)
+
+      const promise = lintFile("/project/test.luau")
+      proc.process.emit("exit", 0)
+      await expect(promise).resolves.toEqual([])
+
+      // Advance past the 30s window — no error should surface; the timer
+      // was cleared in the finally block.
+      await vi.advanceTimersByTimeAsync(31_000)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it("uses the selene.toml ancestor directory as cwd for spawnSidecar", async () => {

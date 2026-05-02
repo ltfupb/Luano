@@ -59,12 +59,82 @@ const proFiles = [
 ]
 
 const proEntries: Record<string, string> = {}
+const proPresent: string[] = []
+const proMissing: string[] = []
 for (const f of proFiles) {
   if (existsSync(resolve(__dirname, f))) {
     proEntries[f.replace("electron/", "").replace(".ts", "")] = resolve(__dirname, f)
+    proPresent.push(f)
+  } else {
+    proMissing.push(f)
   }
 }
 const isPro = Object.keys(proEntries).length > 0
+
+// Public modules loaded via tryRequire from pro/modules.ts. These are NOT
+// Pro-gated — they ship in both private and public builds — but the dynamic
+// require pattern means rollup can't see them via static analysis. Listed
+// here so each is emitted as out/main/<path>.js for runtime resolution.
+//
+// Without this, pro/modules.ts's `tryRequire("../ai/evaluator")` resolves to
+// a non-existent file at runtime; before the transitive-miss discrimination
+// landed, that silently fell back to no-op stubs, but it now throws and
+// crashes app boot. Bundling fixes the root cause.
+const publicTryRequireEntries: Record<string, string> = {
+  "ai/evaluator": resolve(__dirname, "electron/ai/evaluator.ts")
+}
+
+// Build-time assertion: every tryRequire("...") literal in pro/modules.ts
+// must resolve to either a Pro file (present in proFiles) or a public module
+// (listed in publicTryRequireEntries). Any unlisted target would fail silently
+// at runtime — either swallowed as "Free edition fallback" (if the file
+// doesn't exist) or as a boot crash (if transitive-miss discrimination fires).
+// Detect the gap here with a clear remediation message.
+;(() => {
+  const modulesSrc = readFileSync(resolve(__dirname, "electron/pro/modules.ts"), "utf-8")
+  // Match both single- and double-quoted string args to tryRequire<...>()
+  const tryRequireRe = /tryRequire\s*<[\s\S]*?>\s*\(\s*['"]([^'"]+)['"]/g
+  let m: RegExpExecArray | null
+  const missing: string[] = []
+  while ((m = tryRequireRe.exec(modulesSrc)) !== null) {
+    const rawId = m[1]
+    // Normalize relative prefix — tryRequire ids start with "../"
+    // e.g. "../ai/context" → "ai/context", "../bridge/server" → "bridge/server"
+    const id = rawId.replace(/^\.\.\//, "")
+    const proFilePath = `electron/${id}.ts`
+    const isProFile = proFiles.includes(proFilePath)
+    const isPublicModule = Object.prototype.hasOwnProperty.call(publicTryRequireEntries, id)
+    if (!isProFile && !isPublicModule) {
+      missing.push(rawId)
+    }
+  }
+  if (missing.length > 0) {
+    throw new Error(
+      [
+        "pro/modules.ts has tryRequire() targets not covered by proFiles or publicTryRequireEntries.",
+        "These will silently fall back to no-op stubs (or crash boot) at runtime.",
+        `  Uncovered targets: ${missing.join(", ")}`,
+        "Fix: add the file to proFiles (if Pro-only) OR add the id to publicTryRequireEntries (if always bundled).",
+      ].join("\n")
+    )
+  }
+})()
+
+// Sanity assertion: the build is either fully private (all Pro files present)
+// or fully public (none present). A partial state usually means a file was
+// accidentally added to .mirror-exclude or accidentally dropped from the
+// private tree — both will surface as broken imports at runtime via
+// pro/modules.ts's tryRequire fallbacks, with no single place to notice.
+// Fail the build here with a specific list instead.
+if (proPresent.length > 0 && proMissing.length > 0) {
+  const msg = [
+    "Pro file state is inconsistent — expected either all present (private build) or all absent (public mirror).",
+    `  Present (${proPresent.length}): ${proPresent.join(", ")}`,
+    `  Missing (${proMissing.length}): ${proMissing.join(", ")}`,
+    "Fix: either restore the missing files, or ensure pro/modules.ts has no-op fallbacks for every Pro import and remove the partial files.",
+  ].join("\n")
+  throw new Error(msg)
+}
 
 export default defineConfig({
   main: {
@@ -78,19 +148,22 @@ export default defineConfig({
         external: mainExternals,
         input: {
           index: resolve(__dirname, "electron/main.ts"),
-          ...proEntries
+          ...proEntries,
+          ...publicTryRequireEntries
         },
-        output: isPro
-          ? {
-              preserveModules: true,
-              preserveModulesRoot: resolve(__dirname, "electron"),
-              entryFileNames: (chunk) => {
-                if (chunk.facadeModuleId?.replace(/\\/g, "/").endsWith("electron/main.ts"))
-                  return "index.js"
-                return "[name].js"
-              }
-            }
-          : {}
+        // preserveModules is required whenever there's more than one input —
+        // the publicTryRequireEntries above always add at least one alongside
+        // `index`, so this is unconditionally on. Pro and public builds both
+        // emit the same out/main/<path>.js layout.
+        output: {
+          preserveModules: true,
+          preserveModulesRoot: resolve(__dirname, "electron"),
+          entryFileNames: (chunk) => {
+            if (chunk.facadeModuleId?.replace(/\\/g, "/").endsWith("electron/main.ts"))
+              return "index.js"
+            return "[name].js"
+          }
+        }
       }
     }
   },

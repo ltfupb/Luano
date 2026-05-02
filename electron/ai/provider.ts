@@ -1,8 +1,10 @@
 import type Anthropic from "@anthropic-ai/sdk"
 import type OpenAI from "openai"
 import type { GoogleGenerativeAI, GenerativeModel } from "@google/generative-ai"
+import { EventEmitter } from "node:events"
 import { store } from "../store"
 import { BrowserWindow } from "electron"
+import { log } from "../logger"
 
 // ── Lazy SDK loaders ─────────────────────────────────────────────────────────
 // AI SDKs are large (~650KB total) and pulled in only when the user actually
@@ -65,6 +67,10 @@ interface StreamMessageStart {
  * `advisorEnabled` defaults to true. Pass false when the advisor tool is not
  * registered for this stream — defensive guard against the model emitting an
  * unexpected advisor block, which would flash the renderer's advisor indicator.
+ *
+ * `senderId` (when set) scopes the per-stream `:advisor`/`:thinking` events to
+ * the originating window (H4 sender-scoping). Without it the events broadcast
+ * to every renderer that knows the streamChannel UUID.
  */
 export class StreamBlockTracker {
   private advisorIdx = -1
@@ -72,7 +78,8 @@ export class StreamBlockTracker {
 
   constructor(
     private streamChannel: string,
-    private advisorEnabled: boolean = true
+    private advisorEnabled: boolean = true,
+    private senderId?: number
   ) {}
 
   onStart(event: unknown): void {
@@ -100,9 +107,13 @@ export class StreamBlockTracker {
   }
 
   private broadcast(kind: "advisor" | "thinking", active: boolean): void {
-    BrowserWindow.getAllWindows().forEach((win) =>
-      win.webContents.send(`${this.streamChannel}:${kind}`, active)
-    )
+    const channel = `${this.streamChannel}:${kind}`
+    if (this.senderId !== undefined) {
+      const win = BrowserWindow.getAllWindows().find((w) => w.webContents.id === this.senderId)
+      if (win && !win.webContents.isDestroyed()) win.webContents.send(channel, active)
+      return
+    }
+    BrowserWindow.getAllWindows().forEach((win) => win.webContents.send(channel, active))
   }
 }
 
@@ -172,6 +183,10 @@ export function getTokenUsage(): { input: number; output: number; cacheRead: num
 
 export function resetTokenUsage(): void {
   _tokenUsage = { input: 0, output: 0, cacheRead: 0 }
+  // Broadcast the zeroed counters so every renderer window clears its
+  // displayed totals. Without this, the UI keeps showing the pre-reset values
+  // until the next trackUsage() call arrives.
+  broadcastUsage()
 }
 
 export function getProvider(): Provider {
@@ -198,10 +213,16 @@ export function getNetworkTimeoutMs(): number {
 
 export function setNetworkTimeoutMs(ms: number): void {
   store.set("networkTimeoutMs", ms)
-  // Invalidate clients so they re-init with the new timeout
+  // Invalidate ALL cached SDK clients so every provider re-initializes with
+  // the new timeout on the next call. Missing any of these leaves stale clients
+  // using the old timeout until process restart.
   anthropicClient = null
   managedClient = null
   openaiClient = null
+  geminiClient = null
+  localClient = null
+  localClientEndpoint = null
+  localClientKey = null
 }
 
 export async function getAnthropicClient(): Promise<Anthropic> {
@@ -242,13 +263,20 @@ export async function getManagedClient(): Promise<Anthropic> {
   return managedClient
 }
 
-/** Called by the license IPC handlers on activate/deactivate. */
-export function invalidateManagedLicenseCache(): void {
+/**
+ * Clear the cached managed client so the next request re-initializes it with
+ * a fresh read of the license key. Called in two places:
+ *  1. After each chat/stream completes — minimizes the window the license
+ *     key lives in memory (shrinks from "until app quit" to "until this
+ *     turn ends").
+ *  2. From license IPC handlers on activate/deactivate — ensures the next
+ *     Managed request picks up the new key or bails out loudly if revoked.
+ *
+ * Tradeoff: pays ~1 SDK-construct cost per managed request (small — the
+ * Anthropic SDK constructor is pure JS, no network I/O).
+ */
+export function clearManagedClient(): void {
   managedClient = null
-}
-
-export function isManagedMode(): boolean {
-  return getProvider() === "managed"
 }
 
 /**
@@ -264,6 +292,34 @@ export async function getAnthropicPath(requestedModel: string): Promise<{ client
   return { client: await getAnthropicClient(), model: requestedModel }
 }
 
+export interface ManagedRequestCompletedEvent {
+  duration_ms: number
+  cached_ratio: number
+  input_tok: number
+  output_tok: number
+  model: string
+}
+
+/**
+ * Emit a Managed-specific IPC event scoped to the originating window. Used
+ * for cap-exceeded modal trigger and request-completed analytics. When
+ * senderId is missing (legacy callers), broadcasts — kept as a fallback,
+ * but every Managed-aware code path passes senderId today.
+ *
+ * Overloaded so TypeScript catches mismatched payload shapes at the call site
+ * (cap-exceeded sends an empty object; request-completed sends usage metrics).
+ */
+export function emitManagedEvent(channel: "managed:cap-exceeded", payload: Record<string, never>, senderId?: number): void
+export function emitManagedEvent(channel: "managed:request-completed", payload: ManagedRequestCompletedEvent, senderId?: number): void
+export function emitManagedEvent(channel: "managed:cap-exceeded" | "managed:request-completed", payload: object, senderId?: number): void {
+  if (senderId === undefined) {
+    BrowserWindow.getAllWindows().forEach((w) => w.webContents.send(channel, payload))
+    return
+  }
+  const win = BrowserWindow.getAllWindows().find((w) => w.webContents.id === senderId)
+  if (win && !win.webContents.isDestroyed()) win.webContents.send(channel, payload)
+}
+
 /** Fetch current Managed usage from the Worker. Returns null on error. */
 export async function fetchManagedUsage(): Promise<ManagedUsageData | null> {
   const license = store.get<ManagedLicenseData>("license")
@@ -273,14 +329,21 @@ export async function fetchManagedUsage(): Promise<ManagedUsageData | null> {
       headers: { Authorization: `Bearer ${license.key}` },
       signal: AbortSignal.timeout(10_000),
     })
-    if (!res.ok) return null
+    if (!res.ok) {
+      log.warn(`[managed] usage fetch returned ${res.status}`)
+      return null
+    }
     const data = await res.json() as ManagedUsageData
     if (
       typeof data?.used !== "number" || !isFinite(data.used) ||
       typeof data?.cap !== "number" || !isFinite(data.cap) || data.cap <= 0
-    ) return null
+    ) {
+      log.warn("[managed] usage payload malformed:", data)
+      return null
+    }
     return data
-  } catch {
+  } catch (err) {
+    log.warn("[managed] usage fetch failed:", err)
     return null
   }
 }
@@ -493,6 +556,27 @@ export function setThinkingEffort(effort: ThinkingEffort): void {
   store.set("thinkingEffort", effort)
 }
 
+/**
+ * Auto-accept: ambient state, NOT captured per turn. Read at every tool-call
+ * decision so the renderer's mid-turn toggle takes effect immediately on the
+ * next tool. The emitter lets in-flight approval prompts self-resolve when
+ * the flag flips ON.
+ *
+ * Lives in main process so renderer (zustand) and main agree via a single
+ * setter IPC. Renderer is UI; main is source of truth.
+ */
+export const autoAcceptEmitter = new EventEmitter()
+
+export function getAutoAccept(): boolean {
+  return store.get("autoAccept") === true
+}
+
+export function setAutoAccept(value: boolean): void {
+  const prev = getAutoAccept()
+  store.set("autoAccept", value === true)
+  if (prev !== (value === true)) autoAcceptEmitter.emit("change", value === true)
+}
+
 /** Does the current (provider, model) accept a thinking / reasoning hint? */
 export function supportsThinking(): boolean {
   const provider = getProvider()
@@ -522,7 +606,8 @@ const FRONTIER_MODELS = new Set([
   "claude-opus-4-7", "claude-sonnet-4-6", "claude-opus-4-6",
   "claude-haiku-4-5-20251001",
   "gpt-4o", "gpt-4-turbo", "o1",
-  "gemini-2.5-pro"
+  "gemini-2.5-pro",
+  "gemini-2.5-flash"  // M2: was missing, caused standard-tier scaffolding on every request
 ])
 
 export function getModelTier(): ModelTier {
@@ -540,6 +625,7 @@ export function getProviderAndModel(): { provider: Provider; model: string } {
 
 export function abortAgent(): void {
   if (activeAbortController) {
+    log.info("[agent] abort requested by user")
     activeAbortController.abort()
     activeAbortController = null
   }
@@ -611,19 +697,31 @@ type CachedTextBlock = {
 }
 
 /**
- * Split system prompt into cached (static rules) + uncached (dynamic context).
- * Static rules (~3K tokens) are cached via cache_control, saving ~90% on cache hits.
+ * Split system prompt into cached (static rules) + uncached (dynamic context),
+ * with an optional uncached suffix block.
+ *
+ * The optional `suffix` block is for system-level content that must NOT live
+ * in the message history — e.g. the agent's tool-output sentinel
+ * announcement. Stuffing that into a user-content text block makes the model
+ * see "user sent only metadata, empty input" right after a tool_use round
+ * and respond with a generic greeting. Putting it in a third system block
+ * keeps it clearly system-level.
+ *
+ * NOTE: this block is uncached. Keep its content STABLE across the session
+ * (e.g. one sentinel UUID per session, not per turn) — anything that
+ * varies between API calls breaks every cache_control breakpoint after it.
  */
-export function toCachedSystem(systemPrompt: string): CachedTextBlock[] {
+export function toCachedSystem(systemPrompt: string, perCallSuffix?: string): CachedTextBlock[] {
   const marker = "\nPROJECT CONTEXT:"
   const idx = systemPrompt.indexOf(marker)
-  if (idx === -1) {
-    return [{ type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } }]
-  }
-  return [
-    { type: "text", text: systemPrompt.slice(0, idx), cache_control: { type: "ephemeral" } },
-    { type: "text", text: systemPrompt.slice(idx) }
-  ]
+  const blocks: CachedTextBlock[] = idx === -1
+    ? [{ type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } }]
+    : [
+        { type: "text", text: systemPrompt.slice(0, idx), cache_control: { type: "ephemeral" } },
+        { type: "text", text: systemPrompt.slice(idx) }
+      ]
+  if (perCallSuffix) blocks.push({ type: "text", text: perCallSuffix })
+  return blocks
 }
 
 /** Add cache_control to the last tool definition to cache all tool schemas. */
@@ -635,19 +733,82 @@ export function toCachedTools<T extends Record<string, any>>(tools: T[]): T[] {
   )
 }
 
+/**
+ * Add cache_control breakpoints to the last TWO user-role messages so multi-
+ * round sessions stop re-paying full price for tool results that already
+ * shipped in earlier rounds.
+ *
+ * Why two: Anthropic only performs cache lookups AT explicit cache_control
+ * breakpoints. If round N marks only its new last message, round N+1 (with
+ * a different new last) can't find round N's cache entry. Marking the last
+ * two user messages keeps an "anchor" (prior round's edge, still cached)
+ * plus a new "edge" so the chain extends across rounds.
+ *
+ * Budget: Anthropic allows 4 cache_control parameters per request. We use
+ * 1 for system + 1 for tools + 2 here = 4 (exactly at limit).
+ *
+ * Pattern matches Claude Code / Cursor convention.
+ *
+ * Returns a copy — never mutates input. String-content messages are
+ * converted to single-text-block array form so cache_control can attach.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function withMessageCacheControl<T extends { role: string; content: any }>(messages: T[]): T[] {
+  if (messages.length === 0) return messages
+
+  // Find the last 2 user-role message indices (most recent first). Tool
+  // results are user-role too, so they count.
+  const userIndices: number[] = []
+  for (let i = messages.length - 1; i >= 0 && userIndices.length < 2; i--) {
+    if (messages[i].role === "user") userIndices.push(i)
+  }
+
+  if (userIndices.length === 0) return messages
+
+  const result = [...messages]
+  for (const idx of userIndices) {
+    result[idx] = applyCacheControlToBlock(result[idx])
+  }
+  return result
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function applyCacheControlToBlock<T extends { role: string; content: any }>(msg: T): T {
+  // String content → wrap in a single text block with cache_control.
+  if (typeof msg.content === "string") {
+    return {
+      ...msg,
+      content: [{ type: "text", text: msg.content, cache_control: { type: "ephemeral" } }]
+    } as T
+  }
+  // Array content (tool_result, multi-block text) → mark the LAST block.
+  if (Array.isArray(msg.content) && msg.content.length > 0) {
+    const blocks = [...msg.content]
+    blocks[blocks.length - 1] = { ...blocks[blocks.length - 1], cache_control: { type: "ephemeral" } }
+    return { ...msg, content: blocks } as T
+  }
+  return msg
+}
+
 // ── Basic Chat ────────────────────────────────────────────────────────────────
 
-export async function chat(messages: ChatMessage[], systemPrompt: string): Promise<string> {
+// H5: optional AbortSignal so callers (compressHistoryIfNeeded) can cancel
+// an in-flight LLM summarization when the agent session is aborted.
+export async function chat(messages: ChatMessage[], systemPrompt: string, signal?: AbortSignal): Promise<string> {
+  if (signal?.aborted) return ""
   const provider = getProvider()
   const model = getModel()
 
   if (provider === "openai" || provider === "local") {
     const { client, timeout } = await getOpenAICompat()
+    // H5: forward signal so an aborted compressHistoryIfNeeded cancels the
+    // in-flight summarization on OpenAI/local providers too — Anthropic was
+    // already covered, this closes the gap so all providers honor abort.
     const response = await withRetry(() => withTimeout(client.chat.completions.create({
       model,
       ...(provider === "local" ? {} : { max_tokens: 8192 }),
       messages: [{ role: "system", content: systemPrompt }, ...messages]
-    }), timeout))
+    }, signal ? { signal } : undefined), timeout))
     return response.choices[0]?.message?.content ?? ""
   }
 
@@ -663,18 +824,33 @@ export async function chat(messages: ChatMessage[], systemPrompt: string): Promi
   }
 
   const { client: anthropic, model: effectiveModel } = await getAnthropicPath(model)
-  const response = await withRetry(() => withTimeout(anthropic.messages.create({
-    model: effectiveModel,
-    max_tokens: 8192,
-    system: toCachedSystem(systemPrompt),
-    messages
-  })))
-  trackUsage(
-    response.usage.input_tokens,
-    response.usage.output_tokens,
-    response.usage.cache_read_input_tokens ?? 0
-  )
-  return response.content[0].type === "text" ? response.content[0].text : ""
+  try {
+    const response = await withRetry(() => withTimeout(anthropic.messages.create({
+      model: effectiveModel,
+      max_tokens: 8192,
+      system: toCachedSystem(systemPrompt),
+      messages,
+      ...(signal ? { signal } : {})
+    })))
+    // Managed proxy responses occasionally omit `.usage` (proxy implementation
+    // detail). Guard so the missing field doesn't tank the entire chat() —
+    // memory:auto-detect was throwing here after every agent session.
+    if (response.usage) {
+      trackUsage(
+        response.usage.input_tokens,
+        response.usage.output_tokens,
+        response.usage.cache_read_input_tokens ?? 0
+      )
+    }
+    // `response.content` is also occasionally missing on managed proxy
+    // responses (same root cause as the .usage guard above). Defaulting to
+    // empty string keeps callers (e.g. compressHistoryIfNeeded) safe.
+    const first = response.content?.[0]
+    return first?.type === "text" ? first.text : ""
+  } finally {
+    // Shrink license-key residency in memory — recreated next call (see clearManagedClient).
+    if (provider === "managed") clearManagedClient()
+  }
 }
 
 // ── Streaming Chat ─────────────────────────────────────────────────────────────
@@ -682,19 +858,41 @@ export async function chat(messages: ChatMessage[], systemPrompt: string): Promi
 export async function chatStream(
   messages: ChatMessage[],
   systemPrompt: string,
-  streamChannel: string
+  streamChannel: string,
+  senderId?: number
 ): Promise<void> {
   const provider = getProvider()
   const model = getModel()
 
+  // H4: resolve the originating WebContents once; send only to that window.
+  // If senderId is provided but the WebContents was already destroyed, skip
+  // the send rather than falling back to a broadcast.
+  const resolveTarget = (): Electron.WebContents | null => {
+    if (senderId === undefined) return null
+    const win = BrowserWindow.getAllWindows().find((w) => w.webContents.id === senderId)
+    return (win && !win.webContents.isDestroyed()) ? win.webContents : null
+  }
   const send = (text: string | null) => {
-    BrowserWindow.getAllWindows().forEach((win) => win.webContents.send(streamChannel, text))
+    const target = resolveTarget()
+    if (target) {
+      target.send(streamChannel, text)
+    } else if (senderId === undefined) {
+      // No sender scoping requested — legacy broadcast path (should not occur
+      // in normal flows since ai:chat-stream always passes senderId).
+      BrowserWindow.getAllWindows().forEach((win) => win.webContents.send(streamChannel, text))
+    }
+    // If senderId was set but target is gone, drop the send silently.
   }
   const sendError = (err: unknown) => {
     const msg = err instanceof Error ? err.message : String(err)
-    BrowserWindow.getAllWindows().forEach((win) =>
-      win.webContents.send(streamChannel, `\n\nError: ${msg}`)
-    )
+    const target = resolveTarget()
+    if (target) {
+      target.send(streamChannel, `\n\nError: ${msg}`)
+    } else if (senderId === undefined) {
+      BrowserWindow.getAllWindows().forEach((win) =>
+        win.webContents.send(streamChannel, `\n\nError: ${msg}`)
+      )
+    }
     send(null)
   }
 
@@ -738,6 +936,7 @@ export async function chatStream(
     // models to hallucinate tool-call markup in the text response.
     const controller = new AbortController()
     activeAbortController = controller
+    const reqStart = Date.now()
     const stream = anthropic.messages.stream(
       {
         model: effectiveModel,
@@ -750,7 +949,7 @@ export async function chatStream(
 
     let streamedChars = 0
     let inputTracked = false
-    const blocks = new StreamBlockTracker(streamChannel, false)
+    const blocks = new StreamBlockTracker(streamChannel, false, senderId)
     for await (const chunk of stream) {
       if (chunk.type === "message_start" && !inputTracked) {
         const msg = (chunk as unknown as StreamMessageStart).message
@@ -772,23 +971,58 @@ export async function chatStream(
     } else {
       trackUsage(0, finalMessage.usage.output_tokens, 0)
     }
+    if (provider === "managed") {
+      const inTok = finalMessage.usage.input_tokens
+      const denom = inTok + cache
+      emitManagedEvent("managed:request-completed", {
+        duration_ms: Date.now() - reqStart,
+        cached_ratio: denom > 0 ? cache / denom : 0,
+        input_tok: inTok,
+        output_tok: finalMessage.usage.output_tokens,
+        model: effectiveModel,
+      } satisfies ManagedRequestCompletedEvent, senderId)
+    }
     send(null)
   } catch (err) {
     // Clear any stuck advisor/thinking indicator — StreamBlockTracker's
-    // onStop never fires if the upstream errors mid-block
-    BrowserWindow.getAllWindows().forEach((win) => {
-      win.webContents.send(`${streamChannel}:advisor`, false)
-      win.webContents.send(`${streamChannel}:thinking`, false)
-    })
+    // onStop never fires if the upstream errors mid-block.
+    // H4: use the resolved target instead of broadcasting to all windows.
+    const errTarget = resolveTarget()
+    if (errTarget) {
+      errTarget.send(`${streamChannel}:advisor`, false)
+      errTarget.send(`${streamChannel}:thinking`, false)
+    } else if (senderId === undefined) {
+      BrowserWindow.getAllWindows().forEach((win) => {
+        win.webContents.send(`${streamChannel}:advisor`, false)
+        win.webContents.send(`${streamChannel}:thinking`, false)
+      })
+    }
     const waitSec = is429(err)
-    if (waitSec !== null) {
+    if (provider === "managed" && waitSec !== null) {
+      // Cap exceeded — surface a structured event so the renderer can show
+      // the BYOK-fallback modal. The user-facing chat line is a fallback
+      // explanation in case the modal is dismissed without action.
+      log.warn("[chatStream] managed cap exceeded — emitting cap-exceeded event")
+      emitManagedEvent("managed:cap-exceeded", {}, senderId)
+      send(`\n\nMonthly token cap reached. See dialog to switch to BYOK.`)
+      send(null)
+    } else if (waitSec !== null) {
+      log.warn(`[chatStream] rate limited — wait ${waitSec}s`)
       send(`\n\nRate limited. Please wait ${waitSec}s and try again.`)
       send(null)
     } else {
+      log.error("[chatStream] stream error:", err)
       sendError(err)
     }
   } finally {
-    if (activeAbortController?.signal.aborted) activeAbortController = null
+    // Always clear the controller so the next chatStream starts with a clean
+    // slate. Previously this only fired on aborted streams, which meant a
+    // non-abort error (rate limit, network) left a stale controller pinned —
+    // abortAgent() would try to abort a dead stream and nothing would cancel
+    // the live one.
+    activeAbortController = null
+    // Shrink license-key residency in memory — recreated next call (see clearManagedClient).
+    if (provider === "managed") clearManagedClient()
   }
 }
 

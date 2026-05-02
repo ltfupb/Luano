@@ -261,65 +261,6 @@ export function loadInstructions(projectPath: string, currentFile?: string): str
   return sections.join("\n\n")
 }
 
-// ── Auto Memory Detection ───────────────────────────────────────────────────
-
-const MEMORY_DETECT_PROMPT = `Analyze this conversation exchange and extract ONLY information worth remembering for future sessions. Focus on:
-- User preferences (coding style, conventions, communication preferences)
-- Project decisions (architecture choices, tool preferences, patterns)
-- Corrections/feedback the user gave about AI behavior
-
-Rules:
-- Only extract non-obvious information that can't be derived from code
-- Skip ephemeral task details, debugging steps, code snippets
-- If nothing is worth remembering, respond with exactly: NONE
-- Otherwise respond with one memory per line in format: TYPE|content
-  Where TYPE is one of: user, project, feedback
-- Keep each memory under 100 characters
-- Maximum 3 memories per extraction`
-
-/**
- * Build a prompt to detect memories from a conversation exchange.
- * Returns the detection prompt + conversation context.
- */
-export function buildMemoryDetectPrompt(
-  userMessage: string,
-  assistantResponse: string
-): string {
-  return `${MEMORY_DETECT_PROMPT}\n\n---\nUser: ${userMessage.slice(0, 500)}\nAssistant: ${assistantResponse.slice(0, 500)}`
-}
-
-/**
- * Parse the memory detection response into memory entries.
- */
-export function parseMemoryDetectResponse(
-  response: string,
-  projectPath: string
-): Memory[] {
-  if (!response || response.trim() === "NONE") return []
-
-  const added: Memory[] = []
-  const existing = getMemories(projectPath)
-
-  for (const line of response.split("\n")) {
-    const match = line.match(/^(user|project|feedback)\|(.+)$/i)
-    if (!match) continue
-
-    const type = match[1].toLowerCase() as MemoryType
-    const content = match[2].trim()
-    if (!content || content.length < 5) continue
-
-    // Skip if very similar memory already exists
-    const isDuplicate = existing.some((m) =>
-      m.type === type && m.content.toLowerCase().includes(content.toLowerCase().slice(0, 30))
-    )
-    if (isDuplicate) continue
-
-    added.push(addMemory(projectPath, type, content))
-  }
-
-  return added
-}
-
 // ── Token Estimation ────────────────────────────────────────────────────────
 
 /**

@@ -1,5 +1,4 @@
 import { contextBridge, ipcRenderer, webFrame } from "electron"
-import { electronAPI } from "@electron-toolkit/preload"
 
 // Preload runs in sandbox mode, so `node:crypto` isn't in the allowed
 // module list. The Web Crypto API (`crypto.randomUUID`) ships in every
@@ -14,13 +13,31 @@ export interface ToolEvent {
   success: boolean
 }
 
-/** Channels the renderer is allowed to listen on via on()/off() */
+/**
+ * Channels the renderer is allowed to listen on via on()/off().
+ *
+ * Two entry formats are intentional here:
+ *   - Prefix strings (e.g. "file:", "ai:stream:") — matched via startsWith().
+ *     These allow any sub-channel under that prefix. Keep prefixes tightly
+ *     scoped; a broad prefix like "ai:" would inadvertently permit channels
+ *     that have dedicated handling (see ai:todos-updated note below).
+ *   - Exact strings (e.g. "bridge:update") — matched by equality for channels
+ *     where no sub-channel expansion is needed or desired.
+ *
+ * NOTE: "ai:todos-updated" is NOT listed here. onTodosUpdated() subscribes
+ * directly on ipcRenderer.on() (see below) to keep this channel's typing
+ * self-contained. Adding it here would require routing through the generic
+ * api.on() handler which loses the typed callback signature. This is an
+ * intentional documented bypass — not an oversight.
+ */
 const ALLOWED_CHANNELS = [
   "file:",
   "bridge:update",
+  "bridge:token-invalidated",
   "ai:token-usage",
   "ai:stream:",
   "ai:agent:",
+  "ai:history-compressed",
   "agent:checkpoint-available",
   "terminal:data:",
   "terminal:exit:",
@@ -29,7 +46,8 @@ const ALLOWED_CHANNELS = [
   "sidecar:",
   "lint:",
   "toolchain:",
-  "menu:"
+  "menu:",
+  "window:"
 ]
 
 const api = {
@@ -47,6 +65,8 @@ const api = {
   openProject: (path: string) => ipcRenderer.invoke("project:open", path),
   closeProject: () => ipcRenderer.invoke("project:close"),
   initProject: (path: string) => ipcRenderer.invoke("project:init", path),
+  untrustProject: (path: string): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke("project:untrust", path),
 
   // ── File ──────────────────────────────────────────────────────────────────
   readFile: (path: string) => ipcRenderer.invoke("file:read", path),
@@ -91,9 +111,34 @@ const api = {
   aiGetAdvisor: () => ipcRenderer.invoke("ai:get-advisor"),
   aiSetThinkingEffort: (effort: string) => ipcRenderer.invoke("ai:set-thinking-effort", effort),
   aiGetThinkingEffort: () => ipcRenderer.invoke("ai:get-thinking-effort"),
+  aiSetAutoAccept: (enabled: boolean) => ipcRenderer.invoke("ai:set-auto-accept", enabled),
+  aiGetAutoAccept: () => ipcRenderer.invoke("ai:get-auto-accept"),
   managedFetchUsage: () => ipcRenderer.invoke("managed:fetch-usage"),
+  onManagedCapExceeded: (cb: () => void): (() => void) => {
+    const handler = () => cb()
+    ipcRenderer.on("managed:cap-exceeded", handler)
+    return () => ipcRenderer.removeListener("managed:cap-exceeded", handler)
+  },
+  onManagedRequestCompleted: (cb: (info: {
+    duration_ms: number
+    cached_ratio: number
+    input_tok: number
+    output_tok: number
+    model: string
+  }) => void): (() => void) => {
+    const handler = (_: unknown, info: {
+      duration_ms: number
+      cached_ratio: number
+      input_tok: number
+      output_tok: number
+      model: string
+    }) => cb(info)
+    ipcRenderer.on("managed:request-completed", handler)
+    return () => ipcRenderer.removeListener("managed:request-completed", handler)
+  },
   isDirectory: (p: string): Promise<boolean> => ipcRenderer.invoke("file:is-directory", p),
   probeRojo: (folderPath: string): Promise<boolean> => ipcRenderer.invoke("project:probe-rojo", folderPath),
+  projectExists: (folderPath: string): Promise<boolean> => ipcRenderer.invoke("project:exists", folderPath),
   menuSetProjectState: (hasProject: boolean) => ipcRenderer.invoke("menu:set-project-state", hasProject),
   aiGetTokenUsage: () => ipcRenderer.invoke("ai:token-usage"),
   aiResetTokenUsage: () => ipcRenderer.invoke("ai:reset-token-usage"),
@@ -106,6 +151,11 @@ const api = {
     const handler = (_: unknown, todos: Array<{ content: string; status: string }>) => cb(todos)
     ipcRenderer.on("ai:todos-updated", handler)
     return () => ipcRenderer.removeListener("ai:todos-updated", handler)
+  },
+  onHistoryCompressed: (cb: (info: { lossy: boolean; reason: string }) => void): (() => void) => {
+    const handler = (_: unknown, info: { lossy: boolean; reason: string }) => cb(info)
+    ipcRenderer.on("ai:history-compressed", handler)
+    return () => ipcRenderer.removeListener("ai:history-compressed", handler)
   },
 
   // ── AI Context ───────────────────────────────────────────────────────────
@@ -158,7 +208,7 @@ const api = {
     onThinking?: (active: boolean) => void,
     onApprovalRequest?: (req: { id: string; tool: string; input: Record<string, unknown>; preview?: unknown }) => void,
     onAskUserRequest?: (req: { id: string; questions: unknown[] }) => void,
-    autoAccept?: boolean,
+    onApprovalResolved?: (req: { id: string }) => void,
     planMode?: boolean
   ): Promise<{ modifiedFiles: string[] }> => {
     const channel = `ai:agent:${randomUUID()}`
@@ -179,8 +229,11 @@ const api = {
     if (onAskUserRequest) {
       ipcRenderer.on(`${channel}:ask-user`, (_, req) => onAskUserRequest(req as { id: string; questions: unknown[] }))
     }
+    if (onApprovalResolved) {
+      ipcRenderer.on(`${channel}:approve-tool-resolved`, (_, req) => onApprovalResolved(req as { id: string }))
+    }
     return ipcRenderer
-      .invoke("ai:agent-chat", messages, context, channel, autoAccept === true, planMode === true)
+      .invoke("ai:agent-chat", messages, context, channel, planMode === true)
       .finally(() => {
         ipcRenderer.removeAllListeners(channel)
         ipcRenderer.removeAllListeners(`${channel}:tool`)
@@ -189,6 +242,7 @@ const api = {
         ipcRenderer.removeAllListeners(`${channel}:thinking`)
         ipcRenderer.removeAllListeners(`${channel}:approve-tool`)
         ipcRenderer.removeAllListeners(`${channel}:ask-user`)
+        ipcRenderer.removeAllListeners(`${channel}:approve-tool-resolved`)
       }) as Promise<{ modifiedFiles: string[] }>
   },
 
@@ -214,13 +268,6 @@ const api = {
     return () => ipcRenderer.removeListener("agent:checkpoint-available", handler)
   },
 
-  // ── Studio Bridge (legacy MCP) ────────────────────────────────────────────
-  studioGetConsole: (): Promise<string | null> =>
-    ipcRenderer.invoke("studio:get-console"),
-
-  studioIsConnected: (): Promise<boolean> =>
-    ipcRenderer.invoke("studio:is-connected"),
-
   // ── Live Bridge ───────────────────────────────────────────────────────────
   bridgeGetTree: () => ipcRenderer.invoke("bridge:get-tree"),
   bridgeGetLogs: () => ipcRenderer.invoke("bridge:get-logs"),
@@ -233,6 +280,13 @@ const api = {
     ipcRenderer.invoke("bridge:is-plugin-installed"),
   bridgeInstallPlugin: (): Promise<{ success: boolean; path?: string; error?: string }> =>
     ipcRenderer.invoke("bridge:install-plugin"),
+  bridgeGetToken: (): Promise<string | { success: false; error: string; message: string }> =>
+    ipcRenderer.invoke("bridge:get-token"),
+  onBridgeTokenInvalidated: (cb: () => void): (() => void) => {
+    const handler = () => cb()
+    ipcRenderer.on("bridge:token-invalidated", handler)
+    return () => ipcRenderer.removeListener("bridge:token-invalidated", handler)
+  },
 
   // ── Terminal (node-pty) ───────────────────────────────────────────────────
   terminalCreate: (cwd?: string): Promise<{ id: string; error?: string }> =>
@@ -257,15 +311,19 @@ const api = {
     ipcRenderer.invoke("analysis:perf-lint-file", filePath, content),
 
   // ── DataStore Schema ─────────────────────────────────────────────────────
+  // Parameter types are intentionally `unknown` here — the renderer's typed
+  // contract lives in src/types/ipc/datastore.d.ts (DatastoreApi) which
+  // augments Window.api with the precise shape. Preload's job is to forward
+  // the IPC call; ambient renderer-side types aren't visible to tsconfig.node.
   datastoreLoadSchemas: (projectPath: string) =>
     ipcRenderer.invoke("datastore:load-schemas", projectPath),
   datastoreSaveSchema: (projectPath: string, schema: unknown) =>
     ipcRenderer.invoke("datastore:save-schema", projectPath, schema),
   datastoreDeleteSchema: (projectPath: string, name: string) =>
     ipcRenderer.invoke("datastore:delete-schema", projectPath, name),
-  datastoreGenerateCode: (schema: unknown): Promise<string> =>
+  datastoreGenerateCode: (schema: unknown) =>
     ipcRenderer.invoke("datastore:generate-code", schema),
-  datastoreGenerateMigration: (oldSchema: unknown, newSchema: unknown): Promise<string> =>
+  datastoreGenerateMigration: (oldSchema: unknown, newSchema: unknown) =>
     ipcRenderer.invoke("datastore:generate-migration", oldSchema, newSchema),
 
   // ── Custom Skills ──────────────────────────────────────────────────────────
@@ -330,8 +388,6 @@ const api = {
     ipcRenderer.invoke("memory:delete", projectPath, id),
   memoryContext: (projectPath: string): Promise<string> =>
     ipcRenderer.invoke("memory:context", projectPath),
-  memoryAutoDetect: (projectPath: string, userMsg: string, assistantMsg: string) =>
-    ipcRenderer.invoke("memory:auto-detect", projectPath, userMsg, assistantMsg),
 
   // ── Project Instructions ────────────────────────────────────────────────
   instructionsLoad: (projectPath: string): Promise<string> =>
@@ -359,8 +415,10 @@ const api = {
     ipcRenderer.invoke("toolchain:check-updates", installedIds),
   toolchainFetchMetadata: () =>
     ipcRenderer.invoke("toolchain:fetch-metadata"),
-  toolchainUpdateTool: (toolId: string, downloadUrl: string, latestVersion?: string) =>
-    ipcRenderer.invoke("toolchain:update-tool", toolId, downloadUrl, latestVersion),
+  // M3: downloadUrl removed — the handler ignores renderer-supplied URLs to
+  // prevent arbitrary-origin downloads. latestVersion is the only param needed.
+  toolchainUpdateTool: (toolId: string, latestVersion?: string) =>
+    ipcRenderer.invoke("toolchain:update-tool", toolId, latestVersion),
   toolchainDownloadMultiple: (toolIds: string[]) =>
     ipcRenderer.invoke("toolchain:download-multiple", toolIds),
   toolchainIsMinimumReady: () =>
@@ -369,6 +427,17 @@ const api = {
     ipcRenderer.invoke("toolchain:has-project-config", projectPath),
   toolchainInitProjectConfig: (projectPath: string) =>
     ipcRenderer.invoke("toolchain:init-project-config", projectPath),
+
+  // ── Package Manager (Wally / pesde) ────────────────────────────────────────
+  packageManagerRun: (
+    projectPath: string,
+    command: "init" | "install" | "update" | "add",
+    packageName?: string
+  ) => ipcRenderer.invoke("package-manager:run", projectPath, command, packageName),
+  packageManagerMigrateToPesde: (projectPath: string) =>
+    ipcRenderer.invoke("package-manager:migrate-to-pesde", projectPath),
+  packageManagerMigrateToWally: (projectPath: string, options?: { force?: boolean }) =>
+    ipcRenderer.invoke("package-manager:migrate-to-wally", projectPath, options),
 
   // ── Event Listeners ─────────────────────────────────────────────────────────
   on: (channel: string, callback: (...args: unknown[]) => void): (() => void) => {
@@ -387,6 +456,15 @@ const api = {
 
   // ── UI Scale ──────────────────────────────────────────────────────────────
   setZoomFactor: (factor: number) => webFrame.setZoomFactor(factor),
+
+  // ── Window / Titlebar ────────────────────────────────────────────────────
+  // Exposed to the renderer because the OS draws min/max/close *inside* our
+  // titlebar (titleBarOverlay) — it can't read our CSS variables, so theme
+  // changes need to be pushed.
+  platform: process.platform,
+  setTitleBarOverlay: (opts: { color: string; symbolColor: string }): Promise<void> =>
+    ipcRenderer.invoke("window:set-overlay-colors", opts),
+  windowIsMaximized: (): Promise<boolean> => ipcRenderer.invoke("window:is-maximized"),
 
   // ── Sentry context (sync, called once at renderer boot) ──────────────────
   sentryGetContext: (): {
@@ -413,14 +491,11 @@ const api = {
 
 if (process.contextIsolated) {
   try {
-    contextBridge.exposeInMainWorld("electron", electronAPI)
     contextBridge.exposeInMainWorld("api", api)
   } catch (error) {
     console.error(error)
   }
 } else {
-  // @ts-ignore
-  window.electron = electronAPI
   // @ts-ignore
   window.api = api
 }

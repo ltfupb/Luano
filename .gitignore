@@ -49,8 +49,9 @@ resources/binaries/
 # Test coverage
 coverage/
 
-# Claude Code local settings
-.claude/
+# Claude Code local settings (per-developer; skill/agent definitions ARE tracked)
+.claude/settings.local.json
+.claude/worktrees/
 
 # Pro files are tracked in the private repo.
 # Public mirror excludes them via .mirror-exclude.
@@ -58,6 +59,10 @@ coverage/
 # Temp files
 tsc_*.txt
 .gstack/
+
+# /audit (multi-pass-review skill) output — large AI review reports, regenerated on demand
+review/
+review-pass*/
 
 # User test Rojo project scaffolding (accidentally committed 2524270, untracked after)
 /default.project.json

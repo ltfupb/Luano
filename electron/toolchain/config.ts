@@ -28,7 +28,7 @@ export function hasProjectConfig(projectPath: string): boolean {
 export function initProjectConfig(projectPath: string): void {
   if (hasProjectConfig(projectPath)) return
   const config: ProjectToolchain = {}
-  const cats: ToolCategory[] = ["sync", "linter", "formatter", "lsp"]
+  const cats: ToolCategory[] = ["sync", "linter", "formatter", "lsp", "package-manager"]
   for (const cat of cats) {
     const tool = getActiveTool(cat, projectPath)
     if (tool) config[cat] = tool
@@ -114,7 +114,7 @@ export function getToolchainConfig(projectPath?: string, projectOnly = false): {
   selections: Partial<Record<ToolCategory, string | null>>
   installed: Record<string, boolean>
 } {
-  const categories: ToolCategory[] = ["sync", "linter", "formatter", "lsp"]
+  const categories: ToolCategory[] = ["sync", "linter", "formatter", "lsp", "package-manager"]
   const selections: Partial<Record<ToolCategory, string | null>> = {}
   const installed: Record<string, boolean> = {}
 

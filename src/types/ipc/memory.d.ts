@@ -14,8 +14,5 @@ interface MemoryApi {
   } | null>
   memoryDelete: (projectPath: string, id: string) => Promise<boolean>
   memoryContext: (projectPath: string) => Promise<string>
-  memoryAutoDetect: (projectPath: string, userMsg: string, assistantMsg: string) => Promise<Array<{
-    id: string; type: string; content: string
-  }>>
   instructionsLoad: (projectPath: string) => Promise<string>
 }

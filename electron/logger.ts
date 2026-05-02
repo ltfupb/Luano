@@ -1,6 +1,6 @@
 import { app } from "electron"
 import { join } from "path"
-import { appendFileSync, mkdirSync, existsSync, readdirSync, unlinkSync, statSync } from "fs"
+import { appendFileSync, mkdirSync, existsSync, readdirSync, unlinkSync, statSync, renameSync } from "fs"
 
 const MAX_LOG_FILES = 5
 const MAX_LOG_SIZE = 5 * 1024 * 1024 // 5 MB
@@ -31,6 +31,24 @@ function rotateOldLogs(): void {
   } catch { /* ignore */ }
 }
 
+/**
+ * Rotate the current log file out of the way by renaming it with a
+ * numeric suffix. Called when the active log exceeds MAX_LOG_SIZE so new
+ * lines can still be written instead of silently dropped.
+ */
+function rotateCurrentLog(): void {
+  try {
+    if (!existsSync(logFile)) return
+    // Find a non-conflicting suffix (e.g. luano-2026-04-24.1.log)
+    const base = logFile.replace(/\.log$/, "")
+    let idx = 1
+    while (existsSync(`${base}.${idx}.log`)) idx++
+    renameSync(logFile, `${base}.${idx}.log`)
+    // Enforce file count cap now that we added one.
+    rotateOldLogs()
+  } catch { /* ignore — next write will retry */ }
+}
+
 function format(a: unknown): string {
   if (typeof a === "string") return a
   if (a instanceof Error) return a.stack ? a.stack : `${a.name}: ${a.message}`
@@ -58,8 +76,11 @@ function write(level: string, ...args: unknown[]): void {
   }
 
   try {
-    // Skip if file too large
-    if (existsSync(logFile) && statSync(logFile).size > MAX_LOG_SIZE) return
+    // If the active log is past the size limit, rotate it out before
+    // writing — don't silently drop the line.
+    if (existsSync(logFile) && statSync(logFile).size > MAX_LOG_SIZE) {
+      rotateCurrentLog()
+    }
     appendFileSync(logFile, line, "utf-8")
   } catch { /* disk full or locked — skip silently */ }
 }

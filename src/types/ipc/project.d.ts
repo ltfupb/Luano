@@ -3,4 +3,5 @@ interface ProjectApi {
   openProject: (path: string) => Promise<{ success: boolean; lspPort: number }>
   closeProject: () => Promise<{ success: boolean }>
   initProject: (path: string) => Promise<{ success: boolean }>
+  untrustProject: (path: string) => Promise<{ success: boolean; error?: string }>
 }

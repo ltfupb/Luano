@@ -71,24 +71,22 @@ describe("shouldShowProOnboarding / markProOnboardingDone", () => {
 })
 
 describe("ProOnboardingOverlay state machine", () => {
-  it("renders step 1 of 5 initially", () => {
+  it("renders step 1 of 3 initially", () => {
     render(<ProOnboardingOverlay onDone={vi.fn()} />)
     expect(screen.getByText("You're Pro")).toBeInTheDocument()
-    expect(screen.getByText("1 / 5")).toBeInTheDocument()
+    expect(screen.getByText("1 / 3")).toBeInTheDocument()
   })
 
-  it("advances through all 5 steps with Next button", () => {
+  it("advances through all 3 steps with Next button", () => {
     render(<ProOnboardingOverlay onDone={vi.fn()} />)
     const titles = [
       "You're Pro",
-      "Managed AI — no key needed",
-      "Agent & Plan Mode",
-      "Inline Edit",
+      "What's new",
       "Ready",
     ]
     for (let i = 0; i < titles.length; i++) {
       expect(screen.getByText(titles[i])).toBeInTheDocument()
-      expect(screen.getByText(`${i + 1} / 5`)).toBeInTheDocument()
+      expect(screen.getByText(`${i + 1} / 3`)).toBeInTheDocument()
       if (i < titles.length - 1) {
         fireEvent.click(screen.getByRole("button", { name: "Next" }))
       }
@@ -98,7 +96,7 @@ describe("ProOnboardingOverlay state machine", () => {
   it("final step button reads 'Let's go' instead of 'Next'", () => {
     render(<ProOnboardingOverlay onDone={vi.fn()} />)
     // Advance to last step
-    for (let i = 0; i < 4; i++) {
+    for (let i = 0; i < 2; i++) {
       fireEvent.click(screen.getByRole("button", { name: "Next" }))
     }
     expect(screen.getByRole("button", { name: "Let's go" })).toBeInTheDocument()
@@ -107,7 +105,7 @@ describe("ProOnboardingOverlay state machine", () => {
   it("last-step Next calls markProOnboardingDone + onDone", () => {
     const onDone = vi.fn()
     render(<ProOnboardingOverlay onDone={onDone} />)
-    for (let i = 0; i < 4; i++) {
+    for (let i = 0; i < 2; i++) {
       fireEvent.click(screen.getByRole("button", { name: "Next" }))
     }
     fireEvent.click(screen.getByRole("button", { name: "Let's go" }))
@@ -146,17 +144,17 @@ describe("ProOnboardingOverlay accessibility", () => {
 
   it("Enter key advances to next step", () => {
     render(<ProOnboardingOverlay onDone={vi.fn()} />)
-    expect(screen.getByText("1 / 5")).toBeInTheDocument()
+    expect(screen.getByText("1 / 3")).toBeInTheDocument()
     act(() => {
       fireEvent.keyDown(document, { key: "Enter" })
     })
-    expect(screen.getByText("2 / 5")).toBeInTheDocument()
+    expect(screen.getByText("2 / 3")).toBeInTheDocument()
   })
 
   it("Enter on last step triggers onDone", () => {
     const onDone = vi.fn()
     render(<ProOnboardingOverlay onDone={onDone} />)
-    for (let i = 0; i < 4; i++) {
+    for (let i = 0; i < 2; i++) {
       act(() => {
         fireEvent.keyDown(document, { key: "Enter" })
       })

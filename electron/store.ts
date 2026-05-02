@@ -1,12 +1,22 @@
 import { app, safeStorage, dialog } from "electron"
-import { join } from "path"
-import { existsSync, readFileSync, writeFileSync, mkdirSync, renameSync, openSync, closeSync, fsyncSync, unlinkSync } from "fs"
+import { join, dirname, basename } from "path"
+import { existsSync, readFileSync, writeFileSync, mkdirSync, renameSync, openSync, closeSync, fsyncSync, unlinkSync, readdirSync } from "fs"
 import { randomUUID } from "node:crypto"
 import { log } from "./logger"
 
 // Keys that contain secrets and should be encrypted at rest.
 // Supports both string values (apiKey etc.) and object values (license).
 const ENCRYPTED_KEYS = new Set(["apiKey", "openaiKey", "geminiKey", "license"])
+
+// Secret-shaped key-name matcher for defense in depth. Any `set()` for a key
+// matching this pattern refuses to persist plaintext to disk if the OS
+// keychain is unavailable — the value goes to an in-memory fallback instead.
+const SECRET_KEY_PATTERN = /key|token|secret|password|credential/i
+
+// In-memory fallback for secrets when OS keychain is unavailable. Scope is
+// the lifetime of the process — the user loses the value on restart, which
+// is strictly better than leaking it to disk in plaintext.
+const memorySecrets = new Map<string, unknown>()
 
 // Simple JSON file-based store with safeStorage encryption (replaces electron-store)
 class SimpleStore {
@@ -29,7 +39,32 @@ class SimpleStore {
         this.data = JSON.parse(readFileSync(this.filePath, "utf-8"))
       }
     } catch (err) {
-      log.warn("Config file corrupted or unreadable, starting fresh", err)
+      // M7: back up the corrupted config before resetting so the user has a
+      // recovery path. Use a timestamped suffix and prune to the most recent
+      // 3 backups — a corrupt-config-on-startup loop would otherwise overwrite
+      // a single .bak with each successive corrupt version, eventually
+      // destroying the original good copy.
+      log.warn("Config file corrupted or unreadable, backing up and starting fresh", err)
+      try {
+        if (existsSync(this.filePath)) {
+          const backupPath = `${this.filePath}.bak.${Date.now()}`
+          writeFileSync(backupPath, readFileSync(this.filePath))
+          log.info(`Config backup written to ${backupPath}`)
+          // Retain only the 3 most recent backups for this config file.
+          const dir = dirname(this.filePath)
+          const prefix = `${basename(this.filePath)}.bak.`
+          const backups = readdirSync(dir)
+            .filter((n) => n.startsWith(prefix))
+            .map((n) => ({ name: n, ts: Number(n.slice(prefix.length)) }))
+            .filter((b) => Number.isFinite(b.ts))
+            .sort((a, b) => b.ts - a.ts)
+          for (const stale of backups.slice(3)) {
+            try { unlinkSync(join(dir, stale.name)) } catch { /* ignore */ }
+          }
+        }
+      } catch (backupErr) {
+        log.warn("Config backup failed", backupErr)
+      }
       this.data = {}
     }
   }
@@ -104,9 +139,25 @@ class SimpleStore {
   }
 
   get<T>(key: string): T | undefined {
+    // In-memory fallback takes priority — a secret that went to memory in
+    // this session should be visible to the rest of the process.
+    if (memorySecrets.has(key)) return memorySecrets.get(key) as T | undefined
+
     const raw = this.data[key]
     if (ENCRYPTED_KEYS.has(key) && typeof raw === "string" && raw) {
       const decrypted = this.decrypt(raw)
+      // If the stored value equals the decrypted value, the value was stored
+      // in plaintext (decrypt() returns the input on failure). Attempt to
+      // re-encrypt, but do NOT swallow errors — if set() throws we still want
+      // to return the decrypted value to the caller while surfacing the
+      // migration failure.
+      if (decrypted === raw && safeStorage.isEncryptionAvailable()) {
+        try {
+          this.set(key, this.tryParseJson(decrypted))
+        } catch (err) {
+          log.warn(`[store] Failed to migrate legacy plaintext value for "${key}" to encrypted form`, err)
+        }
+      }
       try {
         return JSON.parse(decrypted) as T
       } catch {
@@ -119,15 +170,40 @@ class SimpleStore {
     // would have been handled by the branch above (decrypt+return), so reaching
     // here with a string means it was somehow stored unencrypted as a string.
     if (ENCRYPTED_KEYS.has(key) && raw != null && typeof raw !== "string") {
-      this.set(key, raw)
+      try {
+        this.set(key, raw)
+      } catch (err) {
+        log.warn(`[store] Failed to migrate legacy unencrypted value for "${key}"`, err)
+      }
     }
     return raw as T | undefined
   }
 
+  private tryParseJson(s: string): unknown {
+    try { return JSON.parse(s) } catch { return s }
+  }
+
   set(key: string, value: unknown): void {
-    if (ENCRYPTED_KEYS.has(key) && value != null) {
+    const isSecretShaped = ENCRYPTED_KEYS.has(key) || SECRET_KEY_PATTERN.test(key)
+    if (isSecretShaped && value != null) {
+      if (!safeStorage.isEncryptionAvailable()) {
+        // Refuse to write secrets to disk in plaintext. Hold them in memory
+        // for this session instead. Caller-visible behavior: get() returns
+        // the value while the process is alive, but it's gone on restart.
+        this.warnIfEncryptionMissing()
+        log.warn(`[store] Refusing to persist secret "${key}" to disk without OS keychain; kept in memory only`)
+        memorySecrets.set(key, value)
+        // Also purge any legacy on-disk copy to avoid leaking stale secret.
+        if (key in this.data) {
+          delete this.data[key]
+          this.save()
+        }
+        return
+      }
       const serialized = typeof value === "string" ? value : JSON.stringify(value)
       this.data[key] = this.encrypt(serialized)
+      // Drop any in-memory fallback now that we have a real encrypted copy.
+      memorySecrets.delete(key)
     } else {
       this.data[key] = value
     }
@@ -136,6 +212,7 @@ class SimpleStore {
 
   delete(key: string): void {
     delete this.data[key]
+    memorySecrets.delete(key)
     this.save()
   }
 }

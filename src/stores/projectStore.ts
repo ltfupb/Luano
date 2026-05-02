@@ -128,6 +128,11 @@ export const useProjectStore = create<ProjectStore>()(
     {
       name: "luano-project",
       storage: createJSONStorage(() => localStorage),
+      version: 1,
+      migrate: (persistedState, _version) => {
+        // Identity migration for v1. Future key renames / defaults go here.
+        return persistedState as ProjectStore
+      },
       // Exclude file contents (too large) — reloaded on restart
       partialize: (state) => ({
         projectPath: state.projectPath,

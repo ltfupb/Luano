@@ -6,13 +6,20 @@ import { log } from "../logger"
 
 const MAX_AUTO_RETRIES = 5
 const BASE_DELAY_MS = 2000
-const MAX_DELAY_MS = 30000
+// Cap backoff at 10s — with 1.5^(n-1) growth and 5 retries, uncapped would
+// hit ~10s anyway, but the cap keeps total retry window bounded if constants
+// are later tuned. Keep formula explicit so intent is clear.
+const MAX_DELAY_MS = 10000
 
 export class LspManager {
   private proc: ChildProcess | null = null
   private bridge: LspBridge | null = null
   private projectPath: string | null = null
   private retryCount = 0
+  /** Pending retry timer from handleExit — cleared in stop() so a
+   *  retry fire doesn't spawn a second luau-lsp against the same port
+   *  after the user explicitly stopped. */
+  private retryTimer: NodeJS.Timeout | null = null
   readonly port = 6008
 
   /** User-initiated start. Resets retry budget. */
@@ -92,7 +99,7 @@ export class LspManager {
       log.error("[lsp] failed to start luau-lsp:", err)
       // Bridge or spawn failed — clean up the proc so we don't leak it.
       if (proc && !proc.killed) {
-        try { proc.kill() } catch { /* ignore */ }
+        try { proc.kill() } catch (killErr) { log.debug("[lsp] cleanup kill failed:", killErr) }
       }
       this.proc = null
       this.bridge = null
@@ -131,7 +138,8 @@ export class LspManager {
     BrowserWindow.getAllWindows().forEach((win) =>
       win.webContents.send("sidecar:lsp-status", { status: "starting", port: this.port })
     )
-    setTimeout(() => {
+    this.retryTimer = setTimeout(() => {
+      this.retryTimer = null
       if (this.projectPath === path) {
         this.spawnProcess(path).catch((e) => log.error("[lsp] retry failed:", e))
       }
@@ -146,9 +154,18 @@ export class LspManager {
     this.projectPath = null
     this.retryCount = 0
 
+    // Cancel any pending retry timer. Without this, a user who stops then
+    // reopens the same project within the backoff window could see the
+    // stale timer still fire and spawn a duplicate luau-lsp → EADDRINUSE
+    // on port 6008.
+    if (this.retryTimer !== null) {
+      clearTimeout(this.retryTimer)
+      this.retryTimer = null
+    }
+
     bridge?.stop()
     if (proc && !proc.killed) {
-      try { proc.kill() } catch { /* ignore */ }
+      try { proc.kill() } catch (err) { log.debug("[lsp] stop kill failed:", err) }
     }
 
     BrowserWindow.getAllWindows().forEach((win) =>

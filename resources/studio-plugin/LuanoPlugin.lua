@@ -135,6 +135,7 @@ end
 
 -- ── Main heartbeat loop ───────────────────────────────────────────────────────
 local lastReport = 0
+local lastSuccessAt = nil  -- tick() of the most recent 2xx /api/report
 
 RunService.Heartbeat:Connect(function()
 	local now = tick()
@@ -174,6 +175,7 @@ RunService.Heartbeat:Connect(function()
 		warn("[Luano] bridge POST failed:", response.StatusCode, response.StatusMessage)
 		return
 	end
+	lastSuccessAt = now
 
 	-- Process commands from Luano
 	local decodeOk, data = pcall(HttpService.JSONDecode, HttpService, response.Body)
@@ -181,6 +183,28 @@ RunService.Heartbeat:Connect(function()
 
 	for _, cmd in ipairs(data.commands) do
 		task.spawn(execCommand, cmd)
+	end
+end)
+
+-- ── Toolbar (so the plugin is visible in Studio's Plugins tab) ────────────────
+-- A Studio plugin only appears in the Plugins ribbon if it registers a
+-- toolbar button. Without this the script still runs but is invisible to
+-- the user. The button doubles as a manual "is the bridge live?" probe —
+-- clicking it prints connection state to Output.
+local toolbar = plugin:CreateToolbar("Luano")
+local statusButton = toolbar:CreateButton(
+	"LuanoStatus",
+	"Print Luano bridge status to Output.",
+	"",  -- empty icon → Studio shows a default placeholder
+	"Status"
+)
+
+statusButton.Click:Connect(function()
+	print("[Luano] Bridge endpoint: " .. BASE_URL)
+	if lastSuccessAt then
+		print(string.format("[Luano] Last successful heartbeat: %.1fs ago", tick() - lastSuccessAt))
+	else
+		print("[Luano] No successful heartbeat yet — is Luano running?")
 	end
 end)
 

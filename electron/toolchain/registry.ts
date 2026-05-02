@@ -5,7 +5,7 @@
  * Each tool has download URLs, version info, and category classification.
  */
 
-export type ToolCategory = "sync" | "linter" | "formatter" | "lsp"
+export type ToolCategory = "sync" | "linter" | "formatter" | "lsp" | "package-manager"
 
 export interface ToolDefinition {
   id: string
@@ -34,9 +34,11 @@ export interface ToolDefinition {
    * install an archive whose hash doesn't match — this is the fence
    * against CDN takeover / compromised release tooling.
    *
-   * Only the pinned version in this registry is verified; `checkToolUpdates`
-   * pulls newer versions by asset-keyword match and currently runs without
-   * hash verification (see downloader.ts `downloadFromUrl`).
+   * SECURITY CONTRACT: every install path in downloader.ts MUST provide
+   * an expectedSha256. Install is refused otherwise. The field is
+   * optional only because update detection (`checkToolUpdates`) advertises
+   * a new version only if its sha256 is published upstream — a newer
+   * version without a pinned sha256 is simply not offered as an update.
    */
   sha256?: {
     win: string
@@ -178,6 +180,58 @@ export const TOOL_REGISTRY: Record<string, ToolDefinition> = {
       mac:   "df2a913f8c101683d56d802461ab2ac77c98cab6b03644d04506b6a78cec23ad",
       linux: "6cf618104dbe5a6d7c30784f7136ccb9d912cb1ca4942013df81d9ab9bd18921"
     }
+  },
+  wally: {
+    id: "wally",
+    name: "Wally",
+    description: "Roblox package manager",
+    category: "package-manager",
+    recommended: false,
+    version: "0.3.2",
+    github: "UpliftGames/wally",
+    binaryName: "wally",
+    configFiles: ["wally.toml"],
+    assetKeywords: {
+      win:   ["win64"],
+      mac:   ["macos"],
+      linux: ["linux"]
+    },
+    releaseUrls: {
+      win:   ghRelease("UpliftGames/wally", "v0.3.2", "wally-v0.3.2-win64.zip"),
+      mac:   ghRelease("UpliftGames/wally", "v0.3.2", "wally-v0.3.2-macos.zip"),
+      linux: ghRelease("UpliftGames/wally", "v0.3.2", "wally-v0.3.2-linux.zip")
+    },
+    sha256: {
+      win:   "957dd85c1f0626007018a252cf099b75e1e23d9a181c4830b66cf298707d8fb7",
+      mac:   "f743afd894bd41f285fd45f638f368af6f01f77078ae140f2991a3fb4612d2f0",
+      linux: "21fdbb53dfee397fd21ca7fdd208db65cff0f87f0fd045cdb594b951981bd73f"
+    }
+  },
+  pesde: {
+    id: "pesde",
+    name: "pesde",
+    description: "Modern package manager for Luau, Roblox, and Lune",
+    category: "package-manager",
+    recommended: false,
+    version: "0.7.3",
+    github: "pesde-pkg/pesde",
+    binaryName: "pesde",
+    configFiles: ["pesde.toml"],
+    assetKeywords: {
+      win:   ["windows", "x86_64"],
+      mac:   ["macos", "aarch64"],
+      linux: ["linux", "x86_64"]
+    },
+    releaseUrls: {
+      win:   ghRelease("pesde-pkg/pesde", "v0.7.3+registry.0.2.3", "pesde-0.7.3-windows-x86_64.zip"),
+      mac:   ghRelease("pesde-pkg/pesde", "v0.7.3+registry.0.2.3", "pesde-0.7.3-macos-aarch64.zip"),
+      linux: ghRelease("pesde-pkg/pesde", "v0.7.3+registry.0.2.3", "pesde-0.7.3-linux-x86_64.zip")
+    },
+    sha256: {
+      win:   "a4f497b2e32fb0d25964360012c10bbaf91c8d11c3b783ae61e4be2ca9a8be51",
+      mac:   "cd527bea52fcd83ce0a0ea06dff0a0720f23f1d23460c054ce1eb29fee425108",
+      linux: "425e2b4b1478fa7a3aad49c65953383c5d4c3e3122c202796efc70c2f91e69db"
+    }
   }
 }
 
@@ -187,7 +241,8 @@ export const CATEGORIES: { id: ToolCategory; label: string; allowNone: boolean }
   { id: "sync",            label: "Sync",             allowNone: false },
   // Optional — quality-of-life tools
   { id: "linter",          label: "Linter",           allowNone: true  },
-  { id: "formatter",       label: "Formatter",        allowNone: true  }
+  { id: "formatter",       label: "Formatter",        allowNone: true  },
+  { id: "package-manager", label: "Package Manager",  allowNone: true  }
 ]
 
 export function getToolsForCategory(category: ToolCategory): ToolDefinition[] {

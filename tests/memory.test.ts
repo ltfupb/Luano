@@ -5,7 +5,6 @@ import {
   getMemories, addMemory, updateMemory, deleteMemory,
   getMemoriesByType, buildMemoryContext, buildMemoryIndex, buildMemoryDetail,
   loadInstructions,
-  buildMemoryDetectPrompt, parseMemoryDetectResponse,
   estimateTokens, estimateMessagesTokens,
   buildCompressionPrompt
 } from "../electron/ai/memory"
@@ -157,40 +156,6 @@ describe("loadInstructions", () => {
     const result = loadInstructions(TEST_DIR)
     expect(result).toContain("# Project Rules")
     expect(result).toContain("Use strict mode")
-  })
-})
-
-describe("Auto Memory Detection", () => {
-  it("builds detection prompt from conversation", () => {
-    const prompt = buildMemoryDetectPrompt("I prefer OOP", "Got it, I'll use OOP")
-    expect(prompt).toContain("User: I prefer OOP")
-    expect(prompt).toContain("Assistant: Got it")
-  })
-
-  it("parses NONE response", () => {
-    const result = parseMemoryDetectResponse("NONE", TEST_DIR)
-    expect(result).toEqual([])
-  })
-
-  it("parses valid memory lines", () => {
-    const response = "user|Prefers OOP coding style\nfeedback|No trailing summaries"
-    const result = parseMemoryDetectResponse(response, TEST_DIR)
-    expect(result).toHaveLength(2)
-    expect(result[0].type).toBe("user")
-    expect(result[1].type).toBe("feedback")
-  })
-
-  it("skips duplicate memories", () => {
-    addMemory(TEST_DIR, "user", "Prefers OOP coding style")
-    const response = "user|Prefers OOP coding style"
-    const result = parseMemoryDetectResponse(response, TEST_DIR)
-    expect(result).toHaveLength(0)
-  })
-
-  it("ignores invalid lines", () => {
-    const response = "invalid line\nuser|valid memory\nrandom|bad type"
-    const result = parseMemoryDetectResponse(response, TEST_DIR)
-    expect(result).toHaveLength(1)
   })
 })
 

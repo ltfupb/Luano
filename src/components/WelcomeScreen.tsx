@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react"
 import { useT } from "../i18n/useT"
 import { useSettingsStore } from "../stores/settingsStore"
 
@@ -17,7 +18,15 @@ export function WelcomeScreen({ onOpenFolder, onNewProject, onOpenRecent, onOpen
   const geminiKey = useSettingsStore((s) => s.geminiKey)
   const localEndpoint = useSettingsStore((s) => s.localEndpoint)
   const localModel = useSettingsStore((s) => s.localModel)
-  const aiConfigured = Boolean(apiKey || openaiKey || geminiKey || (localEndpoint && localModel))
+  const provider = useSettingsStore((s) => s.provider)
+  const [isPro, setIsPro] = useState(false)
+  useEffect(() => {
+    window.api.getProStatus().then((s: { isPro: boolean }) => setIsPro(s.isPro)).catch(() => {})
+  }, [])
+  // Pro + Managed AI counts as configured even without a BYOK key — the
+  // managed client uses Anthropic credentials provisioned server-side.
+  const aiConfigured = (isPro && provider === "managed")
+    || Boolean(apiKey || openaiKey || geminiKey || (localEndpoint && localModel))
 
   return (
     <div className="flex-1 flex flex-col items-center justify-center animate-fade-in" style={{ gap: "32px" }}>

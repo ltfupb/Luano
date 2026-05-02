@@ -22,9 +22,41 @@ interface ToolchainApi {
     downloadUrl: string
   }>>
   toolchainFetchMetadata: () => Promise<Record<string, { license: string | null; updatedAt: string | null }>>
-  toolchainUpdateTool: (toolId: string, downloadUrl: string, latestVersion?: string) => Promise<{ success: boolean; error?: string }>
+  // downloadUrl removed: handler ignores renderer-supplied URLs (M3 fix)
+  toolchainUpdateTool: (toolId: string, latestVersion?: string) => Promise<{ success: boolean; error?: string }>
   toolchainDownloadMultiple: (toolIds: string[]) => Promise<Record<string, { success: boolean; error?: string }>>
   toolchainIsMinimumReady: () => Promise<boolean>
   toolchainHasProjectConfig: (projectPath: string) => Promise<boolean>
-  toolchainInitProjectConfig: (projectPath: string) => Promise<{ success: boolean }>
+  toolchainInitProjectConfig: (projectPath: string) => Promise<{ success: boolean; error?: string }>
+  packageManagerRun: (
+    projectPath: string,
+    command: "init" | "install" | "update" | "add",
+    packageName?: string
+  ) => Promise<{
+    success: boolean
+    output?: string
+    error?: string
+    tool?: string
+  }>
+  packageManagerMigrateToPesde: (projectPath: string) => Promise<{
+    success: boolean
+    error?: string
+    migratedCount?: number
+    unmappedCount?: number
+    pesdeTomlPath?: string
+    backupPath?: string
+  }>
+  packageManagerMigrateToWally: (
+    projectPath: string,
+    options?: { force?: boolean }
+  ) => Promise<{
+    success: boolean
+    notSupported?: boolean
+    /** Set when wally.toml.bak is older than current pesde.toml — caller should
+     *  confirm with the user before re-invoking with `{ force: true }`. */
+    staleBackup?: { backupPath: string; backupAgeDays: number; pesdeAgeDays: number }
+    error?: string
+    wallyTomlPath?: string
+    backupPath?: string
+  }>
 }

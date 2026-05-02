@@ -2,6 +2,19 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Hide native spinner buttons on number inputs in inline editors. The default
+   ▲▼ stepper crowds out adjacent inputs in narrow panels and adds visual
+   noise — keyboard ↑↓ still works. */
+input[type="number"].no-spinner::-webkit-inner-spin-button,
+input[type="number"].no-spinner::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"].no-spinner {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
 /* ── Dark theme (VS Code style) ──────────────────────────────── */
 :root,
 [data-theme="dark"] {
@@ -23,7 +36,9 @@
   --text-ghost: #6e6e6e;
   --success: #4ec9b0;
   --warning: #dcdcaa;
+  --warning-muted: rgba(220, 220, 170, 0.15);
   --danger: #f44747;
+  --danger-muted: rgba(244, 71, 71, 0.1);
   --info: #60a5fa;
 }
 
@@ -47,7 +62,9 @@
   --text-ghost: #9a9a9a;
   --success: #16a34a;
   --warning: #ca8a04;
+  --warning-muted: rgba(202, 138, 4, 0.15);
   --danger: #dc2626;
+  --danger-muted: rgba(220, 38, 38, 0.08);
   --info: #2563eb;
 }
 
@@ -71,7 +88,9 @@
   --text-ghost: #565e7e;
   --success: #73daca;
   --warning: #e0af68;
+  --warning-muted: rgba(224, 175, 104, 0.15);
   --danger: #f7768e;
+  --danger-muted: rgba(247, 118, 142, 0.1);
   --info: #7aa2f7;
 }
 
@@ -159,6 +178,19 @@ button.no-press-scale:active {
   to   { opacity: 1; transform: translateY(0); }
 }
 
+/*
+ * Pure opacity fade — no transform. The default fadeIn slides up by 4px,
+ * which works for top-level overlays (modals, toasts) but creates a
+ * visible "compression" against the next sibling row when used inside a
+ * tight vertical list (e.g., FileExplorer expanding a folder pushes the
+ * children 4px closer to the next folder for the duration of the animation).
+ * Use this in flow-layout list expansions instead.
+ */
+@keyframes fadeInOpacity {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
 @keyframes slideUp {
   from { opacity: 0; transform: translateY(10px); }
   to   { opacity: 1; transform: translateY(0); }
@@ -214,6 +246,7 @@ button.no-press-scale:active {
 
 /* ── Utility classes ─────────────────────────────────────────── */
 .animate-fade-in      { animation: fadeIn 0.18s ease-out both; }
+.animate-fade-in-only { animation: fadeInOpacity 0.15s ease-out both; }
 .animate-slide-up     { animation: slideUp 0.2s ease-out both; }
 .animate-slide-in-right { animation: slideInRight 0.22s ease-out both; }
 .animate-slide-down     { animation: slideDown 0.2s ease-out both; }

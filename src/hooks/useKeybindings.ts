@@ -12,12 +12,37 @@ export interface Keybinding {
   handler: (e: KeyboardEvent) => void
 }
 
+/** Normalize a binding into a deterministic string we can dedupe on. */
+function comboKey(b: Keybinding): string {
+  return [
+    b.ctrl ? "ctrl" : "",
+    b.meta ? "meta" : "",
+    b.shift ? "shift" : "",
+    b.alt ? "alt" : "",
+    b.key.toLowerCase()
+  ].filter(Boolean).join("+")
+}
+
 /**
  * Register global keyboard shortcuts.
- * Runs cleanup on unmount.
+ * Runs cleanup on unmount. Duplicate combos within the same bindings array
+ * emit a console.warn — previously the first-registered combo silently won
+ * (via `break`) and the duplicate was dead code, which hid real bugs when
+ * two features raced to claim the same shortcut.
  */
 export function useKeybindings(bindings: Keybinding[]): void {
   useEffect(() => {
+    const seen = new Set<string>()
+    for (const binding of bindings) {
+      const combo = comboKey(binding)
+      if (seen.has(combo)) {
+        // eslint-disable-next-line no-console
+        console.warn(`[useKeybindings] Duplicate binding for "${combo}" — only the first registration will fire.`)
+      } else {
+        seen.add(combo)
+      }
+    }
+
     const onKeyDown = (e: KeyboardEvent) => {
       for (const binding of bindings) {
         const ctrlMatch  = binding.ctrl  ? (e.ctrlKey  || e.metaKey) : !e.ctrlKey && !e.metaKey

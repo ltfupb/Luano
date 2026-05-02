@@ -7,6 +7,7 @@
 
 import { hostname } from "os"
 import { store } from "../store"
+import { log } from "../logger"
 
 const LS_API = "https://api.lemonsqueezy.com/v1/licenses"
 const LUANO_PRODUCT_ID = 937627
@@ -84,12 +85,18 @@ export async function activateLicense(key: string): Promise<{
     }
 
     if (data.meta.product_id !== LUANO_PRODUCT_ID) {
-      // Deactivate the wrongly-activated instance
-      fetch(`${LS_API}/deactivate`, {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: new URLSearchParams({ license_key: key, instance_id: data.instance.id })
-      }).catch(() => {})
+      // Deactivate the wrongly-activated instance. Await so the user's
+      // license slot is freed before we return the error — otherwise a
+      // quick retry could race and hit "already activated" on LS side.
+      try {
+        await fetch(`${LS_API}/deactivate`, {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams({ license_key: key, instance_id: data.instance.id })
+        })
+      } catch (err) {
+        log.warn("[license] failed to deactivate wrong-product instance:", err)
+      }
       return { success: false, error: "This license key is not for Luano" }
     }
 

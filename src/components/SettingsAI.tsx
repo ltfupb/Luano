@@ -2,6 +2,7 @@ import { useState, useEffect } from "react"
 import { useSettingsStore } from "../stores/settingsStore"
 import { useT } from "../i18n/useT"
 import { track, Events } from "../analytics"
+import { toast } from "./Toast"
 
 interface ModelEntry { id: string; label: string }
 export interface ProviderModels { anthropic: ModelEntry[]; openai: ModelEntry[]; gemini: ModelEntry[]; local: ModelEntry[] }
@@ -145,9 +146,10 @@ const KEY_CONFIGS: Record<string, { translationKey: string; placeholder: string;
 
 // ── Component ────────────────────────────────────────────────────────────────
 
-export function SettingsAI({ models, setModels }: {
+export function SettingsAI({ models, setModels, isPro }: {
   models: ProviderModels
   setModels: React.Dispatch<React.SetStateAction<ProviderModels>>
+  isPro: boolean
 }): JSX.Element {
   const {
     apiKey, setApiKey, openaiKey, setOpenAIKey, geminiKey, setGeminiKey,
@@ -163,7 +165,11 @@ export function SettingsAI({ models, setModels }: {
   const [managedUsage, setManagedUsage] = useState<ManagedUsage | null>(null)
   const [managedUsageLoading, setManagedUsageLoading] = useState(false)
   const [managedUsageFailed, setManagedUsageFailed] = useState(false)
-  const isManaged = provider === "managed"
+  // Treat as managed only when Pro is active. If a non-Pro user somehow has
+  // `provider === "managed"` persisted (license deactivated mid-session), we
+  // hide the Managed UI entirely and let them pick a BYOK provider instead.
+  // The actual main-process getManagedClient() also fails fast in that state.
+  const isManaged = isPro && provider === "managed"
 
   useEffect(() => {
     if (provider === "local" && !localKeyLoaded) {
@@ -189,7 +195,13 @@ export function SettingsAI({ models, setModels }: {
     const prev = provider
     if (p === prev) return
     if (prev !== "managed" && p === "managed") setPrevByokProvider(prev)
-    await window.api.aiSetProvider(p)
+    const setResult = await window.api.aiSetProvider(p)
+    if (!setResult.success) {
+      toast(`Failed to switch provider: ${setResult.error ?? "unknown error"}`, "error")
+      // Local state is unchanged — the Zustand store still has `prev`, so no
+      // revert needed. Just bail before the refresh + analytics call.
+      return
+    }
     const result = await window.api.aiGetProviderModel()
     setProvider(result.provider)
     setModel(result.model)
@@ -200,7 +212,11 @@ export function SettingsAI({ models, setModels }: {
   }
 
   const handleSetModel = async (m: string) => {
-    await window.api.aiSetModel(m)
+    const setResult = await window.api.aiSetModel(m)
+    if (!setResult.success) {
+      toast(`Failed to switch model: ${setResult.error ?? "unknown error"}`, "error")
+      return
+    }
     setModel(m)
   }
 
@@ -213,7 +229,10 @@ export function SettingsAI({ models, setModels }: {
 
   return (
     <>
-      {/* Managed / BYOK mode selector */}
+      {/* Managed / BYOK mode selector — Pro only. Free users skip this entirely
+          and go straight to the BYOK provider toggle below; the Managed path
+          requires a license key the main process won't accept without Pro. */}
+      {isPro && (
       <div className="flex flex-col gap-2">
         <SectionLabel>{t("aiMode")}</SectionLabel>
         <div className="flex gap-2">
@@ -258,6 +277,7 @@ export function SettingsAI({ models, setModels }: {
           </button>
         </div>
       </div>
+      )}
 
       {/* Managed usage dashboard */}
       {isManaged && (
@@ -379,13 +399,16 @@ export function SettingsAI({ models, setModels }: {
             </select>
           </div>
           <span style={{ fontSize: "10px", color: "var(--text-muted)" }}>
-            Extended thinking budget. Higher = deeper reasoning, slower + more tokens. Matches Claude Code.
+            Extended thinking budget. Higher = deeper reasoning, slower + more tokens.
           </span>
         </div>
       )}
 
-      {/* Advisor Toggle — Anthropic or Managed non-Opus only */}
-      {(isManaged || (provider === "anthropic" && !model.includes("opus"))) && (
+      {/* Advisor Toggle — BYOK Anthropic non-Opus only.
+          Managed intentionally excluded: provider.ts:isAdvisorAvailable() returns
+          false for managed because the Worker meter prices advisor's Opus subagent
+          tokens at Sonnet rates (under-bills). Re-enable here once meter splits. */}
+      {provider === "anthropic" && !model.includes("opus") && (
         <div className="flex flex-col gap-1.5">
           <div className="flex items-center justify-between">
             <SectionLabel>{t("advisor" as never)}</SectionLabel>

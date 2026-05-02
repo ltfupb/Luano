@@ -27,8 +27,13 @@ module.exports = async function afterPack(context) {
 
   // ── D: node-pty — keep only the current platform + arch prebuild ─────────
   // electron-builder Arch enum: ia32=0, x64=1, armv7l=2, arm64=3, universal=9
-  const ARM64 = 3
-  const archName = arch === ARM64 ? "arm64" : "x64"
+  // Explicit mapping + throw on unknown: silently falling back to "x64" on a
+  // new arch (e.g. universal = 9) would ship a broken prebuild layout.
+  const ARCH_NAMES = { 0: "ia32", 1: "x64", 2: "armv7l", 3: "arm64" }
+  const archName = ARCH_NAMES[arch]
+  if (!archName) {
+    throw new Error(`afterPack: unknown electron-builder Arch enum value ${arch}. Update ARCH_NAMES.`)
+  }
   const keep = `${electronPlatformName}-${archName}`
   const prebuilds = path.join(
     appOutDir,

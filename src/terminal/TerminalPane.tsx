@@ -182,7 +182,11 @@ export function TerminalPane({ projectPath, onClose, height }: TerminalPaneProps
     // xterm keystrokes → pty
     const dataSub = term.onData((data) => {
       if (termIdRef.current) {
-        window.api.terminalWrite(termIdRef.current, data)
+        void window.api.terminalWrite(termIdRef.current, data).then(res => {
+          if (res && res.success === false) {
+            console.warn(`[terminal] write failed: ${res.error ?? "unknown"}`)
+          }
+        }).catch((err) => console.warn(`[terminal] write threw:`, err))
       }
     })
 
@@ -192,7 +196,11 @@ export function TerminalPane({ projectPath, onClose, height }: TerminalPaneProps
       unsubExit()
       dataSub.dispose()
       if (termIdRef.current) {
-        window.api.terminalKill(termIdRef.current)
+        void window.api.terminalKill(termIdRef.current).then(res => {
+          if (res && res.success === false) {
+            console.warn(`[terminal] kill failed: ${res.error ?? "unknown"}`)
+          }
+        }).catch((err) => console.warn(`[terminal] kill threw:`, err))
         termIdRef.current = null
       }
       term.dispose()
@@ -210,6 +218,17 @@ export function TerminalPane({ projectPath, onClose, height }: TerminalPaneProps
     }
   }, [boot])
 
+  // ── Live theme swap ──────────────────────────────────────────────────────
+  // `boot` reads the theme via getState() once, so existing terminals wouldn't
+  // pick up subsequent theme changes. Subscribe to the store here and retune
+  // the xterm options on every change without re-creating the pty.
+  const currentTheme = useSettingsStore((s) => s.theme)
+  useEffect(() => {
+    if (termRef.current) {
+      termRef.current.options.theme = TERMINAL_THEMES[currentTheme]
+    }
+  }, [currentTheme])
+
   // ── Fit on height change ────────────────────────────────────────────────
   const rafRef = useRef(0)
 
@@ -221,7 +240,11 @@ export function TerminalPane({ projectPath, onClose, height }: TerminalPaneProps
         if (termIdRef.current) {
           const dims = fitRef.current.proposeDimensions()
           if (dims) {
-            window.api.terminalResize(termIdRef.current, dims.cols, dims.rows)
+            void window.api.terminalResize(termIdRef.current, dims.cols, dims.rows).then(res => {
+              if (res && res.success === false) {
+                console.warn(`[terminal] resize failed: ${res.error ?? "unknown"}`)
+              }
+            }).catch((err) => console.warn(`[terminal] resize threw:`, err))
           }
         }
       }

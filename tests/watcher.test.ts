@@ -22,7 +22,8 @@ const h = vi.hoisted(() => {
   const winSend = vi.fn()
   const win = { webContents: { send: winSend } }
   const mockWatch = vi.fn(() => watcherInstance)
-  return { winSend, win, watcherInstance, mockWatch }
+  const logWarn = vi.fn()
+  return { winSend, win, watcherInstance, mockWatch, logWarn }
 })
 
 vi.mock("electron", () => ({
@@ -31,9 +32,13 @@ vi.mock("electron", () => ({
 vi.mock("chokidar", () => ({ default: { watch: h.mockWatch } }))
 vi.mock("../electron/sidecar/selene", () => ({ lintFile: vi.fn(async () => []) }))
 vi.mock("../electron/sidecar/stylua", () => ({ formatFile: vi.fn(async () => undefined) }))
+vi.mock("../electron/sidecar", () => ({ isBinaryAvailable: vi.fn(() => true) }))
 vi.mock("../electron/toolchain/config", () => ({ getActiveTool: vi.fn(() => null) }))
+vi.mock("../electron/logger", () => ({
+  log: { info: vi.fn(), warn: h.logWarn, error: vi.fn(), debug: vi.fn() }
+}))
 
-import { watchProject, stopWatcher } from "../electron/file/watcher"
+import { watchProject, stopWatcher, emitSidecarError } from "../electron/file/watcher"
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -75,11 +80,9 @@ describe("watcher", () => {
   })
 
   it("registers an error handler on the watcher (does not crash on error event)", () => {
-    const consoleSpy = vi.spyOn(console, "warn").mockImplementation(() => {})
     watchProject("/proj")
     expect(() => h.watcherInstance.emit("error", new Error("ENOENT"))).not.toThrow()
-    expect(consoleSpy).toHaveBeenCalledWith("[Watcher] FSWatcher error:", expect.any(Error))
-    consoleSpy.mockRestore()
+    expect(h.logWarn).toHaveBeenCalledWith("[Watcher] FSWatcher error:", expect.any(Error))
   })
 
   it("ignores change events on non-Lua files", () => {
@@ -98,5 +101,72 @@ describe("watcher", () => {
     expect(h.watcherInstance.close).toHaveBeenCalledOnce()
     // Advancing timers shouldn't trigger any handler
     vi.advanceTimersByTime(1000)
+  })
+})
+
+// ── Sidecar error debounce ────────────────────────────────────────────────────
+// A linter/formatter crashing on every save can flood the renderer with
+// sidecar:error IPC events. emitSidecarError collapses bursts per-tool into
+// a single event every 2s, keeping the latest message.
+
+describe("emitSidecarError — 2s debounce per tool", () => {
+  it("collapses 5 rapid errors for the same tool into one IPC with the LAST message", () => {
+    emitSidecarError("stylua", "err 1")
+    emitSidecarError("stylua", "err 2")
+    emitSidecarError("stylua", "err 3")
+    emitSidecarError("stylua", "err 4")
+    emitSidecarError("stylua", "err 5")
+
+    // Before debounce window fires, no IPC yet
+    expect(h.winSend).not.toHaveBeenCalledWith("sidecar:error", expect.anything())
+
+    vi.advanceTimersByTime(2000)
+
+    // Exactly one fire, carrying the LAST message
+    const calls = h.winSend.mock.calls.filter((c) => c[0] === "sidecar:error")
+    expect(calls).toHaveLength(1)
+    expect(calls[0][1]).toEqual({ tool: "stylua", message: "err 5" })
+  })
+
+  it("starts a new debounce window after the first fires", () => {
+    emitSidecarError("stylua", "burst-1")
+    vi.advanceTimersByTime(2000)
+
+    // First burst delivered
+    let calls = h.winSend.mock.calls.filter((c) => c[0] === "sidecar:error")
+    expect(calls).toHaveLength(1)
+
+    // Second burst: a fresh window opens; the store is now empty so the next
+    // emitSidecarError schedules a new timer (not a collapse into the
+    // already-fired one).
+    emitSidecarError("stylua", "burst-2")
+    vi.advanceTimersByTime(2000)
+
+    calls = h.winSend.mock.calls.filter((c) => c[0] === "sidecar:error")
+    expect(calls).toHaveLength(2)
+    expect(calls[1][1]).toEqual({ tool: "stylua", message: "burst-2" })
+  })
+
+  it("debounces different tools independently (both fire)", () => {
+    emitSidecarError("stylua", "fmt-err")
+    emitSidecarError("selene", "lint-err")
+
+    vi.advanceTimersByTime(2000)
+
+    const calls = h.winSend.mock.calls.filter((c) => c[0] === "sidecar:error")
+    expect(calls).toHaveLength(2)
+    const tools = calls.map((c) => (c[1] as { tool: string }).tool).sort()
+    expect(tools).toEqual(["selene", "stylua"])
+  })
+
+  it("stopWatcher clears all pending sidecar-error debounce timers", () => {
+    emitSidecarError("stylua", "err")
+    emitSidecarError("selene", "err")
+
+    stopWatcher()
+    vi.advanceTimersByTime(5000)
+
+    // No sidecar:error IPC should ever fire once stopWatcher cleared timers
+    expect(h.winSend).not.toHaveBeenCalledWith("sidecar:error", expect.anything())
   })
 })

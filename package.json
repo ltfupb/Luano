@@ -23,7 +23,9 @@
     "lint": "eslint \"src/**/*.{ts,tsx}\" \"electron/**/*.ts\"",
     "typecheck": "tsc -p tsconfig.web.json --noEmit && tsc -p tsconfig.node.json --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "check-version-sync": "node scripts/check-version-sync.mjs",
+    "bump": "node scripts/bump.mjs"
   },
   "devDependencies": {
     "@electron-toolkit/preload": "^3.0.1",

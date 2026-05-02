@@ -24,8 +24,8 @@ interface AiApi {
   aiSetLocalModel: (model: string) => Promise<{ success: boolean }>
   aiGetLocalModel: () => Promise<string>
   aiFetchLocalModels: () => Promise<Array<{ id: string; label: string }>>
-  aiSetProvider: (provider: string) => Promise<{ success: boolean }>
-  aiSetModel: (model: string) => Promise<{ success: boolean }>
+  aiSetProvider: (provider: string) => Promise<{ success: boolean; error?: string }>
+  aiSetModel: (model: string) => Promise<{ success: boolean; error?: string }>
   aiGetProviderModel: () => Promise<{
     provider: string
     model: string
@@ -45,6 +45,10 @@ interface AiApi {
   aiSetThinkingEffort: (effort: string) => Promise<{ success: boolean }>
   aiGetThinkingEffort: () => Promise<"low" | "medium" | "high" | "xhigh" | "max">
 
+  // Auto-accept — ambient state, read by agent at every tool-call decision
+  aiSetAutoAccept: (enabled: boolean) => Promise<{ success: boolean }>
+  aiGetAutoAccept: () => Promise<boolean>
+
   // Managed AI — usage from Worker
   managedFetchUsage: () => Promise<{
     period_ym: string
@@ -54,12 +58,23 @@ interface AiApi {
     cache_hit_rate: number
     resets_at: number
   } | null>
+  onManagedCapExceeded: (cb: () => void) => () => void
+  onManagedRequestCompleted: (cb: (info: {
+    duration_ms: number
+    cached_ratio: number
+    input_tok: number
+    output_tok: number
+    model: string
+  }) => void) => () => void
 
   // Native menu — tell main to rebuild with hasProject state
   menuSetProjectState: (hasProject: boolean) => Promise<{ success: boolean }>
 
   // Agent Todos
   onTodosUpdated: (cb: (todos: Array<{ content: string; status: string }>) => void) => () => void
+
+  // History compression notice (emitted when agent.ts shrinks history)
+  onHistoryCompressed: (cb: (info: { lossy: boolean; reason: string }) => void) => () => void
 
   // Token usage
   aiGetTokenUsage: () => Promise<{ input: number; output: number; cacheRead: number }>
@@ -103,7 +118,7 @@ interface AiApi {
     onThinking?: (active: boolean) => void,
     onApprovalRequest?: (req: { id: string; tool: string; input: Record<string, unknown>; preview?: EditPreviewPayload | null }) => void,
     onAskUserRequest?: (req: { id: string; questions: AskUserQuestion[] }) => void,
-    autoAccept?: boolean,
+    onApprovalResolved?: (req: { id: string }) => void,
     planMode?: boolean
   ) => Promise<{ modifiedFiles: string[] }>
 

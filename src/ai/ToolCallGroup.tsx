@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from "react"
 import { ChatMessage } from "../stores/aiStore"
 import { getFileName } from "../lib/utils"
 
-const TOOL_META: Record<string, { label: string; icon: string; bridge?: boolean }> = {
+const TOOL_META: Record<string, { label: string; icon: string }> = {
   Read:             { label: "Read",               icon: "eye" },
   Edit:             { label: "Edit",               icon: "pencil" },
   Write:            { label: "Create",             icon: "plus" },
@@ -20,11 +20,11 @@ const TOOL_META: Record<string, { label: string; icon: string; bridge?: boolean 
   WagSearch:        { label: "WAG search",         icon: "search" },
   WagUpdate:        { label: "WAG update",         icon: "check" },
   AskUser:          { label: "Ask user",           icon: "chat" },
-  ReadInstanceTree: { label: "Studio tree",        icon: "tree",   bridge: true },
-  RuntimeLogs:      { label: "Studio logs",        icon: "log",    bridge: true },
-  RunScript:        { label: "Run in Studio",      icon: "play",   bridge: true },
-  SetProperty:      { label: "Studio set",         icon: "gear",   bridge: true },
-  InsertModel:      { label: "Insert model",       icon: "plus",   bridge: true }
+  ReadInstanceTree: { label: "Studio tree",        icon: "tree" },
+  RuntimeLogs:      { label: "Studio logs",        icon: "log" },
+  RunScript:        { label: "Run in Studio",      icon: "play" },
+  SetProperty:      { label: "Studio set",         icon: "gear" },
+  InsertModel:      { label: "Insert model",       icon: "plus" }
 }
 
 function ToolIcon({ type, size = 12 }: { type: string; size?: number }): JSX.Element {
@@ -110,7 +110,12 @@ export function ToolCallGroup({ events }: { events: ChatMessage[] }): JSX.Elemen
       className="animate-fade-in rounded-md"
       style={{ overflow: "hidden" }}
     >
-      {/* Collapsed summary header — only shown for multi-tool groups */}
+      {/* Collapsed summary header — only shown for multi-tool groups.
+       *  No border-bottom: in light themes --border-subtle is #e0e0e0 which
+       *  reads as a near-white horizontal stripe under the "N tools used"
+       *  text — a small jarring artifact every toggle. The vertical guide
+       *  inside the expanded rows already provides enough visual grouping;
+       *  the header sits flush with the rows below it. */}
       {multi && (
         <button
           onClick={() => setGroupOpen((v) => !v)}
@@ -118,8 +123,7 @@ export function ToolCallGroup({ events }: { events: ChatMessage[] }): JSX.Elemen
           style={{
             textAlign: "left",
             padding: "6px 10px",
-            background: "transparent",
-            borderBottom: groupOpen ? "1px solid var(--border-subtle)" : "none"
+            background: "transparent"
           }}
           onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.background = "var(--bg-surface)")}
           onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.background = "transparent")}
@@ -127,7 +131,7 @@ export function ToolCallGroup({ events }: { events: ChatMessage[] }): JSX.Elemen
           <span style={{ color: "var(--text-muted)" }}>
             <Chevron open={groupOpen} />
           </span>
-          <span style={{ fontSize: 12, color: "var(--text-primary)" }}>
+          <span style={{ fontSize: 12, color: "var(--text-muted)" }}>
             {events.length} tools used
           </span>
           {failedCount > 0 && (
@@ -163,11 +167,10 @@ export function ToolCallGroup({ events }: { events: ChatMessage[] }): JSX.Elemen
           {events.map((event, i) => {
             const toolName = event.toolName ?? "unknown"
             const meta = TOOL_META[toolName] ?? { label: toolName, icon: "default" }
-            const isBridge = meta.bridge === true
             const failed = event.toolSuccess === false
             const target = getToolTarget(event)
             const isOpen = rowsOpen.has(event.id)
-            const tone = failed ? "var(--danger)" : isBridge ? "var(--accent)" : "var(--text-muted)"
+            const tone = failed ? "var(--danger)" : "var(--text-muted)"
             const isLast = i === events.length - 1
 
             return (

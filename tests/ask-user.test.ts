@@ -14,8 +14,10 @@ import type { IpcMainEvent } from "electron"
 
 // ── Hoisted mocks ────────────────────────────────────────────────────────────
 
-const { mockIpcMainOnce, mockIpcMainRemoveListener } = vi.hoisted(() => ({
-  mockIpcMainOnce: vi.fn(),
+// H6: agent now uses ipcMain.on + removeListener instead of once + re-registration.
+// Tests updated to match the new correct behavior.
+const { mockIpcMainOn, mockIpcMainRemoveListener } = vi.hoisted(() => ({
+  mockIpcMainOn: vi.fn(),
   mockIpcMainRemoveListener: vi.fn()
 }))
 
@@ -32,8 +34,8 @@ vi.mock("electron", () => ({
   safeStorage: { isEncryptionAvailable: () => false },
   BrowserWindow: { getAllWindows: () => [h.win] },
   ipcMain: {
-    on: vi.fn(),
-    once: mockIpcMainOnce,
+    on: mockIpcMainOn,
+    once: vi.fn(),
     removeListener: mockIpcMainRemoveListener
   }
 }))
@@ -55,8 +57,6 @@ vi.mock("../electron/bridge/server", () => ({
 }))
 vi.mock("../electron/mcp/client", () => ({
   isMcpConnected: vi.fn(async () => false),
-  mcpRunCode: vi.fn(async () => ({ success: false, output: "" })),
-  mcpGetConsole: vi.fn(async () => null),
   mcpInsertModel: vi.fn(async () => ({ success: false, output: "" }))
 }))
 vi.mock("../electron/ai/rag", () => ({ searchDocs: vi.fn() }))
@@ -100,7 +100,9 @@ function makeQuestion(overrides?: Partial<import("../electron/ai/agent").AskUser
 
 /** Simulate the renderer sending back an answer by triggering the registered handler */
 function resolveWithAnswers(id: string, answers: Record<string, string>) {
-  const [, handler] = mockIpcMainOnce.mock.calls[mockIpcMainOnce.mock.calls.length - 1] as [
+  // H6: handler is now registered with ipcMain.on (not once), so we look in
+  // mockIpcMainOn rather than mockIpcMainOnce.
+  const [, handler] = mockIpcMainOn.mock.calls[mockIpcMainOn.mock.calls.length - 1] as [
     string,
     (e: IpcMainEvent, data: { id: string; answers: Record<string, string> }) => void
   ]
@@ -117,7 +119,7 @@ describe("requestAskUser", () => {
   it("returns '(no questions provided)' immediately for empty array", async () => {
     const result = await requestAskUser([], "ch", new AbortController().signal)
     expect(result).toBe("(no questions provided)")
-    expect(mockIpcMainOnce).not.toHaveBeenCalled()
+    expect(mockIpcMainOn).not.toHaveBeenCalled()
   })
 
   it("broadcasts questions to all windows with a UUID id", async () => {
@@ -204,5 +206,58 @@ describe("requestAskUser", () => {
     resolveWithAnswers(id, { "0": "Option A, Option B" })
     const result = await promise
     expect(result).toBe("Pick a style\n→ Option A, Option B")
+  })
+
+  // H6 — flood-race regression. With the old ipcMain.once + re-registration
+  // pattern, a flood of wrong-sender events from a compromised second
+  // renderer could land between `once` firing and the re-registration,
+  // dropping the legitimate sender's reply. The ipcMain.on + manual
+  // removeListener pattern keeps the listener registered until cleanup,
+  // so wrong-sender events are silently ignored AND the legit event still
+  // resolves the promise.
+  it("H6: ignores 5 wrong-sender events then resolves on the legit reply", async () => {
+    // requestUIResponse filters target windows to webContents.id === senderId,
+    // so the mock window must report id 101 for the request broadcast to land.
+    (h.win as unknown as { webContents: { id: number } }).webContents.id = 101
+
+    const controller = new AbortController()
+    const promise = requestAskUser(
+      [makeQuestion()],
+      "ch",
+      controller.signal,
+      /* senderId = expected */ 101
+    )
+    const id = (h.winSend.mock.calls[0][1] as { id: string }).id
+
+    // Capture the handler that requestAskUser registered with ipcMain.on.
+    const [, handler] = mockIpcMainOn.mock.calls[mockIpcMainOn.mock.calls.length - 1] as [
+      string,
+      (e: IpcMainEvent, data: { id: string; answers: Record<string, string> }) => void
+    ]
+
+    // Flood: 5 wrong-sender events with the right id but a hostile sender.
+    for (let i = 0; i < 5; i++) {
+      handler(
+        { sender: { id: 999 } } as unknown as IpcMainEvent,
+        { id, answers: { "0": "Option B" } } // hostile answer
+      )
+    }
+
+    // Promise must NOT have resolved yet — the listener must still be alive.
+    let resolvedEarly: string | null | undefined = undefined
+    const probe = promise.then((v) => { resolvedEarly = v; return v })
+    // Yield once so any microtask resolution would have shown up.
+    await Promise.resolve()
+    expect(resolvedEarly).toBeUndefined()
+
+    // Legit reply from the expected sender — promise must resolve with it.
+    handler(
+      { sender: { id: 101 } } as unknown as IpcMainEvent,
+      { id, answers: { "0": "Option A" } }
+    )
+
+    const result = await probe
+    expect(result).toBe("Pick a style\n→ Option A")
+    expect(mockIpcMainRemoveListener).toHaveBeenCalled()
   })
 })

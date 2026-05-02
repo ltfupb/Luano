@@ -14,5 +14,9 @@
       "@/*": ["src/*"]
     }
   },
-  "include": ["electron/**/*", "electron.vite.config.*"]
+  "include": [
+    "electron/**/*",
+    "electron.vite.config.*",
+    "src/types/datastore.ts"
+  ]
 }

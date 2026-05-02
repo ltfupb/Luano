@@ -12,29 +12,19 @@ interface Step {
 
 const STEPS: Step[] = [
   {
-    emoji: "✦",
+    emoji: "🎉",
     title: "You're Pro",
-    body: "Managed AI, Agent mode, and Inline Edit — all unlocked. Let's take 30 seconds."
+    body: "Managed AI, Agent, and Inline Edit unlocked."
   },
   {
     emoji: "⚡",
-    title: "Managed AI — no key needed",
-    body: "Settings → AI Mode → Managed. Claude Sonnet 4.6 ready to use. 2.5M tokens/month included. No API key, no billing surprises."
-  },
-  {
-    emoji: "🤖",
-    title: "Agent & Plan Mode",
-    body: "Agent writes and edits files directly — approve each change or run hands-free. Plan mode thinks through architecture without touching code."
-  },
-  {
-    emoji: "⌨",
-    title: "Inline Edit",
-    body: "Select any code and press Ctrl+K (Cmd+K on Mac). AI edits exactly what you highlighted, nothing else."
+    title: "What's new",
+    body: "Claude Sonnet 4.6, no key. 2.5M tokens/month. Agent + Plan modes. Ctrl+K for inline edits."
   },
   {
     emoji: "🚀",
     title: "Ready",
-    body: "Open a project and start building."
+    body: "Open a project."
   }
 ]
 

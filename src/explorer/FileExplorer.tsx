@@ -155,12 +155,16 @@ function ContextMenu({ menu, onClose, onRefresh }: ContextMenuProps): JSX.Elemen
   }
 
   if (renaming && menu.entry) {
+    // Always-controlled: the prior `defaultValue` approach + shared setInputVal
+    // with the "create" branch meant React saw the input flip between
+    // uncontrolled and controlled, which triggers a dev warning and loses the
+    // typed value on re-renders.
     return createPortal(
       <div ref={menuRef} className="animate-fade-in" style={popupStyle}>
         <input
           ref={inputRef}
           style={inputStyle}
-          defaultValue={menu.entry.name}
+          value={inputVal}
           onChange={e => setInputVal(e.target.value)}
           onKeyDown={e => { if (e.key === "Enter") handleRename(); if (e.key === "Escape") onClose() }}
           placeholder="New name…"
@@ -299,7 +303,12 @@ function FileNode({ entry, depth = 0, parentPath, onContextMenu, onRefresh }: Fi
       </div>
 
       {isDir && expanded && entry.children && (
-        <div className="animate-fade-in">
+        // Pure opacity fade — `animate-fade-in` would slide the children
+        // up by 4px, which inside a tight vertical list visually compresses
+        // them against the next sibling folder for the duration of the
+        // animation. Pure fade keeps adjacent rows still while the new
+        // ones materialise.
+        <div className="animate-fade-in-only">
           {entry.children.map(child => (
             <FileNode
               key={child.path}

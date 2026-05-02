@@ -204,3 +204,71 @@ describe("spawnSidecar", () => {
     expect(spawnOpts).toMatchObject({ cwd: "/project/src" })
   })
 })
+
+// H2 — sidecar env scrubbing. Sidecar binaries (rojo, selene, stylua, luau-lsp,
+// wally, pesde) must NOT inherit the full parent process environment. That
+// would expose ANTHROPIC_API_KEY, OPENAI_API_KEY, SENTRY_DSN, license keys,
+// etc. to potentially-compromised or supply-chain-attacked binaries.
+describe("spawnSidecar — env scrubbing (H2)", () => {
+  // Snapshot env vars so we can restore them after each test.
+  const SECRETS = ["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GEMINI_API_KEY", "SENTRY_DSN"]
+  const saved: Record<string, string | undefined> = {}
+
+  beforeEach(() => {
+    h.mockExistsSync.mockReturnValue(true)
+    for (const key of SECRETS) {
+      saved[key] = process.env[key]
+      process.env[key] = `secret-${key.toLowerCase()}`
+    }
+    // Ensure a known PATH so the keep-PATH assertion is meaningful.
+    process.env.PATH = process.env.PATH || "/usr/bin"
+  })
+
+  afterEach(() => {
+    for (const key of SECRETS) {
+      if (saved[key] === undefined) delete process.env[key]
+      else process.env[key] = saved[key]
+    }
+  })
+
+  it("does NOT propagate ANTHROPIC_API_KEY / OPENAI_API_KEY / GEMINI_API_KEY / SENTRY_DSN", () => {
+    const fakeProc = makeFakeProc()
+    h.mockSpawn.mockReturnValue(fakeProc)
+
+    spawnSidecar("selene", ["--version"])
+
+    const [, , spawnOpts] = h.mockSpawn.mock.calls[0]
+    const env = (spawnOpts as { env: NodeJS.ProcessEnv }).env
+    for (const key of SECRETS) {
+      expect(env[key]).toBeUndefined()
+    }
+  })
+
+  it("DOES propagate PATH so the binary can find shared libs / shells", () => {
+    const fakeProc = makeFakeProc()
+    h.mockSpawn.mockReturnValue(fakeProc)
+
+    spawnSidecar("selene", ["--version"])
+
+    const [, , spawnOpts] = h.mockSpawn.mock.calls[0]
+    const env = (spawnOpts as { env: NodeJS.ProcessEnv }).env
+    expect(env.PATH).toBe(process.env.PATH)
+  })
+
+  it("propagates proxy + CA vars (corporate networks need them for wally / pesde fetches)", () => {
+    process.env.HTTPS_PROXY = "http://proxy.corp:3128"
+    process.env.NODE_EXTRA_CA_CERTS = "/etc/ssl/corp.pem"
+    const fakeProc = makeFakeProc()
+    h.mockSpawn.mockReturnValue(fakeProc)
+
+    spawnSidecar("wally", ["install"])
+
+    const [, , spawnOpts] = h.mockSpawn.mock.calls[0]
+    const env = (spawnOpts as { env: NodeJS.ProcessEnv }).env
+    expect(env.HTTPS_PROXY).toBe("http://proxy.corp:3128")
+    expect(env.NODE_EXTRA_CA_CERTS).toBe("/etc/ssl/corp.pem")
+
+    delete process.env.HTTPS_PROXY
+    delete process.env.NODE_EXTRA_CA_CERTS
+  })
+})

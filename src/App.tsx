@@ -27,16 +27,27 @@ import { ErrorBoundary } from "./components/ErrorBoundary"
 import { ToastContainer, toast } from "./components/Toast"
 import { TutorialOverlay, shouldShowTutorial } from "./components/TutorialOverlay"
 import { ProOnboardingOverlay, shouldShowProOnboarding, markProOnboardingDone } from "./components/ProOnboardingOverlay"
+import { ManagedCapDialog } from "./components/ManagedCapDialog"
 import { useT } from "./i18n/useT"
 import { usePanelResize } from "./hooks/usePanelResize"
 import { CrossScriptPanel, DataStorePanel, TopologyPanel } from "./lib/loadPro"
-import { initPostHog } from "./analytics"
+import { initPostHog, track, Events } from "./analytics"
 
 const TERMINAL_MIN = 80
 const TERMINAL_MAX = 600
 
 const SIDEPANEL_MIN = 150
 const SIDEPANEL_MAX = 500
+
+// Per-theme colors for the OS-painted titleBarOverlay (Win/Linux). Hex must
+// match var(--bg-panel) / var(--text-secondary) for each theme in globals.css
+// so the native min/max/close buttons blend into our custom titlebar.
+// Update both places together when tuning theme colors.
+const TITLEBAR_OVERLAY_COLORS = {
+  dark: { color: "#252526", symbolColor: "#bdbdbd" },
+  light: { color: "#f5f5f5", symbolColor: "#3d3d3d" },
+  "tokyo-night": { color: "#1f2133", symbolColor: "#b4bce0" }
+} as const
 
 interface CommandContext {
   projectPath: string | null
@@ -84,7 +95,7 @@ function IconChat(): JSX.Element {
 }
 
 export default function App(): JSX.Element {
-  const { projectPath, dirtyFiles, setProject, closeProject, setFileTree, openFile, setLspStatus } = useProjectStore()
+  const { projectPath, dirtyFiles, setProject, closeProject, setFileTree, setLspStatus } = useProjectStore()
   const { setStatus, setPort, setToolName, setError } = useSyncStore()
   const { setGlobalSummary, clearMessages, saveProjectChat, loadProjectChat } = useAIStore()
   const theme = useSettingsStore((s) => s.theme)
@@ -95,6 +106,12 @@ export default function App(): JSX.Element {
   // Apply theme and UI scale to document root
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme)
+    // Sync the OS-painted titleBarOverlay (Win/Linux native min/max/close
+    // buttons) with our theme. The overlay is drawn outside the renderer and
+    // can't read CSS variables, so we push the resolved colors via IPC. No-op
+    // on macOS — main process ignores the call there.
+    const overlayColors = TITLEBAR_OVERLAY_COLORS[theme]
+    window.api.setTitleBarOverlay(overlayColors).catch(() => { /* best-effort */ })
   }, [theme])
   useEffect(() => {
     window.api.setZoomFactor(uiScale / 100)
@@ -123,6 +140,16 @@ export default function App(): JSX.Element {
   // safeStorage (OS keychain); the renderer only ever sees "***set***" | "".
   useEffect(() => { void hydrateKeyStatus() }, [])
 
+  // Managed AI request analytics. Main emits one event per Anthropic call
+  // (chat or each agent round) when provider === "managed"; we forward to
+  // PostHog so we can size the cache hit rate, latency, and IO ratio after
+  // launch. Cap-hit / fallback events are emitted by ManagedCapDialog.
+  useEffect(() => {
+    return window.api.onManagedRequestCompleted((info) => {
+      track(Events.MANAGED_REQUEST_COMPLETED, info)
+    })
+  }, [])
+
   // First-run crash-reports prompt. Until the user gives an explicit answer,
   // Sentry stays dormant — without this prompt nobody opts in and the
   // dashboard stays empty (which is exactly what happened in pre-v0.8.4
@@ -140,11 +167,21 @@ export default function App(): JSX.Element {
     void window.api.aiSetThinkingEffort(thinkingEffort)
   }, [thinkingEffort])
 
+  // Sync auto-accept → main on boot and on every toggle. Renderer is UI;
+  // main is the source of truth read at every tool-call decision in the
+  // agent loop. Toggling here flips the agent's behavior immediately —
+  // including auto-resolving any in-flight non-DANGEROUS approval prompt.
+  const autoAccept = useAIStore((s) => s.autoAccept)
+  useEffect(() => {
+    void window.api.aiSetAutoAccept(autoAccept)
+  }, [autoAccept])
+
   // Rebuild native OS menu when project-scoped items (Close Project, Quick Open,
   // Toggle *) should toggle between enabled and disabled.
   useEffect(() => {
     void window.api.menuSetProjectState(Boolean(projectPath))
   }, [projectPath])
+  const [showTopology, setShowTopology] = useState(false)
   const [activePanel, _setActivePanel] = useState<SidePanel>("explorer")
   const setActivePanel = useCallback((panel: SidePanel) => {
     _setActivePanel(panel)
@@ -178,7 +215,6 @@ export default function App(): JSX.Element {
   const [chatPanelWidth, _setChatPanelWidth] = useState(() => useSettingsStore.getState().chatPanelWidth)
   const [quickOpenVisible, setQuickOpenVisible] = useState(false)
   const [paletteVisible, setPaletteVisible] = useState(false)
-  const [showTopology, setShowTopology] = useState(false)
   const [showTutorial, setShowTutorial] = useState(() => shouldShowTutorial())
   const [showProOnboarding, setShowProOnboarding] = useState(false)
 
@@ -250,9 +286,6 @@ export default function App(): JSX.Element {
     if (typeof message !== "string") return
     toast(message, type === "error" || type === "warn" || type === "info" ? type : "info")
   }, []))
-  useIpcEvent("file:added", () => refreshFileTree())
-  useIpcEvent("file:deleted", () => refreshFileTree())
-
   // ── Sidecar error toasts (LSP, StyLua, Selene) ──────────────────────────
   useIpcEvent("sidecar:error", useCallback((data: unknown) => {
     const { tool } = data as { tool: string; message: string }
@@ -262,6 +295,32 @@ export default function App(): JSX.Element {
       onClick: () => setToolchainOpen(true)
     })
   }, [t]))
+
+  // ── AI history-compressed notice ─────────────────────────────────────────
+  // The agent silently summarizes/truncates history when it gets too long.
+  // Surface a toast when it was lossy so the user knows earlier context may
+  // be gone — prevents confusion when the assistant "forgets" something.
+  useEffect(() => {
+    const unsub = window.api.onHistoryCompressed(({ lossy, reason }) => {
+      if (lossy) {
+        toast(`Chat history summarized — some earlier context may be unavailable (${reason})`, "info")
+      }
+    })
+    return unsub
+  }, [])
+
+  // ── Bridge token invalidated notice ──────────────────────────────────────
+  // If the on-disk bridge-token file was corrupt at launch, the main process
+  // regenerates it. The installed Studio plugin still holds the OLD token, so
+  // prompt the user to reinstall / reconfigure the plugin. Notice only — the
+  // new token value is NOT broadcast; it must be fetched via the Pro-gated
+  // bridge:get-token IPC when the user needs to copy it.
+  useEffect(() => {
+    const unsub = window.api.onBridgeTokenInvalidated(() => {
+      toast("Studio bridge token changed — please reinstall the Studio plugin to reconnect.", "warn")
+    })
+    return unsub
+  }, [])
 
   // ── Native OS menu → renderer actions ───────────────────────────────────
   useIpcEvent("menu:new-project", useCallback(() => { void handleNewProjectRef.current?.() }, []))
@@ -292,11 +351,25 @@ export default function App(): JSX.Element {
     setLspStatus(status)
   }, [setLspStatus]))
 
-  const refreshFileTree = async () => {
+  const refreshFileTree = useCallback(async () => {
     if (!projectPath) return
     const tree = await window.api.readDir(projectPath)
     setFileTree(tree)
-  }
+  }, [projectPath, setFileTree])
+
+  useIpcEvent("file:added", useCallback(() => { void refreshFileTree() }, [refreshFileTree]))
+  useIpcEvent("file:deleted", useCallback(() => { void refreshFileTree() }, [refreshFileTree]))
+
+  // Root-level manifest changes (wally.toml / pesde.toml created or renamed
+  // by package-manager init / migrate) are NOT seen by the file watcher,
+  // which only walks <project>/src. StatusBar dispatches `manifest-changed`
+  // after a successful mutation so the file tree picks up the new state
+  // without waiting for the user to switch projects.
+  useEffect(() => {
+    const handler = (): void => { void refreshFileTree() }
+    window.addEventListener("manifest-changed", handler)
+    return () => window.removeEventListener("manifest-changed", handler)
+  }, [refreshFileTree])
 
   const openPath = useCallback(async (path: string) => {
     try {
@@ -354,18 +427,43 @@ export default function App(): JSX.Element {
   // ── Session Restore — reopen last project + files on restart ────────────
   // Ref guard prevents React StrictMode's dev double-mount from spawning the
   // LSP and Argon twice. The actual session-restore work is one-shot and
-  // belongs outside the React effect lifecycle.
+  // belongs outside the React effect lifecycle — all cross-store handlers
+  // (openPath, loadProjectChat, closeProject, openFile) are read imperatively
+  // via `useStore.getState()` so stale render closures can't leak in and the
+  // effect legitimately depends on nothing.
   const sessionRestoredRef = useRef(false)
   useEffect(() => {
     if (sessionRestoredRef.current) return
     sessionRestoredRef.current = true
 
-    const { projectPath: savedPath, openFiles: savedOpenFiles, activeFile: savedActiveFile } = useProjectStore.getState()
+    const {
+      projectPath: savedPath,
+      openFiles: savedOpenFiles,
+      activeFile: savedActiveFile,
+      closeProject: closeProjectNow,
+      openFile: openFileNow
+    } = useProjectStore.getState()
     if (!savedPath) return
 
-    openPath(savedPath).then(async (ok) => {
+    // Same guard as handleOpenRecent: if the last-open folder no longer
+    // exists (user deleted / moved / unmounted external drive between
+    // sessions), don't even try to re-open it. Just clear the saved state
+    // and surface a toast so the user knows why they're back at the welcome
+    // screen. removeRecentProject also de-trusts the path on the main side.
+    void window.api.projectExists(savedPath).catch(() => false).then((exists) => {
+      if (!exists) {
+        useSettingsStore.getState().removeRecentProject(savedPath)
+        closeProjectNow()
+        toast(t("welcomeRecentMissing"), "warn")
+        return
+      }
+      restoreOpenedSession()
+    })
+
+    async function restoreOpenedSession(): Promise<void> {
+      const ok = await openPath(savedPath!)
       if (!ok) {
-        closeProject()
+        closeProjectNow()
         return
       }
       // Reload previously open files. `openFile` sets activeFile on every call,
@@ -374,17 +472,17 @@ export default function App(): JSX.Element {
       for (const filePath of savedOpenFiles) {
         try {
           const content = await window.api.readFile(filePath)
-          openFile(filePath, content ?? "")
+          openFileNow(filePath, content ?? "")
         } catch { /* Skip if file was deleted */ }
       }
       if (savedActiveFile && useProjectStore.getState().openFiles.includes(savedActiveFile)) {
         useProjectStore.getState().setActiveFile(savedActiveFile)
       }
-      // Restore chat history for this project
-      loadProjectChat(savedPath)
-    })
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+      // Restore chat history for this project via imperative getState() —
+      // keeps this effect genuinely dependency-free.
+      useAIStore.getState().loadProjectChat(savedPath!)
+    }
+  }, [openPath])
 
   // ── Save chat + check unsaved on app exit ────────────────────────────────────
   useEffect(() => {
@@ -520,13 +618,19 @@ export default function App(): JSX.Element {
   const [rojoSetup, setRojoSetup] = useState<string | null>(null)
 
   const switchToProject = useCallback(async (path: string, isNew: boolean) => {
-    // Gate: both luau-lsp must be installed AND this project must have a .luano/toolchain.json.
-    // Missing either → show setup panel before closing the current project.
+    // Gate split:
+    //   ready=false      → toolchain binaries (luau-lsp) NOT installed globally.
+    //                      Setup panel is required — user has to download tools.
+    //   configured=false → tools are installed but this project lacks
+    //                      .luano/toolchain.json. Auto-init with current
+    //                      global defaults; no need to prompt the user every
+    //                      time they open a new folder when the global
+    //                      toolchain is already configured.
     const [ready, configured] = await Promise.all([
       window.api.toolchainIsMinimumReady(),
       window.api.toolchainHasProjectConfig(path),
     ])
-    if (!ready || !configured) {
+    if (!ready) {
       // Defer initProject until the user confirms via the setup panel — see
       // handleToolchainClose. Cancelling should leave the folder untouched.
       pendingProjectRef.current = { path, isNew }
@@ -534,6 +638,32 @@ export default function App(): JSX.Element {
       setToolchainSetupMode(true)
       setToolchainOpen(true)
       return
+    }
+    if (!configured) {
+      // Auto-init only for Rojo projects. As-is folders (no
+      // default.project.json) shouldn't get a .luano/ directory created
+      // behind the user's back — the user explicitly chose "Open as is" to
+      // mean "don't scaffold anything." isNew=true implies the next step is
+      // initProject which scaffolds default.project.json, so the folder is
+      // about to become Rojo. Otherwise probe the current state.
+      const willBeRojo = isNew || await window.api.probeRojo(path)
+      if (willBeRojo) {
+        // Tools are ready, just stamp the project's .luano/toolchain.json with
+        // current global defaults and proceed. Best-effort — fall back to the
+        // setup panel only if the auto-init fails (e.g. permission error).
+        const result = await window.api.toolchainInitProjectConfig(path)
+        if (!result?.success) {
+          pendingProjectRef.current = { path, isNew }
+          setSetupTargetPath(path)
+          setToolchainSetupMode(true)
+          setToolchainOpen(true)
+          return
+        }
+      }
+      // !willBeRojo + !configured: skip the auto-init AND the setup panel.
+      // The folder stays clean and openPath proceeds with global toolchain
+      // defaults. Next time the user re-opens this folder hasProjectConfig
+      // is still false, but that's fine — same skip path runs.
     }
 
     // Save current project's chat before switching
@@ -596,6 +726,17 @@ export default function App(): JSX.Element {
   }
 
   const handleOpenRecent = async (path: string) => {
+    // Detect deleted / moved / unmounted folders BEFORE the open pipeline runs.
+    // Without this guard the path falls through has-project-config → init →
+    // setup-panel cascade and the user sees a confusing "setup needed" UI for
+    // a folder that simply isn't there anymore. Auto-removal also clears the
+    // main-process trustedProjectPaths via removeRecentProject's untrust IPC.
+    const exists = await window.api.projectExists(path).catch(() => false)
+    if (!exists) {
+      useSettingsStore.getState().removeRecentProject(path)
+      toast(t("welcomeRecentMissing"), "warn")
+      return
+    }
     if (projectPath && dirtyFiles.length > 0) {
       setSwitchConfirm({ action: "open", path })
       return
@@ -673,6 +814,7 @@ export default function App(): JSX.Element {
         onNewProject={handleNewProject}
         onOpenFolder={handleOpenFolder}
         onCloseProject={handleCloseProject}
+        onOpenRecent={handleOpenRecent}
         onOpenSettings={() => setSettingsOpen(true)}
         onToggleTerminal={() => setTerminalOpen(!terminalOpen)}
         onOpenToolchain={() => setToolchainOpen(true)}
@@ -859,6 +1001,7 @@ export default function App(): JSX.Element {
       />
       <ToastContainer />
       <UpdateBanner />
+      <ManagedCapDialog />
 
       {/* Tutorial overlay */}
       {showTutorial && <TutorialOverlay onDone={() => setShowTutorial(false)} />}

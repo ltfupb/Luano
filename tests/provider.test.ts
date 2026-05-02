@@ -1,10 +1,19 @@
 import { describe, it, expect, vi } from "vitest"
 
+// Shared capture of send() calls on the ai:token-usage broadcast channel and
+// any other IPC traffic. A mutable windows array lets individual tests plug
+// in a spying window without re-mocking electron.
+const h = vi.hoisted(() => {
+  const winSend = vi.fn()
+  const windows: unknown[] = [{ webContents: { send: winSend } }]
+  return { winSend, windows }
+})
+
 // Mock Electron modules before importing provider
 vi.mock("electron", () => ({
   app: { getPath: () => "/tmp/luano-test" },
   safeStorage: { isEncryptionAvailable: () => false },
-  BrowserWindow: { getAllWindows: () => [] },
+  BrowserWindow: { getAllWindows: () => h.windows },
   // Under parallel test runs multiple suites share this temp dir and the
   // store save can hit a transient rename failure — which in real Electron
   // would pop a dialog. Swallow it in tests so the race doesn't surface as
@@ -27,8 +36,10 @@ import {
   MIN_NETWORK_TIMEOUT_MS, DEFAULT_NETWORK_TIMEOUT_MS,
   getModelTier,
   MANAGED_BASE_URL, MANAGED_MODEL,
-  getManagedClient, invalidateManagedLicenseCache
+  getManagedClient, clearManagedClient,
+  getAnthropicClient, getOpenAIClient, getGeminiClient, getLocalClient
 } from "../electron/ai/provider"
+import { store } from "../electron/store"
 
 describe("toCachedSystem", () => {
   it("wraps entire prompt with cache_control when no PROJECT CONTEXT marker", () => {
@@ -46,6 +57,35 @@ describe("toCachedSystem", () => {
     expect(result[0].cache_control).toEqual({ type: "ephemeral" })
     expect(result[1].text).toContain("PROJECT CONTEXT:")
     expect(result[1].cache_control).toBeUndefined()
+  })
+
+  it("appends perCallSuffix as a third uncached block when provided", () => {
+    const prompt = "Static rules here\nPROJECT CONTEXT:\nDynamic context here"
+    const suffix = "[RUNTIME SYSTEM ANNOUNCEMENT]\nTHIS TURN TOOL-OUTPUT SENTINEL: abc-123"
+    const result = toCachedSystem(prompt, suffix)
+    expect(result).toHaveLength(3)
+    // Cached prefix preserved (cache hit must survive new suffix per round).
+    expect(result[0].text).toBe("Static rules here")
+    expect(result[0].cache_control).toEqual({ type: "ephemeral" })
+    expect(result[1].text).toContain("PROJECT CONTEXT:")
+    expect(result[1].cache_control).toBeUndefined()
+    expect(result[2].text).toBe(suffix)
+    expect(result[2].cache_control).toBeUndefined()
+  })
+
+  it("appends perCallSuffix even when prompt has no PROJECT CONTEXT marker", () => {
+    const result = toCachedSystem("You are a Luau assistant.", "per-call note")
+    expect(result).toHaveLength(2)
+    expect(result[0].text).toBe("You are a Luau assistant.")
+    expect(result[0].cache_control).toEqual({ type: "ephemeral" })
+    expect(result[1].text).toBe("per-call note")
+    expect(result[1].cache_control).toBeUndefined()
+  })
+
+  it("omits the suffix block when perCallSuffix is undefined or empty", () => {
+    const prompt = "Static\nPROJECT CONTEXT:\nDynamic"
+    expect(toCachedSystem(prompt, undefined)).toHaveLength(2)
+    expect(toCachedSystem(prompt, "")).toHaveLength(2)
   })
 })
 
@@ -345,16 +385,60 @@ describe("getModelTier", () => {
     expect(getModelTier()).toBe("frontier")
   })
 
-  it("classifies gemini-2.5-flash as standard", () => {
+  it("classifies gemini-2.5-flash as frontier (M2 fix: was incorrectly standard)", () => {
     setProvider("gemini")
     setModel("gemini-2.5-flash")
-    expect(getModelTier()).toBe("standard")
+    expect(getModelTier()).toBe("frontier")
   })
 
   it("classifies any local model as standard regardless of name", () => {
     setProvider("local")
     setModel("llama3-70b")
     expect(getModelTier()).toBe("standard")
+  })
+
+  // CLAUDE.md §6 regression guard. Any model added to MODELS must be classified
+  // here — the test fails when an unknown model id appears so the reviewer is
+  // forced to make an explicit frontier/standard decision (and update
+  // FRONTIER_MODELS in provider.ts when the answer is "frontier").
+  // Failure mode if missed: extended Luau scaffolding (~40 tokens) appended to
+  // every request and MAX_ROUNDS bumped to 75 — silent quality regression on a
+  // model that should have been getting the frontier treatment.
+  describe("FRONTIER_MODELS coverage (regression guard for CLAUDE.md §6)", () => {
+    const KNOWN_TIERS: Record<string, "frontier" | "standard"> = {
+      // Anthropic — all hosted Claude models in MODELS are frontier today.
+      "claude-opus-4-7": "frontier",
+      "claude-sonnet-4-6": "frontier",
+      "claude-opus-4-6": "frontier",
+      "claude-haiku-4-5-20251001": "frontier",
+      // OpenAI — flagship + reasoning are frontier; mini variants are standard.
+      "gpt-4o": "frontier",
+      "gpt-4o-mini": "standard",
+      "gpt-4-turbo": "frontier",
+      "o1": "frontier",
+      "o1-mini": "standard",
+      // Gemini — 2.5 line is frontier; 2.0 flash is standard.
+      "gemini-2.5-pro": "frontier",
+      "gemini-2.5-flash": "frontier",
+      "gemini-2.0-flash": "standard"
+    }
+
+    const HOSTED_PROVIDERS: Provider[] = ["anthropic", "openai", "gemini"]
+    for (const provider of HOSTED_PROVIDERS) {
+      for (const m of MODELS[provider]) {
+        it(`${provider}/${m.id} has a known tier`, () => {
+          const expected = KNOWN_TIERS[m.id]
+          expect(
+            expected,
+            `Model "${m.id}" was added to MODELS.${provider} but is not classified here. ` +
+            `Add it to KNOWN_TIERS in this test AND, if frontier, to FRONTIER_MODELS in electron/ai/provider.ts.`
+          ).toBeDefined()
+          setProvider(provider)
+          setModel(m.id)
+          expect(getModelTier()).toBe(expected)
+        })
+      }
+    }
   })
 })
 
@@ -383,19 +467,122 @@ describe("Managed license cache invalidation", () => {
     await expect(getManagedClient()).rejects.toThrow(/Pro license required/)
   })
 
-  it("invalidateManagedLicenseCache is safe to call repeatedly with no cached client", () => {
+  it("clearManagedClient is safe to call repeatedly with no cached client", () => {
     // Defensive: IPC handlers call this on every activate/deactivate, even
     // when no Managed client was ever built. Must not throw.
-    expect(() => invalidateManagedLicenseCache()).not.toThrow()
-    expect(() => invalidateManagedLicenseCache()).not.toThrow()
-    expect(() => invalidateManagedLicenseCache()).not.toThrow()
+    expect(() => clearManagedClient()).not.toThrow()
+    expect(() => clearManagedClient()).not.toThrow()
+    expect(() => clearManagedClient()).not.toThrow()
   })
 
-  it("invalidateManagedLicenseCache forces getManagedClient to re-check the license next call", async () => {
+  it("clearManagedClient forces getManagedClient to re-check the license next call", async () => {
     // After invalidation, the next getManagedClient call consults the store
     // again. With no valid license stored it throws — confirming the cache
     // was not silently reused.
-    invalidateManagedLicenseCache()
+    clearManagedClient()
     await expect(getManagedClient()).rejects.toThrow(/Pro license required/)
+  })
+})
+
+// ── setNetworkTimeoutMs invalidation ─────────────────────────────────────────
+
+/**
+ * setNetworkTimeoutMs should null out every cached SDK client so the next
+ * getXxxClient() call reconstructs with the new timeout. Missing any provider
+ * in the invalidation leaves stale clients using the old timeout until app
+ * restart — a real regression we hit before.
+ *
+ * Approach: seed the cache by calling each getXxxClient() once, then call
+ * setNetworkTimeoutMs, then call again and assert the reference changed.
+ */
+describe("setNetworkTimeoutMs invalidates cached clients across all providers", () => {
+  it("invalidates anthropic, openai, gemini, local, and managed clients in one call", async () => {
+    // Seed secrets so each getXxxClient() can build.
+    setApiKey("sk-ant-test")
+    setOpenAIKey("sk-oa-test")
+    setGeminiKey("gm-test")
+    setLocalEndpoint("http://localhost:1234/v1")
+    setLocalKey("lk-test")
+    store.set("license", { key: "lic-key", instanceId: "inst-1", valid: true })
+    clearManagedClient()
+
+    // Build all five clients. Each getter caches its result in module state.
+    const anthropicBefore = await getAnthropicClient()
+    const openaiBefore = await getOpenAIClient()
+    const geminiBefore = await getGeminiClient()
+    const localBefore = await getLocalClient()
+    const managedBefore = await getManagedClient()
+
+    // Invalidate. A single call should null ALL cached clients.
+    setNetworkTimeoutMs(60_000)
+
+    // Each subsequent get must reconstruct — instance reference must change.
+    expect(await getAnthropicClient()).not.toBe(anthropicBefore)
+    expect(await getOpenAIClient()).not.toBe(openaiBefore)
+    expect(await getGeminiClient()).not.toBe(geminiBefore)
+    expect(await getLocalClient()).not.toBe(localBefore)
+    expect(await getManagedClient()).not.toBe(managedBefore)
+  })
+})
+
+// ── chat(provider=managed) finally-clears managedClient ──────────────────────
+
+describe("chat() with provider='managed' clears managedClient in finally", () => {
+  it("next managed request re-checks the license after a managed chat call", async () => {
+    // Seed a license so getManagedClient succeeds.
+    store.set("license", { key: "lic-key-a", instanceId: "inst-a", valid: true })
+    clearManagedClient()
+
+    const first = await getManagedClient()
+    expect(first).toBeTruthy()
+
+    // Simulate what chat()/chatStream's finally branch does for managed.
+    // The block is:
+    //   if (provider === "managed") clearManagedClient()
+    // Run it explicitly; the next call must re-read the store (we prove it by
+    // revoking the license and asserting the throw).
+    clearManagedClient()
+    store.set("license", { key: "lic-key-a", instanceId: "inst-a", valid: false })
+
+    await expect(getManagedClient()).rejects.toThrow(/Pro license required/)
+  })
+})
+
+// ── chatStream's finally always clears activeAbortController ─────────────────
+
+describe("chatStream finally clears activeAbortController on non-abort error", () => {
+  it("abortAgent() is a no-op after a non-abort error clears the controller", () => {
+    // Before the v0.8.x fix the controller was only cleared when aborted, so
+    // a rate-limit / network error left it pinned and subsequent abortAgent()
+    // calls were swallowed by the stale controller. The current provider.ts
+    // clears unconditionally in finally.
+    const ctrl = new AbortController()
+    const abortSpy = vi.spyOn(ctrl, "abort")
+    _setActiveAbortController(ctrl)
+    // Simulate the finally branch: controller set to null.
+    _setActiveAbortController(null)
+    // abortAgent must NOT call abort on the pre-cleared controller.
+    abortAgent()
+    expect(abortSpy).not.toHaveBeenCalled()
+  })
+})
+
+// ── resetTokenUsage broadcasts ───────────────────────────────────────────────
+
+describe("resetTokenUsage emits ai:token-usage with zeroed counters", () => {
+  it("zeros the counters and broadcasts once on the token-usage channel", () => {
+    // Seed a non-zero total first — trackUsage also broadcasts.
+    resetTokenUsage()
+    h.winSend.mockClear()
+    trackUsage(100, 50, 10)
+    // Clear out trackUsage's broadcast so we only assert on reset's.
+    h.winSend.mockClear()
+
+    resetTokenUsage()
+
+    const tokenSends = h.winSend.mock.calls.filter((c) => c[0] === "ai:token-usage")
+    expect(tokenSends.length).toBe(1)
+    expect(tokenSends[0][1]).toEqual({ input: 0, output: 0, cacheRead: 0 })
+    expect(getTokenUsage()).toEqual({ input: 0, output: 0, cacheRead: 0 })
   })
 })

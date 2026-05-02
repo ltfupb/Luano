@@ -13,6 +13,7 @@ import { MessageBubble, MessageFooter } from "./MessageBubble"
 import { pickVerbPair, formatDuration } from "./ThinkingBubble"
 import { toast } from "../components/Toast"
 import { track, Events } from "../analytics"
+import { ErrorBoundary } from "../components/ErrorBoundary"
 
 interface ToolEvent {
   tool: string
@@ -143,7 +144,7 @@ interface AttachedFile {
   content: string
 }
 
-export function ChatPanel({ onClose }: ChatPanelProps): JSX.Element {
+function ChatPanelInner({ onClose }: ChatPanelProps): JSX.Element {
   const {
     messages, isStreaming, addMessage, updateMessage, removeMessage, setThinkingSeconds, setMessageTokens, setStreaming,
     globalSummary, mode, autoAccept, setMode, setAutoAccept,
@@ -395,19 +396,6 @@ export function ChatPanel({ onClose }: ChatPanelProps): JSX.Element {
     return history
   }, [messages])
 
-  // Auto-detect memories from the last exchange (fire-and-forget)
-  const triggerAutoMemory = useCallback(() => {
-    if (!projectPath) return
-    const nonStreaming = messages.filter((m) => !m.streaming)
-    if (nonStreaming.length < 2) return
-    const lastUser = [...nonStreaming].reverse().find((m) => m.role === "user")
-    const lastAssistant = [...nonStreaming].reverse().find((m) => m.role === "assistant")
-    if (!lastUser || !lastAssistant) return
-    // Fire and forget — don't block UI
-    window.api.memoryAutoDetect(projectPath, lastUser.content, lastAssistant.content).catch(() => {})
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [messages, projectPath])
-
   const handleAbort = useCallback(() => {
     window.api.aiAbort()
     setStreaming(false)
@@ -440,7 +428,11 @@ export function ChatPanel({ onClose }: ChatPanelProps): JSX.Element {
       setAdvisorActive(false)
         setPendingApproval(null); setPendingAskUser(null)
       const thinkingStart = Date.now()
-      let thinkingCaptured = false
+      // Captured first-chunk thinking duration. Stored once per turn (one
+      // "thinking" period precedes the first text), but re-applied to whatever
+      // bubble ends up being the footer target so the post-turn ✶ pastTense
+      // line shows even when text → tool → text rotates the live bubble.
+      let thinkingMs: number | null = null
       const tokenSnapshot = { ...tokens }
       streamingCtxRef.current = { id: assistantId, snap: tokenSnapshot }
       // Track the current assistant bubble. After each tool event we clear
@@ -465,11 +457,11 @@ export function ChatPanel({ onClose }: ChatPanelProps): JSX.Element {
               currentId = addMessage({ role: "assistant", content: "", streaming: true })
               accumulated = ""
             }
-            if (!thinkingCaptured) {
+            if (thinkingMs === null) {
               const ms = Date.now() - thinkingStart
+              thinkingMs = ms
               setThinkingSeconds(currentId, Math.round(ms / 1000))
               setTurn((t) => t && t.thoughtMs === null ? { ...t, thoughtMs: ms } : t)
-              thinkingCaptured = true
             }
             accumulated += chunk
             updateMessage(currentId, accumulated, true)
@@ -489,7 +481,16 @@ export function ChatPanel({ onClose }: ChatPanelProps): JSX.Element {
             }
             addMessage({
               role: "tool",
-              content: event.output.slice(0, 200),
+              // Cap at 8KB to bound chat-history footprint, but keep enough
+              // for full error messages (context-line previews, type-check
+              // diagnostic lists, MCP error bodies) so the expanded row
+              // actually tells the user what failed. The expanded UI
+              // already scrolls (maxHeight: 180px) so there's no display
+              // reason to truncate — the prior 200-char cap chopped most
+              // real errors mid-sentence.
+              content: event.output.length > 8192
+                ? event.output.slice(0, 8192) + "\n…(truncated — see app log for full output)"
+                : event.output,
               toolName: event.tool,
               toolSuccess: event.success,
               // Prefer input.path for the filename label — output text is
@@ -504,9 +505,11 @@ export function ChatPanel({ onClose }: ChatPanelProps): JSX.Element {
           undefined,  // onThinking — turn-status covers thinking UI globally
           (req) => { setPendingApproval(req as { id: string; tool: string; input: Record<string, unknown>; preview?: EditPreviewPayload | null }) },
           (req) => { setPendingAskUser(req) },
-          // Read latest autoAccept via getState — useCallback closure would
-          // otherwise freeze it at the first-render value (always false).
-          useAIStore.getState().autoAccept,
+          // Main side auto-resolves a pending approval if the user toggles
+          // auto-accept ON mid-prompt — clear the card to mirror that.
+          (req) => {
+            setPendingApproval((cur) => (cur && cur.id === req.id ? null : cur))
+          },
           opts?.planMode === true
         )
         // If the agent ended right after a tool (no trailing text), there's
@@ -518,9 +521,13 @@ export function ChatPanel({ onClose }: ChatPanelProps): JSX.Element {
         // back to assistantId is unsafe — it may have been removed by the
         // empty-bubble cleanup in the tool callback.
         const targetId = currentId ?? lastLiveId
-        if (!thinkingCaptured) {
-          setThinkingSeconds(targetId, Math.round((Date.now() - thinkingStart) / 1000))
-        }
+        // Re-stamp thinkingSeconds onto the FOOTER target. When the turn
+        // rotated past the original bubble (text → tool → more text), the
+        // captured ms lives on the first bubble but the renderer paints the
+        // footer on the last one — without this, the ✶ Pondered line vanishes
+        // for any turn that ended on a fresh post-tool bubble.
+        const finalMs = thinkingMs ?? (Date.now() - thinkingStart)
+        setThinkingSeconds(targetId, Math.round(finalMs / 1000))
         setMessageTokens(targetId, {
           input: Math.max(0, finalTokens.input - tokenSnapshot.input),
           output: Math.max(0, finalTokens.output - tokenSnapshot.output),
@@ -541,8 +548,6 @@ export function ChatPanel({ onClose }: ChatPanelProps): JSX.Element {
         setAgentTodos([])
         // Auto-compress if context is getting large
         compressOldMessages()
-        // Auto-detect memories from this exchange
-        triggerAutoMemory()
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -607,8 +612,6 @@ export function ChatPanel({ onClose }: ChatPanelProps): JSX.Element {
         setStreaming(false)
             // Auto-compress if context is getting large
         compressOldMessages()
-        // Auto-detect memories from this exchange
-        triggerAutoMemory()
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -681,10 +684,10 @@ export function ChatPanel({ onClose }: ChatPanelProps): JSX.Element {
     }
     if (e.key === "Tab" && e.shiftKey) {
       e.preventDefault()
-      // Cycle Chat → Agent → Plan → Chat
-      if (mode === "chat") setMode("agent")
-      else if (mode === "agent") setMode("plan")
-      else setMode("chat")
+      // Toggle auto-accept (mid-turn flips also take effect — main process is
+      // source of truth and re-reads on every tool-call decision; see
+      // electron/ai/provider.ts:autoAcceptEmitter).
+      setAutoAccept(!autoAccept)
       return
     }
     if (e.key === "Enter" && !e.shiftKey) {
@@ -961,41 +964,56 @@ export function ChatPanel({ onClose }: ChatPanelProps): JSX.Element {
             </div>
           </div>
         )}
-        {groupedMessages.map((item, i) => {
-          // While the turn is active, ALL assistant footers are suppressed —
-          // the bottom turn-status line is the single live indicator. Otherwise
-          // rotation between bubbles shows a frozen "Unioned for 6s" footer on
-          // the just-completed bubble AND the live status at the bottom, which
-          // reads as two indicators for the same turn.
+        {(() => {
+          // Render the turn footer ("Oofed for Xs · ↑Yk ↓Zk") exactly once,
+          // at the very END of the turn — never sandwiched between groups.
+          //
+          // Old logic deferred each assistant's footer to the next tool
+          // group, so a multi-step agent run with [text → tools → text →
+          // tools → final text] painted a footer after EVERY tool group.
+          // Users saw the indicator "stop" at the first tool group end
+          // because that's where the deferred footer first landed; later
+          // groups' deferred footers had no thinking/token stats so
+          // MessageFooter returned null and the user never saw them.
+          // Effect: bubble appeared frozen on the first tool.
+          //
+          // New rule: hide every per-message footer; render ONE turn-
+          // scoped MessageFooter on the LAST grouped item, attached to
+          // the last assistant message in the turn (which carries the
+          // cumulative thinking + token stats — see agent.ts targetId).
           const turnActive = turn !== null
-          if (Array.isArray(item)) {
-            // Tool group. If the assistant message immediately before this one
-            // had its footer deferred (because a tool group followed it), render
-            // it here — CC-style footer belongs at the end of the turn, below tools.
-            const prev = groupedMessages[i - 1]
-            const deferredFooter = !Array.isArray(prev) && prev?.role === "assistant" ? prev : null
-            return (
-              <div key={`tg-${i}`}>
-                <ToolCallGroup events={item} />
-                {!turnActive && deferredFooter && <MessageFooter message={deferredFooter} />}
-              </div>
-            )
+          const lastIdx = groupedMessages.length - 1
+          let footerOwner: typeof messages[number] | null = null
+          if (!turnActive) {
+            for (let j = messages.length - 1; j >= 0; j--) {
+              if (messages[j].role === "assistant") { footerOwner = messages[j]; break }
+            }
           }
-          // Hide this message's footer if the next item is a tool group —
-          // the footer will render after the tool group instead. Also hide
-          // while turn is active (any assistant bubble mid-turn would double
-          // up with the turn-status line).
-          const next = groupedMessages[i + 1]
-          const hasTrailingTools = Array.isArray(next) && item.role === "assistant"
-          const hideFooter = hasTrailingTools || (turnActive && item.role === "assistant")
-          return (
-            <MessageBubble
-              key={item.id}
-              message={item}
-              hideFooter={hideFooter}
-            />
-          )
-        })}
+
+          return groupedMessages.map((item, i) => {
+            const isLast = i === lastIdx
+            const renderFooterHere = isLast && !turnActive && footerOwner !== null
+            if (Array.isArray(item)) {
+              return (
+                <div key={`tg-${i}`}>
+                  <ToolCallGroup events={item} />
+                  {renderFooterHere && <MessageFooter message={footerOwner!} attached />}
+                </div>
+              )
+            }
+            // Non-array last item: render the footer inline as the
+            // message's own footer if THIS message is the owner;
+            // otherwise hide.
+            const renderInline = renderFooterHere && footerOwner === item
+            return (
+              <MessageBubble
+                key={item.id}
+                message={item}
+                hideFooter={!renderInline}
+              />
+            )
+          })
+        })()}
 
         {/* Ask user interactive card */}
         {pendingAskUser && (
@@ -1022,7 +1040,7 @@ export function ChatPanel({ onClose }: ChatPanelProps): JSX.Element {
         {/* Turn status — one line, visible throughout an agent/chat turn */}
         {isStreaming && turn && (
           <div
-            className="flex items-center gap-2 px-2 py-1.5 selectable animate-fade-in"
+            className="flex items-center gap-2 px-0 py-1.5 selectable animate-fade-in"
             style={{ fontSize: 12, color: "var(--text-secondary)", fontFamily: "'JetBrains Mono', monospace" }}
             data-tick={tick}
           >
@@ -1343,4 +1361,19 @@ export function ChatPanel({ onClose }: ChatPanelProps): JSX.Element {
   )
 }
 
+/**
+ * Public ChatPanel — wraps the renderer in an ErrorBoundary so a crash inside
+ * chat (e.g. bad markdown, tool card throwing, streaming edge case) falls back
+ * to the boundary's retry UI instead of unmounting the whole app. The outer
+ * App-level boundary still exists as a second line of defence, but handling
+ * chat errors close to the chat means the rest of the window keeps running
+ * (editor, terminal, file explorer, etc.).
+ */
+export function ChatPanel(props: ChatPanelProps): JSX.Element {
+  return (
+    <ErrorBoundary>
+      <ChatPanelInner {...props} />
+    </ErrorBoundary>
+  )
+}
 

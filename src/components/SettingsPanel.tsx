@@ -417,7 +417,7 @@ export function SettingsPanel({ onClose, onProActivated }: SettingsPanelProps): 
           <div style={{ height: "1px", background: "var(--border-subtle)" }} />
 
           {/* AI Provider / Model / Keys */}
-          <SettingsAI models={models} setModels={setModels} />
+          <SettingsAI models={models} setModels={setModels} isPro={proStatus?.isPro === true} />
 
           {/* Divider */}
           <div style={{ height: "1px", background: "var(--border-subtle)" }} />

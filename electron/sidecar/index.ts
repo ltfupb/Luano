@@ -74,6 +74,33 @@ const decoder = ((): { decode: (b: Buffer) => string } => {
   }
 })()
 
+/**
+ * Minimal environment to pass to sidecar processes.
+ * H2: sidecar binaries (rojo, selene, stylua, luau-lsp) must NOT inherit
+ * the full parent environment — that would expose ANTHROPIC_API_KEY,
+ * OPENAI_API_KEY, SENTRY_DSN, license keys, etc. to potentially-compromised
+ * or supply-chain-attacked binaries. Pass only the minimal set they actually need.
+ *
+ * Exported so other process spawners (mcp/client.ts) can apply the same policy.
+ */
+export function buildSidecarEnv(): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = {}
+  // PATH / HOME / LANG / TMPDIR are needed for normal process operation.
+  // Proxy + CA vars are required for wally / pesde fetches behind corporate
+  // networks — without them, install fails with "connection refused" on
+  // proxied environments.
+  const passthrough = ["PATH", "HOME", "LANG", "TMPDIR", "TMP", "TEMP",
+    "USERPROFILE", "LOCALAPPDATA", "APPDATA", "SYSTEMROOT", "WINDIR",
+    "USERNAME", "LOGNAME",
+    "HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "ALL_PROXY",
+    "http_proxy", "https_proxy", "no_proxy", "all_proxy",
+    "NODE_EXTRA_CA_CERTS", "SSL_CERT_FILE", "SSL_CERT_DIR"]
+  for (const key of passthrough) {
+    if (process.env[key] !== undefined) env[key] = process.env[key]
+  }
+  return env
+}
+
 export function spawnSidecar(
   binary: string,
   args: string[],
@@ -83,7 +110,8 @@ export function spawnSidecar(
   const binPath = getBinaryPath(binary)
   const proc = spawn(binPath, args, {
     cwd: options?.cwd,
-    stdio: ["pipe", "pipe", "pipe"]
+    stdio: ["pipe", "pipe", "pipe"],
+    env: buildSidecarEnv()
   })
 
   proc.stdout?.on("data", (data: Buffer) => options?.onData?.(decoder.decode(data)))

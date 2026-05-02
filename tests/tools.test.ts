@@ -26,8 +26,6 @@ vi.mock("../electron/bridge/server", () => ({
 }))
 vi.mock("../electron/mcp/client", () => ({
   isMcpConnected: vi.fn(async () => false),
-  mcpRunCode: vi.fn(async () => ({ success: false, output: "MCP not connected" })),
-  mcpGetConsole: vi.fn(async () => null),
   mcpInsertModel: vi.fn(async () => ({ success: false, output: "MCP not connected" }))
 }))
 vi.mock("../electron/ai/rag", () => ({

@@ -18,14 +18,21 @@ import { app } from "electron"
 import { spawnSync } from "child_process"
 import { existsSync, readdirSync, renameSync } from "fs"
 import { dirname, join } from "path"
+import { log } from "./logger"
 
 app.setName("Luano")
 
 // Force the attached console to UTF-8 codepage in dev so Korean/Japanese
 // paths logged via process.stdout aren't mangled by cp949/cp932 rendering.
 // Packaged builds don't write to a console at all, so skip there.
+// Note: `chcp` is a CMD builtin, not a standalone .exe — running it with
+// `shell: false` silently fails (ENOENT). Invoke cmd.exe explicitly instead.
+// `/d` disables autorun (doesn't run HKCU/HKLM Command Processor AutoRun),
+// `/c` runs the command and exits. Args stay an array (never a concat
+// string), so no shell injection from dynamic input — even though the args
+// here are static today.
 if (process.platform === "win32" && !app.isPackaged) {
-  try { spawnSync("chcp", ["65001"], { stdio: "ignore", shell: true }) } catch { /* ignore */ }
+  try { spawnSync("cmd.exe", ["/d", "/c", "chcp", "65001"], { stdio: "ignore" }) } catch { /* ignore */ }
 }
 
 // Fixed temp name lets us recover from a crash between the two rename steps
@@ -41,7 +48,8 @@ function migrate(): void {
   let entries: string[]
   try {
     entries = readdirSync(parent)
-  } catch {
+  } catch (err) {
+    log.warn("[bootstrap] migrate: readdirSync failed on", parent, err)
     return
   }
 
@@ -57,8 +65,9 @@ function migrate(): void {
     if (hasFinal) return
     try {
       renameSync(tempPath, newPath)
-    } catch {
+    } catch (err) {
       // Locked or permission denied — retry next launch.
+      log.warn("[bootstrap] migrate: temp → final rename failed, will retry next launch:", err)
     }
     return
   }
@@ -82,14 +91,16 @@ function migrate(): void {
   try {
     renameSync(join(parent, legacyEntry), tempPath)
     renameSync(tempPath, newPath)
-  } catch {
+  } catch (err) {
     // Best-effort — retry next launch. Data remains accessible via the
     // legacy path on case-insensitive FS, or untouched on case-sensitive FS.
+    log.warn("[bootstrap] migrate: legacy rename failed, will retry next launch:", err)
   }
 }
 
 try {
   migrate()
-} catch {
+} catch (err) {
   // Never block app startup on migration failure.
+  log.warn("[bootstrap] migrate threw unexpectedly:", err)
 }

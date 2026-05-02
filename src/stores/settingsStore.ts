@@ -72,7 +72,12 @@ interface SettingsStore {
  */
 export async function hydrateKeyStatus(): Promise<void> {
   const api = (window as { api?: Window["api"] }).api
-  if (!api) return
+  // H17b: surface preload failure rather than silently returning empty key
+  // markers — the user would see all keys as "not set" and reset them.
+  if (!api) {
+    console.error("[settingsStore] window.api is not available — preload may have failed to load. Key status cannot be hydrated.")
+    return
+  }
   const [a, o, g] = await Promise.all([
     api.aiGetKey().catch(() => null),
     api.aiGetOpenAIKey().catch(() => null),
@@ -140,6 +145,14 @@ export const useSettingsStore = create<SettingsStore>()(
       },
       removeRecentProject: (path) => {
         set({ recentProjects: get().recentProjects.filter((p) => p.path !== path) })
+        // Best-effort: remove the path from the main-process trust allowlist so
+        // a future renderer can't silently re-open it without dialog confirmation.
+        // The IPC has no security gate (de-trusting a path is always safe), so
+        // we fire-and-forget and log any unexpected failure.
+        const api = (window as { api?: Window["api"] }).api
+        if (api?.untrustProject) {
+          api.untrustProject(path).catch(() => { /* best effort — trust removal is non-critical */ })
+        }
       }
     }),
     {

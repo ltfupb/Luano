@@ -28,28 +28,10 @@ vi.mock("../electron/bridge/server", () => ({
 }))
 vi.mock("../electron/mcp/client", () => ({
   isMcpConnected: vi.fn(async () => false),
-  mcpRunCode: vi.fn(async () => ({ success: false, output: "" })),
-  mcpGetConsole: vi.fn(async () => null),
   mcpInsertModel: vi.fn(async () => ({ success: false, output: "" }))
 }))
 vi.mock("../electron/ai/rag", () => ({ searchDocs: vi.fn() }))
 vi.mock("../electron/file/sandbox", () => ({ validatePath: vi.fn() }))
-// autoVerifyLint calls lintModifiedFiles, which calls executeTool("Lint", ...).
-// Mock executeTool so we control the lint output without wiring Selene.
-// Hoisted so the vi.mock factory can see it.
-const { mockExecuteTool } = vi.hoisted(() => ({ mockExecuteTool: vi.fn() }))
-// Preserve the real TOOLS array (getToolsForExecution tests need it) but
-// override executeTool so autoVerifyLint tests can drive the lint output.
-vi.mock("../electron/ai/tools", async () => {
-  const actual = await vi.importActual<typeof import("../electron/ai/tools")>("../electron/ai/tools")
-  return { ...actual, executeTool: mockExecuteTool }
-})
-// lintModifiedFiles only runs executeTool on paths where existsSync(path) is true.
-// Return true for any .luau path so the tests can drive the lint result.
-vi.mock("fs", async () => {
-  const actual = await vi.importActual<typeof import("fs")>("fs")
-  return { ...actual, existsSync: vi.fn(() => true), readFileSync: vi.fn(() => "") }
-})
 vi.mock("../electron/ai/wag", () => ({
   wagExists: vi.fn(() => false), readWagFile: vi.fn(),
   listSiblings: vi.fn(() => []), searchWag: vi.fn(() => []), rebuildWagIndex: vi.fn()
@@ -74,7 +56,8 @@ import {
   estimateTokens, microCompact,
   appendWagReminder, WAG_VALUE_PATTERN,
   getToolsForExecution, studioAvailable,
-  autoVerifyLint
+  redactSecrets,
+  reconcileHistoryAfterError
 } from "../electron/ai/agent"
 import { wagExists } from "../electron/ai/wag"
 import { isBridgeConnected } from "../electron/bridge/server"
@@ -85,7 +68,7 @@ beforeEach(() => { vi.clearAllMocks() })
 describe("detectStall", () => {
   it("resets counter and returns no-nudge when a write tool is used", () => {
     const state = { executeRoundsWithoutWrite: 5 }
-    const result = detectStall("execute", ["Read", "Write"], state)
+    const result = detectStall(["Read", "Write"], state)
     expect(result).toEqual({ nudge: false })
     expect(state.executeRoundsWithoutWrite).toBe(0)
   })
@@ -93,7 +76,7 @@ describe("detectStall", () => {
   it(`increments counter without nudge for the first ${STALL_THRESHOLD - 1} read-only rounds`, () => {
     const state = { executeRoundsWithoutWrite: 0 }
     for (let i = 0; i < STALL_THRESHOLD - 1; i++) {
-      const result = detectStall("execute", ["Read"], state)
+      const result = detectStall(["Read"], state)
       expect(result.nudge).toBe(false)
     }
     expect(state.executeRoundsWithoutWrite).toBe(STALL_THRESHOLD - 1)
@@ -101,7 +84,7 @@ describe("detectStall", () => {
 
   it("nudges on the STALL_THRESHOLD-th consecutive read-only round", () => {
     const state = { executeRoundsWithoutWrite: STALL_THRESHOLD - 1 }
-    const result = detectStall("execute", ["Read"], state)
+    const result = detectStall(["Read"], state)
     expect(result.nudge).toBe(true)
     if (result.nudge) expect(result.text).toMatch(/many rounds reading without writing/i)
     expect(state.executeRoundsWithoutWrite).toBe(0) // reset after nudge
@@ -109,26 +92,15 @@ describe("detectStall", () => {
 
   it("treats empty tool rounds as non-write and accumulates", () => {
     const state = { executeRoundsWithoutWrite: STALL_THRESHOLD - 1 }
-    const result = detectStall("execute", [], state)
-    expect(result.nudge).toBe(true)
-  })
-
-  it("works in verify phase same as execute", () => {
-    const state = { executeRoundsWithoutWrite: STALL_THRESHOLD - 1 }
-    const result = detectStall("verify", ["Read"], state)
+    const result = detectStall([], state)
     expect(result.nudge).toBe(true)
   })
 })
 
 describe("broadcastRound", () => {
   it("sends round payload to all windows on :round channel", () => {
-    broadcastRound("ai:agent:abc", 3, 100, "execute")
-    expect(h.winSend).toHaveBeenCalledWith("ai:agent:abc:round", { round: 3, max: 100, phase: "execute" })
-  })
-
-  it("supports verify phase", () => {
-    broadcastRound("ch", 7, 50, "verify")
-    expect(h.winSend).toHaveBeenCalledWith("ch:round", { round: 7, max: 50, phase: "verify" })
+    broadcastRound("ai:agent:abc", 3, 100)
+    expect(h.winSend).toHaveBeenCalledWith("ai:agent:abc:round", { round: 3, max: 100 })
   })
 })
 
@@ -164,26 +136,16 @@ describe("microCompact", () => {
     expect(microCompact("Read", small)).toBe(small)
   })
 
-  it("head+tail for read_file when total lines <= 90", () => {
-    const lines = Array.from({ length: 80 }, (_, i) => `line ${i} ${"x".repeat(50)}`).join("\n")
-    const out = microCompact("Read", lines)
-    expect(out).toContain("head + tail")
-    expect(out).toContain("line 0")
-    expect(out).toContain("line 79")
-    // Omitted count must be non-negative
-    const m = out.match(/…\((\d+) lines omitted\)…/)
-    expect(m).not.toBeNull()
-    expect(Number(m![1])).toBeGreaterThanOrEqual(0)
-  })
+  it("Read output passes through unchanged regardless of size — Read tool itself caps at 2000 lines", () => {
+    // Claude Code style: agent does NOT compact Read at all. The Read tool
+    // already truncates >2000 line files at the source with an explicit hint
+    // to the model. Agent-level head/mid/tail sampling created synthetic
+    // views that triggered repeated re-reads.
+    const small = Array.from({ length: 80 }, (_, i) => `line ${i} ${"x".repeat(50)}`).join("\n")
+    expect(microCompact("Read", small)).toBe(small)
 
-  it("head+mid+tail for read_file when total lines > 90", () => {
-    const lines = Array.from({ length: 200 }, (_, i) => `line ${i} ${"x".repeat(30)}`).join("\n")
-    const out = microCompact("Read", lines)
-    expect(out).toContain("head (1-")
-    expect(out).toContain("middle")
-    expect(out).toContain("tail (last")
-    expect(out).toContain("line 0") // head
-    expect(out).toContain("line 199") // tail
+    const big = Array.from({ length: 500 }, (_, i) => `line ${i} ${"x".repeat(50)}`).join("\n")
+    expect(microCompact("Read", big)).toBe(big)
   })
 
   it("caps grep output at 20 lines with narrow-hint", () => {
@@ -220,7 +182,7 @@ describe("appendWagReminder", () => {
   })
 
   it("case-insensitive keyword match (HP)", () => {
-    const out = appendWagReminder("ok", "Edit", luaPath, projectRoot, { new_text: "self.HP = 100" })
+    const out = appendWagReminder("ok", "Edit", luaPath, projectRoot, { new_string: "self.HP = 100" })
     expect(out).toContain("[WAG]")
   })
 
@@ -321,55 +283,51 @@ describe("getToolsForExecution (PLAN MODE filter)", () => {
   })
 })
 
-describe("autoVerifyLint", () => {
-  beforeEach(() => { mockExecuteTool.mockReset() })
-
-  it("returns null when modifiedFiles is empty — no lint run", async () => {
-    const result = await autoVerifyLint([], "ch", "/proj", "")
-    expect(result).toBeNull()
-    expect(mockExecuteTool).not.toHaveBeenCalled()
+describe("redactSecrets", () => {
+  it("returns empty/undefined input untouched", () => {
+    expect(redactSecrets("")).toBe("")
   })
 
-  it("returns null when lint finds no errors", async () => {
-    mockExecuteTool.mockResolvedValue({ success: true, output: "No lint errors" })
-    const result = await autoVerifyLint(["/proj/a.luau"], "ch", "/proj", "")
-    expect(result).toBeNull()
+  it("redacts a Bearer token (≥16 chars) while keeping surrounding text", () => {
+    // Token must be at least 16 chars to be redacted (minimum-length floor).
+    const out = redactSecrets("Authorization header was Bearer abcdefghij123456")
+    expect(out).toContain("Bearer [REDACTED]")
+    expect(out).not.toContain("abcdefghij123456")
   })
 
-  it("returns errors object when lint finds new errors", async () => {
-    mockExecuteTool.mockResolvedValue({
-      success: true,
-      output: "ERROR: unused variable 'x'"
-    })
-    const result = await autoVerifyLint(["/proj/a.luau"], "ch", "/proj", "")
-    expect(result).not.toBeNull()
-    expect(result!.errors.length).toBeGreaterThan(0)
-    expect(result!.errorKey).toBe(result!.errors.join("\n"))
+  it("does NOT redact a short Bearer fragment (< 16 chars)", () => {
+    // A 5-char fragment after 'Bearer ' is not a real token — must not be redacted.
+    const out = redactSecrets("Bearer abcde")
+    expect(out).toBe("Bearer abcde")
   })
 
-  it("returns null when errors match the previous round (loop stuck on same problem)", async () => {
-    mockExecuteTool.mockResolvedValue({
-      success: true,
-      output: "ERROR: unused variable 'x'"
-    })
-    // First call — should return errors and we record the key.
-    const first = await autoVerifyLint(["/proj/a.luau"], "ch", "/proj", "")
-    expect(first).not.toBeNull()
-    const prevKey = first!.errorKey
-    // Second call with same prevKey and same lint output — dedup kicks in.
-    const second = await autoVerifyLint(["/proj/a.luau"], "ch", "/proj", prevKey)
-    expect(second).toBeNull()
+  it("redacts an Authorization: header value", () => {
+    const out = redactSecrets("Authorization: secret-token-here")
+    expect(out).toContain("Authorization: [REDACTED]")
+    expect(out).not.toContain("secret-token-here")
   })
 
-  it("dedupes entirely independently of warning-only output (warnings are stripped by lintModifiedFiles)", async () => {
-    mockExecuteTool.mockResolvedValue({
-      success: true,
-      output: "WARN: style issue only (no ERROR lines)"
-    })
-    const result = await autoVerifyLint(["/proj/a.luau"], "ch", "/proj", "")
-    // lintModifiedFiles filters to ERROR-only — warnings alone should not
-    // trigger an AUTO-VERIFY round.
-    expect(result).toBeNull()
+  it("redacts api-key / x-api-key style headers", () => {
+    expect(redactSecrets("api-key: aaa-bbb-ccc")).toContain("api-key: [REDACTED]")
+    expect(redactSecrets("x-api-key: zzz-yyy")).toContain("api-key: [REDACTED]")
+  })
+
+  it("redacts Anthropic / OpenAI sk- keys", () => {
+    const out = redactSecrets("My key is sk-ant-1234567890abcdef and another is sk-proj-abcdef0123456789")
+    expect(out).toContain("sk-[REDACTED]")
+    expect(out).not.toMatch(/sk-ant-\w+/)
+    expect(out).not.toMatch(/sk-proj-\w+/)
+  })
+
+  it("redacts JSON-style \"access_token\" / \"refresh_token\" values", () => {
+    const out = redactSecrets('{"access_token":"abc123def","other":"keep"}')
+    expect(out).toContain('"access_token":"[REDACTED]"')
+    expect(out).toContain('"other":"keep"')
+  })
+
+  it("does not mangle benign log lines", () => {
+    const benign = "Player joined: name=Bob, score=42"
+    expect(redactSecrets(benign)).toBe(benign)
   })
 })
 
@@ -395,5 +353,69 @@ describe("studioAvailable", () => {
     vi.mocked(isBridgeConnected).mockReturnValueOnce(false)
     vi.mocked(isMcpConnected).mockRejectedValueOnce(new Error("ECONNREFUSED"))
     await expect(studioAvailable()).resolves.toBe(false)
+  })
+})
+
+// H11 — reconcileHistoryAfterError. When the Anthropic API call throws after
+// streaming a tool_use block (ECONNRESET, premature close, etc), the last
+// assistant turn carries an orphan tool_use with no matching tool_result.
+// The next API retry would 400 with "tool_use without matching tool_result".
+// reconcileHistoryAfterError pops the orphaned assistant turn so the loop can
+// re-issue cleanly.
+describe("reconcileHistoryAfterError", () => {
+  type MsgParam = Parameters<typeof reconcileHistoryAfterError>[0][number]
+
+  it("pops a tail assistant turn that contains a tool_use block", () => {
+    const history: MsgParam[] = [
+      { role: "user", content: "do the thing" },
+      {
+        role: "assistant",
+        content: [
+          { type: "text", text: "Sure — " },
+          { type: "tool_use", id: "toolu_orphan", name: "Read", input: { path: "/x" } }
+        ] as MsgParam["content"]
+      }
+    ]
+    reconcileHistoryAfterError(history)
+    expect(history).toHaveLength(1)
+    expect(history[0].role).toBe("user")
+  })
+
+  it("leaves history alone when the last assistant turn has no tool_use", () => {
+    const history: MsgParam[] = [
+      { role: "user", content: "hi" },
+      { role: "assistant", content: [{ type: "text", text: "hello" }] as MsgParam["content"] }
+    ]
+    reconcileHistoryAfterError(history)
+    expect(history).toHaveLength(2)
+  })
+
+  it("leaves history alone when the last turn is not assistant (already reconciled)", () => {
+    const history: MsgParam[] = [
+      { role: "user", content: "hi" },
+      {
+        role: "assistant",
+        content: [{ type: "tool_use", id: "toolu_a", name: "Read", input: {} }] as MsgParam["content"]
+      },
+      // tool_result already on history — last turn is user (synthesized result)
+      { role: "user", content: [{ type: "tool_result", tool_use_id: "toolu_a", content: "ok" }] as MsgParam["content"] }
+    ]
+    reconcileHistoryAfterError(history)
+    expect(history).toHaveLength(3)
+  })
+
+  it("is a no-op on empty history (defensive)", () => {
+    const history: MsgParam[] = []
+    expect(() => reconcileHistoryAfterError(history)).not.toThrow()
+    expect(history).toHaveLength(0)
+  })
+
+  it("preserves history when assistant content is a plain string (no tool_use possible)", () => {
+    const history: MsgParam[] = [
+      { role: "user", content: "hi" },
+      { role: "assistant", content: "no tools here" }
+    ]
+    reconcileHistoryAfterError(history)
+    expect(history).toHaveLength(2)
   })
 })

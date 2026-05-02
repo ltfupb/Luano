@@ -5,7 +5,7 @@
  * - Header (kind label, filename, stat)
  * - Create / Edit / Delete rendering paths
  * - Unified diff rows (add / del / ctx)
- * - Error banner (missing file, duplicate old_text)
+ * - Error banner (missing file, duplicate old_string)
  * - Y / N keyboard shortcuts (fired + ignored when typing in an input)
  * - LCS guard fallback when diff is too large (m*n > 2M cells)
  */
@@ -103,11 +103,11 @@ describe("EditPreviewCard — error banner", () => {
   it("shows the preview error and hides the diff body", () => {
     const preview = makePreview({
       kind: "edit",
-      error: "old_text matches 3 locations"
+      error: "old_string matches 3 locations"
     })
     render(<EditPreviewCard tool="Edit" preview={preview} input={{}} onAccept={vi.fn()} onReject={vi.fn()} />)
 
-    expect(screen.getByText(/Cannot preview: old_text matches 3 locations/)).toBeInTheDocument()
+    expect(screen.getByText(/Cannot preview: old_string matches 3 locations/)).toBeInTheDocument()
     // No diff content rendered
     expect(screen.queryByText(/^\+$/)).toBeNull()
   })
