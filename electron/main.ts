@@ -396,10 +396,25 @@ function createWindow(): void {
 // H13: enforce single-instance lock BEFORE app is ready. If a second instance
 // tries to launch, focus the existing window and quit. Without this, two
 // concurrent instances race on settings.json, bridge token, and LSP port.
-const singleInstanceLock = app.requestSingleInstanceLock()
-if (!singleInstanceLock) {
-  log.info("Another Luano instance is already running — quitting.")
-  app.quit()
+//
+// Retry on failure: when NSIS auto-update launches the new exe via
+// isForceRunAfter, the previous instance may still be holding the mutex for
+// a few ms after process exit. Without retry, the new instance loses the
+// race and `app.exit` leaves a zombie process — visible in Task Manager,
+// no window. A short spin-wait absorbs the post-update race.
+function acquireSingleInstanceLock(): boolean {
+  for (let attempt = 0; attempt < 5; attempt++) {
+    if (app.requestSingleInstanceLock()) return true
+    if (attempt < 4) {
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 300)
+    }
+  }
+  return false
+}
+
+if (!acquireSingleInstanceLock()) {
+  log.info("Another Luano instance is already running — exiting.")
+  app.exit(0)
 }
 
 app.on("second-instance", () => {
