@@ -10,7 +10,7 @@
 
 <p align="center"><strong>The all-in-one AI code editor for Roblox developers.</strong></p>
 
-Open the app. Start building. Luano ships with the Luau language server, Rojo, Selene, StyLua, and a Studio bridge already wired up — no setup, no config files, no separate installs.
+Open the app. Start building. Luau LSP, Rojo, Selene, StyLua, Wally, pesde, and the Studio bridge are wired in — Luano fetches each tool on first use, no system install or PATH changes.
 
 > **Status:** Early beta. Expect rough edges.
 
@@ -18,36 +18,25 @@ Open the app. Start building. Luano ships with the Luau language server, Rojo, S
 
 ## Features
 
-**Editor**
-- Luau syntax highlighting, autocomplete, type checking, diagnostics, hover, go-to-definition, rename
-- Side-by-side split editor
-- 30+ Roblox snippets (RemoteEvent, DataStore, OOP patterns, and more)
-- Inline AI edit: select code, press Cmd/Ctrl+K
-- Command palette (Cmd/Ctrl+Shift+P) for every action
-- Quick open (Cmd/Ctrl+P) with fuzzy match
-- Full-text search across the project
-- Auto-save with configurable delay
-- Drag-and-drop tab reorder
-- Dark, Light, Tokyo Night themes
+**Roblox-aware editor**
+- Luau LSP wired in (autocomplete, type checking, diagnostics, hover, go-to-definition, rename)
+- 30+ Roblox snippets (RemoteEvent, DataStore, OOP patterns)
+- Inline AI edit — select code, press Cmd/Ctrl+K
 
 **AI**
-- Chat that understands Roblox architecture, Luau patterns, and your project
-- Three modes: **Chat** (Q&A), **Plan** (step-by-step design), **Agent** (autonomous file editing) — each with its own auto-accept toggle
+- Three modes: **Chat** (Q&A), **Plan** (read-only design), **Agent** (autonomous file editing) — each with its own auto-accept toggle
 - Pre-edit preview with Accept (Y) / Reject (N) before any write
 - Agent mode self-verifies (lints after every edit, fixes the errors it finds)
-- 10 built-in skills: `/explain`, `/fix`, `/optimize`, `/refactor`, `/test`, `/type`, `/doc`, `/security`, `/convert`, `/scaffold`. Bring your own as JSON or Markdown.
-- Project instructions in `LUANO.md` (global / project / directory) loaded automatically
-- Attach files for context
+- 10 ready-to-use skills (`/explain`, `/fix`, `/optimize`, `/refactor`, `/test`, `/type`, `/doc`, `/security`, `/convert`, `/scaffold`) plus your own as JSON / Markdown
+- Project instructions in `LUANO.md` (global / project / directory) auto-loaded
 - Per-project chat history, session handoff so long conversations stay coherent
-- Roblox API docs retrieval built in (Pro)
-- Works with Claude, OpenAI, Gemini, or any local OpenAI-compatible endpoint (Ollama, LM Studio, vLLM)
-- Bring Your Own Key, or use **Managed AI** (Pro — no key needed)
+- Roblox API docs retrieval (Pro)
+- Claude, GPT, Gemini, or any local OpenAI-compatible endpoint (Ollama, LM Studio, vLLM) — BYOK or **Managed AI** (Pro, no key needed)
 
-**Roblox Studio**
-- Studio Live Bridge: see the live instance tree, read console logs, run scripts (Pro)
+**Roblox Studio integration**
+- Studio Live Bridge: live instance tree, console logs, script execution (Pro)
 - One-click pair with the Studio plugin — stays authenticated across restarts
-- Rojo or Argon sync serve with sourcemap, status in the sidebar
-- Studio plugin included at `resources/studio-plugin/LuanoPlugin.lua`
+- Rojo / Argon sync serve with sourcemap, status in the sidebar
 
 **Analysis (Pro)**
 - Topology graph — server / client / shared script dependencies and RemoteEvent flow
@@ -56,16 +45,8 @@ Open the app. Start building. Luano ships with the Luau language server, Rojo, S
 - Cross-script analysis
 - DataStore schema generator
 
-**Other**
-- Built-in terminal with theme sync
-- File explorer with Roblox class icons
-- Project templates (Obby, Tycoon, and more)
-- Native OS menus (File / Edit / View / Help)
-- Drag a folder onto the window to open it as a project
-- Session restore: projects, open files, chat, layout, window bounds persist across restarts
-- Auto-update via GitHub Releases
-- Opt-in crash reporting; no telemetry by default
-- English + 한국어 UI
+**Toolchain — fetched on demand**
+- Luau LSP, Rojo / Argon, Selene, StyLua, Wally, pesde — auto-downloaded the first time you use them, no system installs, no PATH changes
 
 ---
 
@@ -85,9 +66,9 @@ Two options:
 
 1. **Managed AI (Pro)** — no key, no config. Activate your Pro license in Settings and pick "Managed" as the provider. 2.5M tokens/month included.
 2. **Bring Your Own Key** — open Settings, paste a key for any supported provider:
-   - Anthropic Claude
-   - OpenAI
-   - Google Gemini
+   - Claude
+   - GPT
+   - Gemini
    - Any local OpenAI-compatible endpoint (Ollama, LM Studio, vLLM)
 
 AI is optional. The editor, language support, toolchain, and Studio sync all work without a key.
@@ -99,7 +80,7 @@ AI is optional. The editor, language support, toolchain, and Studio sync all wor
 |  | **Free** | **Pro** |
 | --- | --- | --- |
 | Luau editor with full language support | ✅ | ✅ |
-| Rojo / Argon / Selene / StyLua bundled | ✅ | ✅ |
+| Rojo / Argon / Selene / StyLua auto-fetched | ✅ | ✅ |
 | File explorer, terminal, search | ✅ | ✅ |
 | Split editor, auto-save | ✅ | ✅ |
 | Project templates | ✅ | ✅ |
@@ -119,12 +100,10 @@ The Free plan is free forever.
 
 ## Supported AI Models
 
-| Provider | Models |
-| --- | --- |
-| Anthropic | Claude Opus 4.7, Sonnet 4.6, Opus 4.6, Haiku 4.5 |
-| OpenAI | GPT-4o, GPT-4o mini, GPT-4 Turbo, o1, o1 mini |
-| Google | Gemini 2.5 Pro, 2.5 Flash, 2.0 Flash |
-| Local | Any OpenAI-compatible endpoint (Ollama, LM Studio, vLLM) |
+- **Claude** — Opus 4.7, Sonnet 4.6, Opus 4.6, Haiku 4.5
+- **GPT** — 4o, 4o mini, 4 Turbo, o1, o1 mini
+- **Gemini** — 2.5 Pro, 2.5 Flash, 2.0 Flash
+- **Local** — any OpenAI-compatible endpoint (Ollama, LM Studio, vLLM)
 
 ---
 
